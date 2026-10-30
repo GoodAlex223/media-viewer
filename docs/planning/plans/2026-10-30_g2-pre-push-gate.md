@@ -4,7 +4,7 @@
 
 **Task Reference**: [WEEKLY.md § G2](../WEEKLY.md#g2-pre-push-gate-batch---hooks-and-tests--4-sp) · BACKLOG 🟤 [2026-10-27] "Build the blocking renderer line ratchet: a pre-push check that fails when `media-viewer.js` is over a committed ceiling" · TODO 🟠 "Fix the flaky tournament E2E 'Ctrl+A undo restores the previous pair after a pick'" (← BACKLOG 🟤 [2026-10-11])
 **Created**: 2026-10-30
-**Status**: Planned — awaiting the user's review
+**Status**: In progress — Tasks 1–3 and Task 4 Steps 1–3 done; the first push awaits the user (Task 4, Step 4)
 **Last Updated**: 2026-10-30
 
 **Goal:** A push whose merge into `origin/main` would carry a `media-viewer.js` over a committed ceiling is refused in seconds, a push to `main` is refused while the ceiling is above the count, E2E still gets git's ref lines, and three tournament E2E tests stop failing at random.
@@ -51,10 +51,10 @@
 
 **Success Criteria** (spec § 1):
 - [ ] A push whose merge into `origin/main` carries a renderer over the ceiling is refused, in seconds, before the E2E decision (Task 1 cases 1, 3; Task 4).
-- [ ] Each planted case fails against its wrong rule and passes against the built check (Task 1, mutants M1–M9).
-- [ ] A push to `main` is refused while the ceiling is above the count (case 6a).
-- [ ] The E2E gate still receives git's ref lines after the ratchet has run (Task 2's stdin row, shown able to fail).
-- [ ] The flake is reproduced on demand before its fix, and the fixed tests pass on repeat (Task 3).
+- [x] Each planted case fails against its wrong rule and passes against the built check (Task 1, mutants M1–M9).
+- [x] A push to `main` is refused while the ceiling is above the count (case 6a).
+- [x] The E2E gate still receives git's ref lines after the ratchet has run (Task 2's stdin row, shown able to fail).
+- [x] The flake is reproduced on demand before its fix, and the fixed tests pass on repeat (Task 3).
 - [ ] The unit and E2E suites pass (Task 4).
 
 ---
@@ -160,9 +160,9 @@ Re-estimated after planning: **~4.25 SP** against WEEKLY's 4 and the spec's 4–
   - `decide(count: number, ceiling: number, remoteRef: string): 'pass' | 'remind' | 'over' | 'lower'`.
 - CLI contract, which Task 2's hook relies on: the CLI reads the ref lines on stdin, exits 0 to pass and 1 to refuse, and writes every message to stderr and nothing to stdout.
 
-- [ ] **Step 1: Record the baseline.** Run `npx vitest run` from the repo root, with an uppercase drive letter in the cwd. Record the file count and the passed and skipped counts in § 4. G1's last run, at `ff4cccc`, was 2,431 passed and 1 skipped.
+- [x] **Step 1: Record the baseline.** Run `npx vitest run` from the repo root, with an uppercase drive letter in the cwd. Record the file count and the passed and skipped counts in § 4. G1's last run, at `ff4cccc`, was 2,431 passed and 1 skipped.
 
-- [ ] **Step 2: Write the planted cases and rows 10–12** in `tests/check-line-ratchet.test.js`, under `describe('CLI on a real repo with a local origin', { timeout: 120_000 })`.
+- [x] **Step 2: Write the planted cases and rows 10–12** in `tests/check-line-ratchet.test.js`, under `describe('CLI on a real repo with a local origin', { timeout: 120_000 })`.
 
   **Helpers**, at module level so that Step 3's rows can use `body`:
   - Copy `gitEnv` and `GIT_CONFIG` from `tests/check-e2e-needed.test.js:136-159`, with their comments.
@@ -205,7 +205,7 @@ Re-estimated after planning: **~4.25 SP** against WEEKLY's 4 and the spec's 4–
   - Main's changes in cases 2, 3 and 5 remove lines from the top of the renderer, and the branch appends at the end, so git merges them cleanly.
   - Each refusal row asserts a message that only the built check prints. When the script is absent, node exits 1 with "Cannot find module", so a row that asserted the exit code alone would pass vacuously.
 
-- [ ] **Step 3: Write the pure-function rows** in the same file. Each list is an `it.each` table, using Step 2's shas.
+- [x] **Step 3: Write the pure-function rows** in the same file. Each list is an `it.each` table, using Step 2's shas.
   - **`countLines`**: `''` → 0; `'a'` → 0; `'a\n'` → 1; `'a\nb'` → 1; `'a\n\n'` → 2; `Buffer.from('a\r\nb\r\n')` → 2; `Buffer.from(body(3))` → 3.
   - **`parseCeiling` parses**:
     - `'11529\n'` → 11529;
@@ -241,9 +241,9 @@ Re-estimated after planning: **~4.25 SP** against WEEKLY's 4 and the spec's 4–
     - each of these → `null`: (`''`, 1), which is git 2.38's unresolvable ref; (`''`, 0); (`` `${T}\n` ``, 128); (`'not-an-oid\n'`, 0); and (`` `${T}\nmedia-viewer.js\n` ``, 0), a clean exit that lists a conflict.
   - **`'the committed ceiling file parses to a positive integer'`**: `parseCeiling` of the repo's own `scripts/renderer-line-ceiling.txt` is greater than 0.
 
-- [ ] **Step 4: Run them and see them fail.** Run `npx vitest run tests/check-line-ratchet.test.js`. Expect every test to fail: the module is missing, so the pure rows throw on `require`, and the CLI rows see node's "Cannot find module". If any row passes, it is vacuous. Fix that row before going on.
+- [x] **Step 4: Run them and see them fail.** Run `npx vitest run tests/check-line-ratchet.test.js`. Expect every test to fail: the module is missing, so the pure rows throw on `require`, and the CLI rows see node's "Cannot find module". If any row passes, it is vacuous. Fix that row before going on.
 
-- [ ] **Step 5: Write `scripts/renderer-line-ceiling.txt` and the pure functions.** The ceiling file is exactly:
+- [x] **Step 5: Write `scripts/renderer-line-ceiling.txt` and the pure functions.** The ceiling file is exactly:
 
   ```
   # The renderer line ceiling (v2 spec § 11.1; the user's ruling of 2026-10-27). .husky/pre-push refuses
@@ -254,7 +254,7 @@ Re-estimated after planning: **~4.25 SP** against WEEKLY's 4 and the spec's 4–
 
   The script's header comment states what it measures, that it fails closed, and that it never writes the ceiling. `parseCeiling` strips a leading BOM, trims each line and skips blank lines and `#` lines. It needs exactly one remaining line matching `/^[0-9]+$/`, whose value is a safe integer ≥ 1. A sha is `/^[0-9a-f]{40}([0-9a-f]{24})?$/`, and a zero sha is `/^0+$/`. Run the file: the pure rows pass, and the CLI rows still fail.
 
-- [ ] **Step 6: Write the CLI** under `require.main === module`, in the order of spec § 5.2:
+- [x] **Step 6: Write the CLI** under `require.main === module`, in the order of spec § 5.2:
   1. Read stdin with `fs.readFileSync(0)` and run `selectUpdates`. If nothing is selected, exit 0 before any fetch.
   2. Fetch `main` once (call 4), then resolve `refs/remotes/origin/main^{commit}`.
   3. For each update, in order:
@@ -274,11 +274,11 @@ Re-estimated after planning: **~4.25 SP** against WEEKLY's 4 and the spec's 4–
 
   One top-level `catch` prints `pre-push ratchet: cannot measure — <reason>. Refusing the push.` with the ways out, and exits 1. Every `execFileSync` and `spawnSync` call passes `maxBuffer: 64 * 1024 * 1024`.
 
-- [ ] **Step 7: Run them and see them pass.** Same command. Expect every test in the file to pass. Record the count and the file's run time.
+- [x] **Step 7: Run them and see them pass.** Same command. Expect every test in the file to pass. Record the count and the file's run time.
 
-- [ ] **Step 8: Commit.** `git add scripts/check-line-ratchet.js scripts/renderer-line-ceiling.txt tests/check-line-ratchet.test.js`, then `git commit -m "feat(scripts): the renderer line ratchet, measured on git's merge, failing closed"`. After the hook runs, check `git diff --cached` is empty: a refused commit leaves its files staged.
+- [x] **Step 8: Commit.** `git add scripts/check-line-ratchet.js scripts/renderer-line-ceiling.txt tests/check-line-ratchet.test.js`, then `git commit -m "feat(scripts): the renderer line ratchet, measured on git's merge, failing closed"`. After the hook runs, check `git diff --cached` is empty: a refused commit leaves its files staged.
 
-- [ ] **Step 9: Show each case able to fail (spec § 6.2).** Apply one mutant at a time with Edit. Run its rows with `npx vitest run tests/check-line-ratchet.test.js -t "<case prefix>"`, record the result, and restore the file with `git checkout -- scripts/check-line-ratchet.js`. Each listed row must fail. Record any other rows that fail too.
+- [x] **Step 9: Show each case able to fail (spec § 6.2).** Apply one mutant at a time with Edit. Run its rows with `npx vitest run tests/check-line-ratchet.test.js -t "<case prefix>"`, record the result, and restore the file with `git checkout -- scripts/check-line-ratchet.js`. Each listed row must fail. Record any other rows that fail too.
 
   | Mutant | The wrong rule | Must fail |
   |---|---|---|
@@ -308,7 +308,7 @@ Re-estimated after planning: **~4.25 SP** against WEEKLY's 4 and the spec's 4–
 - Consumes: Task 1's CLI contract, which is `node scripts/check-line-ratchet.js`, with exit 0 to pass, exit 1 to refuse, and messages on stderr.
 - Produces: the hook order (tokens checked → ref lines read once → ratchet → gate), and `check_failed`'s hint, which names `git push` in the pre-push hook.
 
-- [ ] **Step 1: Write the failing tests.**
+- [x] **Step 1: Write the failing tests.**
   - **The stub.** In the hook describe, the stub `node` now dispatches on `$1`. Its body is exact, because the stdin behaviour is what the tests prove:
 
     ```sh
@@ -343,12 +343,12 @@ Re-estimated after planning: **~4.25 SP** against WEEKLY's 4 and the spec's 4–
     - The existing `check_failed` row also expects `SKIP=vitest git commit`.
     - New row `'check_failed names git push in the pre-push hook'`: run `runSkip('(exit 1) || check_failed ratchet', undefined, 'pre-push')`. Status 1. Stderr contains `SKIP=ratchet git push`, and does not contain `git commit`.
 
-- [ ] **Step 2: Run them and see them fail.** Run `npx vitest run tests/check-e2e-needed.test.js tests/husky-skip.test.js`.
+- [x] **Step 2: Run them and see them fail.** Run `npx vitest run tests/check-e2e-needed.test.js tests/husky-skip.test.js`.
   - Expect these to fail: the stdin proof, the refusal, 127, `SKIP=ratchet` (the token is unknown and nothing is skipped), `SKIP=e2e`, and the `git push` row.
   - Expect the control, the `it.each` rows, the real-node row and the `git commit` assertion to pass against today's hook.
   - If the control fails, the stub is broken: fix that first.
 
-- [ ] **Step 3: Implement.**
+- [x] **Step 3: Implement.**
   - **`check_failed`**: the hint's command is `git push` when `$HOOK_NAME` is `pre-push`, and `git commit` otherwise.
   - **`.husky/pre-push`** becomes:
 
@@ -375,9 +375,9 @@ Re-estimated after planning: **~4.25 SP** against WEEKLY's 4 and the spec's 4–
     fi
     ```
 
-- [ ] **Step 4: Run them and see them pass.** Same command. Every test in both files passes.
+- [x] **Step 4: Run them and see them pass.** Same command. Every test in both files passes.
 
-- [ ] **Step 5: Update the live docs.**
+- [x] **Step 5: Update the live docs.**
   - **`CLAUDE.md:31`.** Replace `Pre-push hook (Husky): \`node scripts/check-e2e-needed.js\` decides` with:
 
     > Pre-push hook (Husky): `node scripts/check-line-ratchet.js` first (merges each pushed branch into a freshly fetched `origin/main` with `git merge-tree` and refuses when the merged `media-viewer.js` is over the ceiling in `scripts/renderer-line-ceiling.txt` or, on a push to `main`, under it; a conflict or any failure to measure refuses; raising the ceiling is an explicit edit of that file), then `node scripts/check-e2e-needed.js` decides
@@ -393,9 +393,9 @@ Re-estimated after planning: **~4.25 SP** against WEEKLY's 4 and the spec's 4–
   - Update each doc's Last Updated line, if it has one.
   - Check `CLAUDE.md`'s size with `wc -c CLAUDE.md`, and record it. It must stay under 69,000 bytes.
 
-- [ ] **Step 6: Commit.** Run `git add .husky/pre-push .husky/skip.sh tests/check-e2e-needed.test.js tests/husky-skip.test.js CLAUDE.md PROJECT.md docs/planning/GOALS.md`, then `git commit -m "feat(husky): run the line ratchet before the E2E gate, each with its own copy of the ref lines"`. Check that `git diff --cached` is empty.
+- [x] **Step 6: Commit.** Run `git add .husky/pre-push .husky/skip.sh tests/check-e2e-needed.test.js tests/husky-skip.test.js CLAUDE.md PROJECT.md docs/planning/GOALS.md`, then `git commit -m "feat(husky): run the line ratchet before the E2E gate, each with its own copy of the ref lines"`. Check that `git diff --cached` is empty.
 
-- [ ] **Step 7: Show the stdin row able to fail (spec § 6.3).** Temporarily edit `.husky/pre-push` into the ↳ note's shape: delete `refs=$(cat)`, have the ratchet line read git's stdin directly (`node scripts/check-line-ratchet.js || check_failed ratchet`), and have the gate line read it too (`decision=$(node scripts/check-e2e-needed.js || echo RUN)`). Run the hook describe. Expect the stdin-proof row to fail (no `STUB-GATE`, and the gate prints `STDIN-LOST`), and record which other rows fail. Restore with `git checkout -- .husky/pre-push`, and check `git status` is clean.
+- [x] **Step 7: Show the stdin row able to fail (spec § 6.3).** Temporarily edit `.husky/pre-push` into the ↳ note's shape: delete `refs=$(cat)`, have the ratchet line read git's stdin directly (`node scripts/check-line-ratchet.js || check_failed ratchet`), and have the gate line read it too (`decision=$(node scripts/check-e2e-needed.js || echo RUN)`). Run the hook describe. Expect the stdin-proof row to fail (no `STUB-GATE`, and the gate prints `STDIN-LOST`), and record which other rows fail. Restore with `git checkout -- .husky/pre-push`, and check `git status` is clean.
 
 ### Task 3: The flaky tournament tests
 
@@ -403,13 +403,13 @@ Re-estimated after planning: **~4.25 SP** against WEEKLY's 4 and the spec's 4–
 - Modify: `tests/e2e/tournament-mode.test.js:292, 351, 418`
 - Probe, not committed: the same file, the Ctrl+A test
 
-- [ ] **Step 1: Confirm the two siblings the spec reads as unaffected.** Read `:397` ("undo button is disabled…") and `:452` ("tournament chrome hides…"), and record in § 4 why each is safe. The expected reasons:
+- [x] **Step 1: Confirm the two siblings the spec reads as unaffected.** Read `:397` ("undo button is disabled…") and `:452` ("tournament chrome hides…"), and record in § 4 why each is safe. The expected reasons:
   - `:397` waits with `waitForUserHistory`, which filters out prunes, and its button follows `peekUndoKind`, which skips them;
   - `:452` asserts only the chrome's visibility.
 
   If either reads the raw history, the pair or `currentIndex` across a window where a skip can land, it gets the fix too: record it and extend Step 4.
 
-- [ ] **Step 2: Phase 0, reproduce on the unfixed fixtures.** This is a temporary edit of the Ctrl+A test (`:291`).
+- [x] **Step 2: Phase 0, reproduce on the unfixed fixtures.** This is a temporary edit of the Ctrl+A test (`:291`).
   1. After `waitForMedia`, seed the deal. Call `setSeedScores(page, { 'tiny.mp4': 0.9, 'red-1x1.png': 0.7, 'green-1x1.png': 0.3, 'blue-1x1.png': 0.1 })`, and assert it returns `[['tiny.mp4', 'blue-1x1.png'], ['red-1x1.png', 'green-1x1.png']]`.
   2. Hold the skip. In `page.evaluate`, replace `window.mediaViewer._skipFailedTournamentFile` with a function that pushes `() => original.apply(mv, args)` onto `window.__heldSkips`. The failure listener resolves `this._skipFailedTournamentFile` when it fires, so the instance property takes effect.
   3. Call `enterAndStartTournament(page, { rounds: 2, aiSeeding: true })`.
@@ -420,25 +420,25 @@ Re-estimated after planning: **~4.25 SP** against WEEKLY's 4 and the spec's 4–
   - If `enterAndStartTournament`'s idle wait never returns while the skip is held, the hold blocked a state the real flake passed through. Inline the helper's steps without its final idle wait, capture `before` once `__heldSkips.length === 1`, and record the deviation.
   - If it still does not fail, stop and report: the mechanism is not the BACKLOG entry's.
 
-- [ ] **Step 3: The probe's control.** Keep only the hold patch (no seeding, and no wait on `__heldSkips`), and run the Ctrl+A test with the three PNGs only. Expect PASS: the patch alone does not fail the test. Then restore the file with `git checkout -- tests/e2e/tournament-mode.test.js`, check that `git diff` is empty, and record both runs.
+- [x] **Step 3: The probe's control.** Keep only the hold patch (no seeding, and no wait on `__heldSkips`), and run the Ctrl+A test with the three PNGs only. Expect PASS: the patch alone does not fail the test. Then restore the file with `git checkout -- tests/e2e/tournament-mode.test.js`, check that `git diff` is empty, and record both runs.
 
-- [ ] **Step 4: The fix.** Drop `'tiny.mp4'` from the `createTempFixtureDir` lists at `:292`, `:351` and `:418`, with one comment line above each:
+- [x] **Step 4: The fix.** Drop `'tiny.mp4'` from the `createTempFixtureDir` lists at `:292`, `:351` and `:418`, with one comment line above each:
   - `:292` and `:418`: `// No tiny.mp4: its decode-failure skip can land after the pair is read and change it (G2; undo past a skip is G3 E7's).`
   - `:351`: `// No tiny.mp4: its decode-failure skip can push a tracked prune after Continue, which the raw history read below counts (G2).`
 
-- [ ] **Step 5: Run them on repeat.** Run `npx playwright test tests/e2e/tournament-mode.test.js -g "Ctrl\+A undo restores|leave-prompt Save persists|mouse wheel does not navigate|undo button is disabled|tournament chrome hides" --repeat-each=10`. Expect 50 passed: the three fixed tests and the two controls, 10 runs each.
+- [x] **Step 5: Run them on repeat.** Run `npx playwright test tests/e2e/tournament-mode.test.js -g "Ctrl\+A undo restores|leave-prompt Save persists|mouse wheel does not navigate|undo button is disabled|tournament chrome hides" --repeat-each=10`. Expect 50 passed: the three fixed tests and the two controls, 10 runs each.
   - If a control fails, stop and report: it carries the mechanism too.
   - A launch that exits `0xC0000142` is the low-memory environment, not the code. Record it and rerun once.
 
-- [ ] **Step 6: Commit.** `git add tests/e2e/tournament-mode.test.js`, then `git commit -m "test(e2e): drop tiny.mp4 from three tournament tests it made flaky"`.
+- [x] **Step 6: Commit.** `git add tests/e2e/tournament-mode.test.js`, then `git commit -m "test(e2e): drop tiny.mp4 from three tournament tests it made flaky"`.
 
 ### Task 4: End-to-end verification and the first push
 
-- [ ] **Step 1: The suites and checks.**
+- [x] **Step 1: The suites and checks.**
   - Run `npx vitest run` from the repo root, with an uppercase drive letter in the cwd. Expect one more file than the baseline. The passed count must equal the baseline plus Task 1's file plus Task 2's seven new rows: check the count, not the exit code.
   - Run `npm run lint`, then `npx prettier --check scripts/check-line-ratchet.js tests/check-line-ratchet.test.js tests/check-e2e-needed.test.js tests/husky-skip.test.js tests/e2e/tournament-mode.test.js`, then `node scripts/check-docs-index.js`.
 
-- [ ] **Step 2: The local end-to-end probe** (scratch, not committed; call 11).
+- [x] **Step 2: The local end-to-end probe** (scratch, not committed; call 11).
   - **Setup**: in a temp dir, create a bare `origin.git` and a `work` clone. Copy into the clone `.husky/pre-push`, `.husky/skip.sh`, `scripts/check-line-ratchet.js` and `scripts/check-e2e-needed.js`, with a 100-line `media-viewer.js` and a ceiling of 100, and push `main`. Point `core.hooksPath` at a dir whose `pre-push` runs `exec sh -e .husky/pre-push "$@"`. Put a stub `npx` first on `PATH`.
   - (a) Push a docs commit to a new branch. The push succeeds, and stderr shows `100 lines, ceiling 100 — at the ceiling` and the gate's decision.
   - (b) Commit one more renderer line and push. The push is refused, and the bare's branch ref is unchanged.
@@ -446,7 +446,7 @@ Re-estimated after planning: **~4.25 SP** against WEEKLY's 4 and the spec's 4–
   - Record each push's time and output in § 4.
   - A structural failure here (the fetch refused or hanging, or a ref-update error) stops the work: report it to the user, with no fallback (spec § 4).
 
-- [ ] **Step 3: Dogfood on this repo without pushing.** Pipe `refs/heads/g2-pre-push-gate <HEAD sha> refs/heads/g2-pre-push-gate <zeros>` into `node scripts/check-line-ratchet.js`: this is a real fetch from GitHub outside a push. Then pipe the same line with remote ref `refs/heads/main`. Expect both to pass with `media-viewer.js 11529 lines, ceiling 11529 — at the ceiling`, unless `main` has moved. Record the times.
+- [x] **Step 3: Dogfood on this repo without pushing.** Pipe `refs/heads/g2-pre-push-gate <HEAD sha> refs/heads/g2-pre-push-gate <zeros>` into `node scripts/check-line-ratchet.js`: this is a real fetch from GitHub outside a push. Then pipe the same line with remote ref `refs/heads/main`. Expect both to pass with `media-viewer.js 11529 lines, ceiling 11529 — at the ceiling`, unless `main` has moved. Record the times.
 
 - [ ] **Step 4: Ask the user before pushing.** On approval, run `git push -u origin g2-pre-push-gate`.
   - Record the ratchet's line and its duration, the gate's decision (RUN, since `tests/e2e/` changed) and the E2E result.
@@ -471,11 +471,29 @@ Re-estimated after planning: **~4.25 SP** against WEEKLY's 4 and the spec's 4–
   - node's exit 1 on a missing module would satisfy an exit-code-only refusal row, so every refusal row also pins a message (Task 1, Step 2).
 - A side agent's note, relayed by the user: the same limit, with the remedy "merge `main` into older branches before pushing them". Accepted as a practice, since G2 cannot change another branch's hook. Checked against today's unmerged branches, and carried by a § 9 closeout row so that it reaches the groups still open.
 
+### 2026-10-30 — PHASE: Implementation (Native, Sonnet · high)
+
+- The user approved the plan ("looks good. Native"). The plan was committed as `e42e8ec`.
+- **Task 1** (`25bc288`): baseline 49 files, 2,431 passed, 1 skipped. RED: 80 of 80 failed, the CLI rows on node's "Cannot find module". GREEN: 80 of 80 in about 19.5 s. All 12 mutants failed their named rows (M1: cases 1, 3, 5, 6a, 7, 9a–e, row 11; M2: 2, 3; M3: 2, 3; M4a: 4a, 4b, 9e; M4b: 4a, 4b, 9c, 9e; M5: 2, 3, 5; M6a: 6a and the `lower` pure row; M6b: 6b and two `remind` pure rows; M7: 7; M8: 8; M9: 9a–e; M12: row 12), plus the collateral rows listed.
+  - Deviations: `parseMergeTree` also returns `null` for an exit 1 that lists no path, with one extra pure row; the test loads the module per row (`lib()`), so a missing module fails each row on its own; the passed/refused helpers also assert an empty stdout (the CLI contract). Wording choices: the fetch failure appends git's first stderr line; the reminder reads "lower the ceiling to N before this reaches main".
+- **Task 2** (`7ff9a47`): RED was exactly the plan's set (stdin proof, refusal, 127, `SKIP=ratchet`, `SKIP=e2e`, the `git push` row); the control, the `it.each` rows, the real-node row and the `git commit` assertion passed against the old hook. The real-node stub row passed with the `PATH=${PATH#*:} command -v node` form, so the fallback was not needed. GREEN: 83 of 83 in the two files; full suite 50 files, 2,518 passed, 1 skipped (2,431 + 80 + 7). `CLAUDE.md` is 67,818 bytes. The stdin mutation (no `refs=$(cat)`, both checks reading git's stdin) failed the control and the stdin proof, and nothing else. A first attempt left the two pipes in place by mistake (my escaping) and failed four rows; the exact shape was then re-run.
+  - `PROJECT.md`'s Last Updated moved from 2026-09-02 to 2026-10-30, which over-claims freshness for the rest of that file (ledgered as a ruling).
+- **Task 3** (`7787f4d`):
+  - `:397` is safe: it waits with `waitForUserHistory`, which filters prunes, and its button follows `peekUndoKind`, which skips them. `:452` asserts only the chrome's visibility.
+  - Phase 0 (seeding that deals `tiny.mp4` against `blue-1x1.png`, and a held `_skipFailedTournamentFile`) failed at `expect(after).toEqual(before)`: `before` held `blue-1x1.png` and `tiny.mp4`, `after` held `green-1x1.png` and `red-1x1.png`. No fallback was needed.
+  - The control (the hold patch only, the three PNGs) passed. The fix was applied at the three sites.
+  - `--repeat-each=10` over the five tests: 50 passed in 2.7 minutes.
+- **Task 4, Steps 1–3**: full suite 50 files, 2,518 passed, 1 skipped; lint, Prettier and the docs index clean.
+  - Local end-to-end probe, with a local bare origin and the real hook through `core.hooksPath`: (a) a docs commit to a new branch passed in 1.3 s (`100 lines, ceiling 100 — at the ceiling`, the gate's SKIP); (b) one more renderer line was refused in 1.0 s (`101 lines, ceiling 100 — over by 1`) and the bare's branch ref was unchanged; (c) a docs commit pushed to `main` fast-forwarded in 1.3 s, and `refs/remotes/origin/main` afterwards equalled the pushed sha.
+  - Dogfood against GitHub without pushing: `media-viewer.js 11529 lines, ceiling 11529 — at the ceiling` for the branch ref and for `refs/heads/main`, 1.2 s and 1.1 s, `origin/main` still `4054d11`.
+
 ---
 
 ## 5. Key Discoveries
 
-_(filled during execution)_
+- The flake's mechanism is the BACKLOG entry's: `tiny.mp4` is dealt into the first pair, and its decode-failure skip lands after the test reads the pair. Seeding plus a held skip reproduces it on demand, and the same hold on the three PNGs does not, so the cause is the fixture and not the hold.
+- The unit suite for the ratchet needs no network: a local bare `origin` carries the real fetch, `merge-tree` and blob reads, so the 18 CLI rows take about 19 s together.
+- A real push measures in about a second on a local origin and 1.1–1.2 s against GitHub, so a refused push costs far less than the E2E suite it now precedes.
 
 ---
 
@@ -501,26 +519,26 @@ _(filled during execution)_
 
 ### Test Plan
 
-- [ ] Unit: Task 1 (the pure rows, 18 CLI rows, and the 12 mutants M1–M9 and M12); Task 2 (7 new rows, and the stdin mutation).
-- [ ] The full `npx vitest run`, checked by count (Task 4, Step 1).
-- [ ] `npm run lint`, `npx prettier --check …` and `node scripts/check-docs-index.js`.
-- [ ] E2E: Phase 0 and its control; the 50-run repeat (Task 3).
+- [x] Unit: Task 1 (the pure rows, 18 CLI rows, and the 12 mutants M1–M9 and M12); Task 2 (7 new rows, and the stdin mutation).
+- [x] The full `npx vitest run`, checked by count (Task 4, Step 1).
+- [x] `npm run lint`, `npx prettier --check …` and `node scripts/check-docs-index.js`.
+- [x] E2E: Phase 0 and its control; the 50-run repeat (Task 3).
 - [ ] The local end-to-end probe (Task 4, Step 2), the dogfood (Step 3), and the first push's full E2E run (Step 4).
 
 ### Test Results
 
 | Test | Result | Notes |
 |------|--------|-------|
-| Baseline `npx vitest run` | | |
-| `tests/check-line-ratchet.test.js` | | |
-| Mutants M1–M9, M12 | | |
-| Hook test + `husky-skip` | | |
-| Stdin mutation | | |
-| Phase 0 / control | | |
-| Repeat run (50) | | |
-| Local end-to-end probe | | |
-| Dogfood | | |
-| First push | | |
+| Baseline `npx vitest run` | 49 files, 2,431 passed, 1 skipped | At `e42e8ec` |
+| `tests/check-line-ratchet.test.js` | RED 80 of 80 failed; GREEN 80 of 80 | About 19.5 s |
+| Mutants M1–M9, M12 | each failed its named rows | § 4 |
+| Hook test + `husky-skip` | 83 of 83; full suite 50 files, 2,518 passed, 1 skipped | 2,431 + 80 + 7 |
+| Stdin mutation | the control and the stdin proof failed, nothing else | § 4 |
+| Phase 0 / control | Phase 0 FAILED at `toEqual(before)` as predicted; the control PASSED | `before` = `blue-1x1.png` + `tiny.mp4` |
+| Repeat run (50) | 50 passed | 2.7 minutes |
+| Local end-to-end probe | (a) passed, (b) refused with the ref unchanged, (c) fast-forwarded | 1.3 s, 1.0 s, 1.3 s |
+| Dogfood | 11529 / 11529 on both refs | 1.2 s, 1.1 s |
+| First push | | awaits the user |
 
 ---
 
