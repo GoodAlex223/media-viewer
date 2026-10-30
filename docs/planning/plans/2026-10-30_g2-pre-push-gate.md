@@ -4,7 +4,7 @@
 
 **Task Reference**: [WEEKLY.md § G2](../WEEKLY.md#g2-pre-push-gate-batch---hooks-and-tests--4-sp) · BACKLOG 🟤 [2026-10-27] "Build the blocking renderer line ratchet: a pre-push check that fails when `media-viewer.js` is over a committed ceiling" · TODO 🟠 "Fix the flaky tournament E2E 'Ctrl+A undo restores the previous pair after a pick'" (← BACKLOG 🟤 [2026-10-11])
 **Created**: 2026-10-30
-**Status**: In progress — Tasks 1–3 and Task 4 Steps 1–3 done; the first push awaits the user (Task 4, Step 4)
+**Status**: In progress — Task 4 Step 4 done (pushed); the PR and the `max` review remain (Step 5)
 **Last Updated**: 2026-10-30
 
 **Goal:** A push whose merge into `origin/main` would carry a `media-viewer.js` over a committed ceiling is refused in seconds, a push to `main` is refused while the ceiling is above the count, E2E still gets git's ref lines, and three tournament E2E tests stop failing at random.
@@ -448,7 +448,7 @@ Re-estimated after planning: **~4.25 SP** against WEEKLY's 4 and the spec's 4–
 
 - [x] **Step 3: Dogfood on this repo without pushing.** Pipe `refs/heads/g2-pre-push-gate <HEAD sha> refs/heads/g2-pre-push-gate <zeros>` into `node scripts/check-line-ratchet.js`: this is a real fetch from GitHub outside a push. Then pipe the same line with remote ref `refs/heads/main`. Expect both to pass with `media-viewer.js 11529 lines, ceiling 11529 — at the ceiling`, unless `main` has moved. Record the times.
 
-- [ ] **Step 4: Ask the user before pushing.** On approval, run `git push -u origin g2-pre-push-gate`.
+- [x] **Step 4: Ask the user before pushing.** On approval, run `git push -u origin g2-pre-push-gate`.
   - Record the ratchet's line and its duration, the gate's decision (RUN, since `tests/e2e/` changed) and the E2E result.
   - If the ratchet fails structurally inside the real push, stop and ask the user (spec § 4).
   - If only an unrelated flake fails, re-push once and record it.
@@ -487,6 +487,8 @@ Re-estimated after planning: **~4.25 SP** against WEEKLY's 4 and the spec's 4–
   - Local end-to-end probe, with a local bare origin and the real hook through `core.hooksPath`: (a) a docs commit to a new branch passed in 1.3 s (`100 lines, ceiling 100 — at the ceiling`, the gate's SKIP); (b) one more renderer line was refused in 1.0 s (`101 lines, ceiling 100 — over by 1`) and the bare's branch ref was unchanged; (c) a docs commit pushed to `main` fast-forwarded in 1.3 s, and `refs/remotes/origin/main` afterwards equalled the pushed sha.
   - Dogfood against GitHub without pushing: `media-viewer.js 11529 lines, ceiling 11529 — at the ceiling` for the branch ref and for `refs/heads/main`, 1.2 s and 1.1 s, `origin/main` still `4054d11`.
 
+- **Task 4, Step 4**: the user approved, and `git push -u origin g2-pre-push-gate` went through. The real hook printed `refs/heads/g2-pre-push-gate: media-viewer.js 11529 lines, ceiling 11529 — at the ceiling`, the gate chose RUN (`tests/e2e/` changed), and the E2E suite finished with 236 passed and 7 skipped in 11.2 minutes. The remote branch holds exactly the six commits `5d72f64`..`6edb762`; no foreign commit landed on it.
+
 ---
 
 ## 5. Key Discoveries
@@ -523,7 +525,7 @@ Re-estimated after planning: **~4.25 SP** against WEEKLY's 4 and the spec's 4–
 - [x] The full `npx vitest run`, checked by count (Task 4, Step 1).
 - [x] `npm run lint`, `npx prettier --check …` and `node scripts/check-docs-index.js`.
 - [x] E2E: Phase 0 and its control; the 50-run repeat (Task 3).
-- [ ] The local end-to-end probe (Task 4, Step 2), the dogfood (Step 3), and the first push's full E2E run (Step 4).
+- [x] The local end-to-end probe (Task 4, Step 2), the dogfood (Step 3), and the first push's full E2E run (Step 4).
 
 ### Test Results
 
@@ -538,7 +540,7 @@ Re-estimated after planning: **~4.25 SP** against WEEKLY's 4 and the spec's 4–
 | Repeat run (50) | 50 passed | 2.7 minutes |
 | Local end-to-end probe | (a) passed, (b) refused with the ref unchanged, (c) fast-forwarded | 1.3 s, 1.0 s, 1.3 s |
 | Dogfood | 11529 / 11529 on both refs | 1.2 s, 1.1 s |
-| First push | | awaits the user |
+| First push | Pushed; E2E 236 passed, 7 skipped, 11.2 min | The ratchet line: `11529 lines, ceiling 11529 — at the ceiling`; the gate chose RUN (`tests/e2e/` changed) |
 
 ---
 
