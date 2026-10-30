@@ -289,7 +289,8 @@ test.describe('Tournament Mode', () => {
     });
 
     test('Ctrl+A undo restores the previous pair after a pick', async () => {
-        tmpFixtures = await createTempFixtureDir(['red-1x1.png', 'green-1x1.png', 'blue-1x1.png', 'tiny.mp4']);
+        // No tiny.mp4: its decode-failure skip can land after the pair is read and change it (G2; undo past a skip is G3 E7's).
+        tmpFixtures = await createTempFixtureDir(['red-1x1.png', 'green-1x1.png', 'blue-1x1.png']);
         await loadFolder(page, tmpFixtures.dir);
         await waitForMedia(page);
 
@@ -348,7 +349,8 @@ test.describe('Tournament Mode', () => {
     });
 
     test('leave-prompt Save persists state; re-enter Continue resumes', async () => {
-        tmpFixtures = await createTempFixtureDir(['red-1x1.png', 'green-1x1.png', 'blue-1x1.png', 'tiny.mp4']);
+        // No tiny.mp4: its decode-failure skip can push a tracked prune after Continue, which the raw history read below counts (G2).
+        tmpFixtures = await createTempFixtureDir(['red-1x1.png', 'green-1x1.png', 'blue-1x1.png']);
         await loadFolder(page, tmpFixtures.dir);
         await waitForMedia(page);
 
@@ -415,7 +417,8 @@ test.describe('Tournament Mode', () => {
     });
 
     test('mouse wheel does not navigate pairs in tournament mode', async () => {
-        tmpFixtures = await createTempFixtureDir(['red-1x1.png', 'green-1x1.png', 'blue-1x1.png', 'tiny.mp4']);
+        // No tiny.mp4: its decode-failure skip can land after the pair is read and change it (G2; undo past a skip is G3 E7's).
+        tmpFixtures = await createTempFixtureDir(['red-1x1.png', 'green-1x1.png', 'blue-1x1.png']);
         await loadFolder(page, tmpFixtures.dir);
         await waitForMedia(page);
 
