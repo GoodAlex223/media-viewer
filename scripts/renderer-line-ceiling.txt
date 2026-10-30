@@ -1,0 +1,4 @@
+# The renderer line ceiling (v2 spec § 11.1; the user's ruling of 2026-10-27). .husky/pre-push refuses
+# a push whose merge into origin/main carries a longer media-viewer.js, and a push to main while this is
+# above the count. Each v2 phase's PR lowers it to its new count; raising it is an explicit edit here.
+11529
