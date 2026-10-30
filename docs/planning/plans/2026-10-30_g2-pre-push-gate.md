@@ -4,7 +4,7 @@
 
 **Task Reference**: [WEEKLY.md § G2](../WEEKLY.md#g2-pre-push-gate-batch---hooks-and-tests--4-sp) · BACKLOG 🟤 [2026-10-27] "Build the blocking renderer line ratchet: a pre-push check that fails when `media-viewer.js` is over a committed ceiling" · TODO 🟠 "Fix the flaky tournament E2E 'Ctrl+A undo restores the previous pair after a pick'" (← BACKLOG 🟤 [2026-10-11])
 **Created**: 2026-10-30
-**Status**: In progress — Task 4 Step 4 done (pushed); the PR and the `max` review remain (Step 5)
+**Status**: In progress — Task 4 Step 4 done (pushed); the PR and the `max` review remain (Step 5); PR #94 is open
 **Last Updated**: 2026-10-30
 
 **Goal:** A push whose merge into `origin/main` would carry a `media-viewer.js` over a committed ceiling is refused in seconds, a push to `main` is refused while the ceiling is above the count, E2E still gets git's ref lines, and three tournament E2E tests stop failing at random.
