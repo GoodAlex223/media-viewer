@@ -1,10 +1,19 @@
-# SKIP=e2e waives the E2E suite for one push — see .husky/skip.sh.
+# SKIP=ratchet waives the renderer line ratchet and SKIP=e2e the E2E suite, each for one push — see .husky/skip.sh.
 . "$(dirname "$0")/skip.sh"
-check_skip_tokens "e2e"
+check_skip_tokens "ratchet e2e"
+
+# Git sends the ref lines on stdin once. Keep them and give each check its own copy: the gate prints SKIP
+# for an empty stdin, so a check that read git's stdin first would turn E2E off for every push.
+refs=$(cat)
+
+# Before the E2E decision, so a refused push costs seconds, not the suite.
+if ! skipped ratchet; then
+    printf '%s\n' "$refs" | node scripts/check-line-ratchet.js || check_failed ratchet
+fi
 
 # Run unless the gate printed exactly SKIP: a crash after its token (RUNRUN, SKIPRUN), no output or
 # stray output all mean the decision is uncertain.
-decision=$(node scripts/check-e2e-needed.js || echo RUN)
+decision=$(printf '%s\n' "$refs" | node scripts/check-e2e-needed.js || echo RUN)
 if [ "$decision" != "SKIP" ] && ! skipped e2e; then
     echo "pre-push: running the E2E suite before push (skip it for one push with: SKIP=e2e git push)…"
     npx playwright test

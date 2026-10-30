@@ -32,7 +32,9 @@ check_failed() {
     if [ "$status" -eq 127 ]; then
         echo "$HOOK_NAME: $1 could not run — command not found (exit 127). Run npm install." >&2
     else
-        echo "$HOOK_NAME: $1 failed — fix it, or waive this check only: SKIP=$1 git commit …" >&2
+        verb=commit
+        [ "$HOOK_NAME" = "pre-push" ] && verb=push
+        echo "$HOOK_NAME: $1 failed — fix it, or waive this check only: SKIP=$1 git $verb …" >&2
     fi
     exit "$status"
 }

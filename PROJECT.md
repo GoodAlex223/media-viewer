@@ -2,7 +2,7 @@
 
 Project-specific configuration. Universal rules are in [CLAUDE.md](CLAUDE.md).
 
-**Last Updated**: 2026-09-02
+**Last Updated**: 2026-10-30
 
 ---
 
@@ -62,8 +62,8 @@ npm run lint          # ESLint (lint:fix to auto-fix)
 npm run format        # Prettier (format:check to verify only)
 # No type checking (plain JavaScript)
 # Husky pre-commit: secret scan -> docs-index guard -> CLAUDE.md size warning (never blocks) -> lint-staged -> unit tests
-# Husky pre-push: conditional E2E (skipped when a push changes only paths the app never loads)
-# Per-check bypass: SKIP=<check> git commit|push — secrets, docs-index, lint-staged, vitest | e2e (see CLAUDE.md)
+# Husky pre-push: renderer line ratchet (refuses a merge over scripts/renderer-line-ceiling.txt) -> conditional E2E (skipped when a push changes only paths the app never loads)
+# Per-check bypass: SKIP=<check> git commit|push — secrets, docs-index, lint-staged, vitest | ratchet, e2e (see CLAUDE.md)
 ```
 
 ---
