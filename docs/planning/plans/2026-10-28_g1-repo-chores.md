@@ -312,7 +312,7 @@ describe('classifyPaths — near misses and look-alikes run E2E', () => {
   - `beforeAll` refuses unless `sh` resolves both stubs. Mutation: deleting the node stub made it throw "sh resolves node to `/c/Program Files/nodejs/node`, not the stub", and no hook test ran.
 - **Finding 2**: the Global Constraint "`.husky/pre-push` is not edited" is now marked superseded.
 - **My own miss, surfaced by held-back item 2**: the 🔵 and 🟤 entries I filed in round 1 repeat the open 🟤 [2026-10-27] G5 entry "Remove the user's local profile paths and real folder names from the live docs, and add a check that stops new ones" (its "History" and "The control" bullets). I filed them without checking for it. Both are now tagged `possible-dup-of`, as the intake rules require, and the G5 entry has a progress note.
-  - That entry also makes redacting frozen docs the user's call. `4e8b54d` redacted four frozen files the relayed note did not name (two archived plans and two specs). That is disclosed there and to the user, and those four can be reverted.
+  - That entry also makes redacting frozen docs the user's call. `4e8b54d` redacted four frozen files the relayed note did not name (two archived plans and two specs). That was disclosed there and to the user, who kept all four and ruled that such redactions are allowed in frozen docs. The ruling is recorded in that entry's "Frozen docs" bullet.
 
 ---
 
