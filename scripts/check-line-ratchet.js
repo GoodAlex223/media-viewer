@@ -8,8 +8,9 @@
 // except on `refs/heads/main`, where it refuses until the ceiling equals the count.
 //
 // A main that is itself over its ceiling (two PRs that each fitted the slack, a SKIP, a web-UI commit)
-// refuses only a push that adds lines to it, and says whose overage it is. A main with no ceiling file
-// yet (before this check reaches it) passes with a note.
+// does not blame a branch that adds no lines to it: that branch passes with a note naming main's overage.
+// A branch that adds lines, and any push to main itself, still refuse, and say whose overage it is. A main
+// with no ceiling file yet (before this check reaches it) passes with a note.
 //
 // Fails closed: a failed fetch or merge, an unreadable or unparsable file, a renderer or ceiling file
 // that is not a regular file, or a malformed ref line refuses the push (`SKIP=ratchet git push` is the
@@ -58,7 +59,7 @@ function countLines(content) {
  */
 function parseCeiling(text) {
     const lines = text
-        .replace(/^﻿/, '')
+        .replace(/^\uFEFF/, '')
         .split(/\r?\n/)
         .map((line) => line.trim())
         .filter((line) => line && !line.startsWith('#'));
@@ -256,7 +257,9 @@ if (require.main === module) {
                     const over = `${head} — over by ${count - ceiling}`;
                     if (main && main.count > main.ceiling) {
                         const itself = `origin/main is itself over its ceiling (${main.count} lines, ceiling ${main.ceiling})`;
-                        if (count <= main.count) {
+                        // Only a branch gets the pass. The push to main is the backstop that forces an over-ceiling
+                        // main back under, and its pusher is the one landing on main, so refusing there blames no one else.
+                        if (count <= main.count && remoteRef !== MAIN_REF) {
                             say(`${over}, but ${itself} and this push adds no lines. Fix main.`);
                             break;
                         }

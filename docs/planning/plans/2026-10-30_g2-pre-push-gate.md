@@ -210,7 +210,7 @@ Re-estimated after planning: **~4.25 SP** against WEEKLY's 4 and the spec's 4–
   - **`parseCeiling` parses**:
     - `'11529\n'` → 11529;
     - `'# c\n\n11529\n# d\n'` → 11529;
-    - `'﻿11529\n'` → 11529;
+    - `'U+FEFF11529\n'` → 11529;
     - `'11529\r\n'` → 11529;
     - `'  11529  \n'` → 11529;
     - `'  # indented\n7'` → 7;
@@ -496,7 +496,7 @@ The user chose three calls: keep D3 for finding 1 (record the limit), fix 3 and 
 | # | Finding | Disposition |
 |---|---|---|
 | 1 | Slack on `main` is used up with no ceiling edit | D3 kept by the user. Recorded as a known limit (spec § 12) and filed (§ 6). |
-| 2 | An over-ceiling `main` blames every branch | Fixed: rows 14a–c. A push that adds no lines passes with a note; one that adds lines refuses and names main's overage. |
+| 2 | An over-ceiling `main` blames every branch | Fixed: rows 14a–c. A branch push that adds no lines passes with a note; one that adds lines refuses and names main's overage. Round 2 narrowed the pass to branches (row 14d). |
 | 3 | The fetch moves the user's `origin/main` and `FETCH_HEAD` | Fixed: a private ref `refs/ratchet/origin-main`, row 13. Mutants N1a, N1b each fail it. |
 | 4 | A force push to `main` is measured on the merge | Filed (§ 6): it needs a forced push, against policy. |
 | 5 | The wheel test could no longer fail on three files | Fixed: it counts `nextMedia`/`previousMedia` calls. With the guard deleted it fails (`Expected: 0, Received: 1`). |
@@ -511,9 +511,20 @@ The user chose three calls: keep D3 for finding 1 (record the limit), fix 3 and 
 | 14 | The ratchet test file is the critical path | Done in two steps. (1) The rows are split into a pure file and three CLI files with a shared harness: interleaved, the old file took 24.5–28.5 s and the three 20 s, so a modest saving. (2) The user then asked for the lasting fix: each commit is now one `git fast-import` (no checkout), equal commits are built once, and a `main` already on origin is not pushed again. Git processes started by the three CLI files fell from 777 to 466, and the full suite ran in 16–17 s in two runs (23.5–40 s before). Wall times swing with machine load, so the process count is the evidence. All 18 mutants rerun (M1, M2, M3, M4b, M6a, M6b, M7, M8, M9, M12, N1a, N1b, N2a, N2b, N3, N4, N5, N7) still fail their rows. One full run had timed out an unrelated `lint-guard` test at 5 s under load: its first test takes about 2 s alone, a 2.5x margin. |
 | 15 | `CLAUDE.md` overstated "a conflict refuses" | Fixed: "a conflict in either file". |
 
-- Held back by the reviewer and answered: `ROADMAP.md:34,96` goes in the closeout (§ 9); `plans/README.md:81` is fixed now; `--no-auto-maintenance` is added to the fetch; "in memory" wording is corrected in the spec and plan; the duplicate parser, the fourth `gitEnv` copy, the double `rev-parse`, the redundant BOM `replace` (now an escaped `﻿`) and the E2E readiness helpers are filed or left as cleanups (§ 6).
+- Held back by the reviewer and answered: `ROADMAP.md:34,96` goes in the closeout (§ 9); `plans/README.md:81` is fixed now; `--no-auto-maintenance` is added to the fetch; "in memory" wording is corrected in the spec and plan; the duplicate parser, the fourth `gitEnv` copy, the double `rev-parse`, the redundant BOM `replace` and the E2E readiness helpers are filed or left as cleanups (§ 6). The BOM line was recorded here as an escape sequence but was still the literal character (round 2, finding 3); it is now an escape sequence in the script and the test, checked at byte level.
 - Found by the pre-commit guard, not by the review: the new `tests/ratchet-repo-harness.js` is a RUN path that names SKIP paths (`scripts/…`), which the guard "nothing a RUN path loads is on the SKIP list" refuses. It is unit-only, so it joined `SKIP_FILES` in `scripts/check-e2e-needed.js` beside the two older harnesses, with a SKIP row that failed first. The first commit attempt was refused and left everything staged, so the plan and spec edits landed in the same commit (`4fa92ed`) as the code.
-- Ruling: finding 2 is fixed by letting a push that adds no lines to an over-ceiling `main` pass, which the spec's "count > ceiling refuses everywhere" did not say; the user did not rule on it. It costs a branch passing while `main` is over, with the note naming main. Revert if you want the stricter reading.
+- Ruling: finding 2 is fixed by letting a branch push that adds no lines to an over-ceiling `main` pass, which the spec's "count > ceiling refuses everywhere" did not say; the user did not rule on it. It costs a branch passing while `main` is over, with the note naming main. Revert if you want the stricter reading. (Round 2 showed the first version also let a push to `main` through; that is now refused.)
+
+### 2026-10-30 — PHASE: Review round 2 (PR #94, the re-review at `020890d`: 3 findings, 1 held back; 14 of 15 round-1 answers accepted)
+
+| # | Remark | Disposition |
+|---|---|---|
+| 1 | The fix for finding 2 also passes a push *to* `main` while `main` is over | Fixed: the pass is for branches only. Row 14d pushes to `main` and is refused, naming main's overage and both ways out. Mutant N8 (the condition dropped) fails it. |
+| 2 | The stub `node` runs the real ratchet for `node -- scripts/…` | Fixed: the stub scans every argument for `scripts/`. Two new rows (`node -- scripts/…`, `node --no-warnings scripts/…`) failed first; before the fix both rows fell through to the real node. |
+| 3 | The BOM answer was wrong: the code still held the literal character | Fixed, and my round-1 claim was wrong. The editor tools had written the escape as the literal character. It is now an escape sequence in the script and in the test, written with a node script, and checked with `grep -c` for the bytes (0 in both files). |
+| HB | A branch that sets the ceiling far below its count on an over-ceiling `main` passes as "adds no lines" | Recorded, not fixed: lowering a ceiling only makes the check stricter, and with finding 1 fixed the next push to `main` refuses until someone fixes main. Filed in § 6. |
+
+- The reviewer's visible messages (`edfddf3c…`, 15 assistant text blocks) hold no remark that is not in its two comments.
 
 ---
 
@@ -536,6 +547,7 @@ The user chose three calls: keep D3 for finding 1 (record the limit), fix 3 and 
 | A way to run the ratchet on the current branch without pushing (`npm run ratchet`) (🟤) | It would let a PR author see the merged count and set the ceiling before the push refuses it. Today that needs Task 4, Step 3's hand-built ref line | XS | L |
 | Close the slack-on-`main` gap (🟤) | Review finding 1: a branch that shrinks the renderer without lowering the ceiling leaves slack that the next branch can use up with no ceiling edit. D3 (the user's ruling) accepts it. Options when it bites: refuse a branch push whose merged count is below main's ceiling, or lower the ceiling in the merge automatically | S | M |
 | Measure what a push to `main` lands, not the merge (🟤) | Review finding 4: with `origin/main` at 90/100 and a stale tip at 110/100, `git push --force origin HEAD:main` measures 100/100 and passes. Measure the tip's own tree on `refs/heads/main`, or refuse when `remoteSha` is not an ancestor of the tip. Needs a forced push, against policy | XS | L |
+| Compare the merged ceiling with main's when a branch passes an over-ceiling `main` (🟤) | Review round 2, held back: a branch that sets the ceiling far below its own count (103/100 → 50) passes as "adds no lines", because the pass compares counts only. Harmless today (the push to `main` then refuses), but the branch push could say so | XS | L |
 | Smaller review cleanups (🟤) | `readBlob` spawns git twice per file (`ls-tree`, `cat-file`); the per-tip `rev-parse` duplicates a guard in `parseMergeTree`; the E2E readiness helpers report idle while a dealt file's failure is pending (a documented choice) | XS | L |
 
 ### Spawned Tasks
@@ -576,7 +588,7 @@ The user chose three calls: keep D3 for finding 1 (record the limit), fix 3 and 
 
 ## 8. Review
 
-- [ ] Self-review complete
+- [x] Self-review complete
 - [ ] Code review at `max` in a separate session, all findings answered in the PR
 - [ ] User approved (merge)
 

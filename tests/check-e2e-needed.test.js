@@ -286,10 +286,13 @@ describe.skipIf(!shAvailable)(
                     '        echo "STUB-GATE got the ref lines" >&2; printf "%s" "$STUB_OUT"',
                     '    else printf STDIN-LOST; fi',
                     '    exit "${STUB_EXIT:-0}" ;;',
-                    // Any other script is a hook line this stub does not model: fail loudly, never run the real one
-                    // (the real ratchet would fetch from GitHub inside the unit suite).
-                    '*scripts/*) echo "stub node: unexpected script $1" >&2; exit 99 ;;',
-                    '*) exec "$REAL_NODE" "$@" ;;',
+                    // Any other script, whichever argument names it (`node -- scripts/…` puts an option first), is a
+                    // hook line this stub does not model: fail loudly, never run the real one (the real ratchet
+                    // would fetch from GitHub inside the unit suite).
+                    '*) for arg in "$@"; do',
+                    '       case "$arg" in *scripts/*) echo "stub node: unexpected script $arg" >&2; exit 99 ;; esac',
+                    '   done',
+                    '   exec "$REAL_NODE" "$@" ;;',
                     'esac',
                     '',
                 ].join('\n'),
@@ -402,14 +405,21 @@ describe.skipIf(!shAvailable)(
             expect(result.stdout).toBe('42');
         });
 
-        it('the stub fails loudly on a script it does not model, instead of running the real one', () => {
-            const result = spawnSync('sh', ['-c', 'node ./scripts/check-line-ratchet.js'], {
+        // Any argument that names a script counts, not just the first: an option before it (`node --
+        // scripts/…`, `node --no-warnings scripts/…`) must not slip through to the real node, which would run
+        // the real ratchet and fetch from GitHub inside the unit suite.
+        it.each([
+            ['./scripts/check-line-ratchet.js', './scripts/check-line-ratchet.js'],
+            ['-- scripts/check-line-ratchet.js', 'scripts/check-line-ratchet.js'],
+            ['--no-warnings scripts/check-e2e-needed.js', 'scripts/check-e2e-needed.js'],
+        ])('the stub fails loudly on `node %s`, instead of running the real script', (args, script) => {
+            const result = spawnSync('sh', ['-c', `node ${args}`], {
                 env: stubEnv(),
                 encoding: 'utf8',
                 timeout: 10_000,
             });
             expect(result.status).toBe(99);
-            expect(result.stderr).toContain('stub node: unexpected script ./scripts/check-line-ratchet.js');
+            expect(result.stderr).toContain(`stub node: unexpected script ${script}`);
         });
     }
 );

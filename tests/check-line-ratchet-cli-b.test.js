@@ -77,6 +77,22 @@ describe('CLI on a real repo with a local origin (B)', { timeout: 120_000 }, () 
             );
         });
 
+        // The pusher to main is the one landing on main, so a refusal there blames nobody else; without it
+        // nothing would ever force an over-ceiling main back under (D3: the push to main is the backstop).
+        it('row 14d: refuses a push to main while main is over, naming its overage and both ways out', () => {
+            const m = overMain();
+            const tip = repo.commit(m, { 'docs/a.md': 'a\n' }, 'tip');
+            const r = repo.run([`HEAD ${tip} refs/heads/main ${m}`]);
+            repo.expectRefused(
+                r,
+                'refs/heads/main: media-viewer.js 103 lines, ceiling 100 — over by 3',
+                'origin/main is itself over its ceiling (103 lines, ceiling 100)',
+                'shrink media-viewer.js',
+                'raise the ceiling in scripts/renderer-line-ceiling.txt'
+            );
+            expect(r.stderr).not.toContain('adds no lines');
+        });
+
         it('row 14c: passes a branch that shrinks the renderer, though it is still over', () => {
             const m = overMain();
             const tip = repo.commit(m, { [R]: body(102) }, 'tip');
