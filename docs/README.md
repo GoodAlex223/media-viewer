@@ -29,7 +29,9 @@ Central index for all project documentation.
 
 | Document                    | Purpose                               |
 |-----------------------------|---------------------------------------|
-| _None currently active_     | —                                      |
+| [G2 Pre-Push Gate Plan][]   | Planned 2026-10-30 from the approved [G2 Pre-Push Gate][] spec: the renderer line ratchet (planted cases first, each shown able to fail), the hook's one read of the ref lines, and the tournament flake |
+
+[G2 Pre-Push Gate Plan]: planning/plans/2026-10-30_g2-pre-push-gate.md
 
 [G4 Strategic-Doc Refresh Plan]: archive/plans/2026-07-12_g4-strategic-docs-refresh.md
 [G1 Bulk-Rate Follow-ups Plan]: archive/plans/2026-08-29_g1-bulk-rate-followups.md
