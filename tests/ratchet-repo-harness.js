@@ -1,4 +1,5 @@
 import { beforeAll, afterAll, expect } from 'vitest';
+import { createHash } from 'crypto';
 import { execFileSync, spawnSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
@@ -7,7 +8,9 @@ import path from 'path';
 
 // Shared by the ratchet's test files: the planted-case values, and a throwaway work repo whose `origin` is
 // a local bare repo, so the CLI's fetch, `merge-tree` and blob reads are all real. The CLI rows are split
-// across files so that vitest runs them in parallel; each file builds its own repo.
+// across files so that vitest runs them in parallel; each file builds its own repo. Starting git is the
+// slow part on Windows, so a commit costs one `git fast-import`, equal commits are built once, and a
+// `main` that is already on origin is not pushed again.
 
 export const ZEROS = '0'.repeat(40);
 export const S1 = 'a'.repeat(40);
@@ -49,6 +52,23 @@ export const git = (repo, ...args) =>
 
 const SCRIPT = fileURLToPath(new URL('../scripts/check-line-ratchet.js', import.meta.url));
 
+// One fast-import commit stream, as a Buffer. `data` is the stream's length-prefixed block.
+const fastImportCommit = (ref, stamp, parent, files, message) => {
+    const text = (value) => Buffer.from(value, 'utf8');
+    const data = (value) => [text(`data ${Buffer.byteLength(value)}\n`), text(value), text('\n')];
+    const parts = [text(`commit ${ref}\nmark :1\nauthor ${stamp}\ncommitter ${stamp}\n`), ...data(message)];
+    if (parent !== null) parts.push(text(`from ${parent}\n`));
+    for (const [file, content] of Object.entries(files)) {
+        if (content === null) {
+            parts.push(text(`D ${file}\n`));
+        } else {
+            const link = typeof content === 'object';
+            parts.push(text(`M ${link ? '120000' : '644'} inline ${file}\n`), ...data(link ? content.link : content));
+        }
+    }
+    return Buffer.concat(parts);
+};
+
 /**
  * Call inside a `describe`: registers the repo's setup and teardown and returns the helpers. Each test
  * publishes its own `main` first, so the tests of one file share a repo but not each other's order.
@@ -58,7 +78,9 @@ export function useRatchetRepo() {
     let work;
     let origin;
     let missing;
-    let orphans = 0;
+    let clock = 0;
+    let publishedMain = null;
+    const commits = new Map();
 
     const repo = {
         get root() {
@@ -67,43 +89,33 @@ export function useRatchetRepo() {
         get work() {
             return work;
         },
-        // A commit on `parent` (detached), or a root commit for null. `files` maps a path to its content, or
-        // null to delete it.
+        // A commit on `parent`, or a root commit for null, built with one `git fast-import` and no checkout, so
+        // the work tree is never touched. `files` maps a path to its content, to { link: target } for a symlink
+        // (mode 120000, whatever the platform does with symlinks on disk), or to null to delete it. The same
+        // arguments give the same commit: tests that plant the same base share one.
         commit(parent, files, message) {
-            if (parent === null) {
-                git(work, 'checkout', '-q', '--orphan', `o${++orphans}`);
-                git(work, 'rm', '-rfq', '--ignore-unmatch', '.');
-            } else {
-                git(work, 'checkout', '-q', '--detach', parent);
-            }
-            for (const [file, content] of Object.entries(files)) {
-                const abs = path.join(work, file);
-                if (content === null) {
-                    fs.rmSync(abs, { force: true });
-                } else {
-                    fs.mkdirSync(path.dirname(abs), { recursive: true });
-                    fs.writeFileSync(abs, content);
-                }
-            }
-            git(work, 'add', '-A');
-            git(work, 'commit', '-q', '--allow-empty', '-m', message);
-            return git(work, 'rev-parse', 'HEAD');
-        },
-        // A commit on `parent` in which `file` is a symlink to `target` (mode 120000), whatever the platform
-        // does with symlinks on disk.
-        commitSymlink(parent, file, target, message) {
-            git(work, 'checkout', '-q', '--detach', parent);
-            const oid = execFileSync('git', ['hash-object', '-w', '--stdin'], {
+            const key = createHash('sha1')
+                .update(JSON.stringify([parent, files, message]))
+                .digest('hex');
+            if (commits.has(key)) return commits.get(key);
+            const stamp = `t <t@t> ${1_700_000_000 + ++clock} +0000`;
+            const marks = path.join(root, 'marks.txt');
+            execFileSync('git', ['fast-import', '--quiet', `--export-marks=${marks.replace(/\\/g, '/')}`], {
                 cwd: work,
-                input: target,
-                encoding: 'utf8',
+                input: fastImportCommit(`refs/fi/${clock}`, stamp, parent, files, message),
                 env: gitEnv(),
-            }).trim();
-            git(work, 'update-index', '--add', '--cacheinfo', `120000,${oid},${file}`);
-            git(work, 'commit', '-q', '--allow-empty', '-m', message);
-            return git(work, 'rev-parse', 'HEAD');
+            });
+            const sha = fs.readFileSync(marks, 'utf8').trim().split(' ')[1];
+            commits.set(key, sha);
+            return sha;
         },
-        publishMain: (sha) => git(work, 'push', '-q', '--force', 'origin', `${sha}:refs/heads/main`),
+        commitSymlink: (parent, file, target, message) => repo.commit(parent, { [file]: { link: target } }, message),
+        // Pushes `sha` to origin's main; a main that is already there is not pushed again.
+        publishMain(sha) {
+            if (sha === publishedMain) return;
+            git(work, 'push', '-q', '--force', 'origin', `${sha}:refs/heads/main`);
+            publishedMain = sha;
+        },
         run: (lines) =>
             spawnSync(process.execPath, [SCRIPT], {
                 cwd: work,
