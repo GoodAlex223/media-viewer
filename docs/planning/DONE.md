@@ -2,7 +2,8 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-10-27 <!-- Group G6: Weekly Reviews (2026-10-27 run, ⚪ Overhead, Oct 19–23, run 2026-10-27). MERGED 2026-10-27 via PR #92 (merge c5ac35f) after two review rounds: 6 findings and 2 nits (one finding fixed differently), then 1 optional nit; a round-3 close-out found no issue. -->
+**Last Updated**: 2026-10-30 <!-- Group G1: Repo chores (🔵, Cleanup Week #5, Oct 26–30, run Oct 28–30). MERGED 2026-10-30 via PR #93 (merge 4894a13) after three review rounds (15 + 7 held back → 2 + 5 → 0) and a close-out: the pre-push SKIP list, --no-renames, the hook fail-safe, Context7 retired, MIT LICENSE. -->
+<!-- Previous: Group G6: Weekly Reviews (2026-10-27 run, ⚪ Overhead, Oct 19–23, run 2026-10-27). MERGED 2026-10-27 via PR #92 (merge c5ac35f) after two review rounds: 6 findings and 2 nits (one finding fixed differently), then 1 optional nit; a round-3 close-out found no issue. -->
 <!-- Previous: Group G5: Strategic-doc refresh (🟡, Oct 19–23, run 2026-10-27). MERGED 2026-10-27 via PR #91 (merge 7fb9978) after three review rounds (7 → 1 → 0 findings) and a close-out that accepted every response. -->
 <!-- Previous: Group G3: ZoomManager extraction (🔵, Oct 19–23, run 2026-10-26). MERGED 2026-10-26 via PR #90 (merge 082e3b2) after four review rounds (15 → 1 → 0 → 0 findings) and a close-out that accepted every response. -->
 <!-- Previous: Group G4: Formatter hook per-edit cost (🔵, Oct 19–23, run 2026-10-26). MERGED 2026-10-26 via PR #89 (merge 7f75013) after a 5-finding review, a docs round and a clean round 3. -->
@@ -33,6 +34,57 @@ Completed tasks with implementation details and learnings.
 <!-- Organize by month, newest first. -->
 
 ## 2026-10 (October)
+
+### 2026-10-30 — Group G1: Repo chores 🔵 (Cleanup Week #5, Oct 26–30, run Oct 28–30) — **3/3, MERGED `4894a13`** (PR #93)
+
+**Plan**: [2026-10-28_g1-repo-chores.md](../archive/plans/2026-10-28_g1-repo-chores.md). There is no spec: it is a 3-SP small change, and the design was approved in chat. Executed natively by Claude.
+**Branch**: `g1-repo-chores`, cut from `main` at `a3d00e8`. It was deleted on the remote and locally after the merge.
+
+✅ **Status: 3/3 chores. MERGED 2026-10-30 via PR #93** (merge `4894a13`, with `--merge`). Three review rounds ran in a separate session at `max`:
+- **Round 1** (head `23e1115`): 15 findings and 7 held back, each checked first-hand. 18 were fixed, 2 fixed differently and 2 recorded, in `a1e59c2..4e8b54d`.
+  - The worst: the hook ran E2E only on an exact `RUN`, so a gate that printed `RUN` and then failed, printed nothing or printed stray text skipped E2E silently.
+  - Also: the import guard crashed on a tracked file deleted but not staged, and the `*.md` rule outranked `tests/e2e/`.
+- **Round 2** (head `4e8b54d`): 2 findings and 5 held back. The hook test's stubs had no execute bit, so on Linux or macOS POSIX `sh` would have passed over them and run the real gate and the real suite; the plan's "hook is not edited" constraint was stale. Both fixed in `7fdebf7` and `735f014`.
+- **Round 3 and its close-out** (head `ff4cccc`): no issues. The reviewer re-ran the full suite and checked the gate on every push range.
+
+**Summary**:
+- **The pre-push gate skips E2E for paths the app never loads.**
+  - `classifyPaths` has an explicit SKIP list: `*.md`, `docs/`, `.claude/`, `scripts/`, `.husky/`, `prototypes/`, `tests/integration/`, the top-level unit tests and their two harnesses, and the Vitest, ESLint and Prettier configs.
+  - `tests/e2e/`, `playwright.config.js`, `package.json` and the lockfile are checked first and never skip.
+  - The CLI diffs with `--no-renames`, because a rename otherwise lists only its new path, so `git mv main.js docs/` used to skip.
+  - `.husky/pre-push` now runs E2E unless the gate prints exactly `SKIP`.
+  - The first live SKIP pushes took seconds; the RUN pushes took 9.9–11.2 min.
+- **Context7** is retired: the local `.mcp.json` (asked first) and `.mcp.json.example` are deleted, and `disabledMcpjsonServers` is gone.
+- **`LICENSE`** is GitHub's MIT template with `Copyright (c) 2025 GoodAlex223` (the user's ruling), and README links it.
+
+**Key changes**:
+- `scripts/check-e2e-needed.js`: the SKIP list and never-skip set, `--no-renames`, the header and messages.
+- `.husky/pre-push`: compare against `SKIP`.
+- `tests/check-e2e-needed.test.js` (11 → 67 tests):
+  - each class both ways;
+  - the CLI on one temp repo (moved files, the new-branch merge-base, exit status, the hook-variable scrub);
+  - the hook under `sh` with executable stub `node`/`npx`, a positive control, and a `beforeAll` that refuses unless the stubs resolve;
+  - an import guard that reads the index, with one control row per load form (nine mutations).
+- Docs: `CLAUDE.md`'s pre-push sentence, `PROJECT.md:65`, `GOALS.md:83`, REVIEW-QUEUE, README, `LICENSE`.
+- **Also on this PR** (a side agent's note, relayed by the user): 13 profile-path lines in 6 tracked docs on `main` now read `<user>`.
+  - Four of those files were frozen docs the note did not name. The user kept those redactions and ruled that placeholder-only redactions are allowed in frozen docs (the G5 BACKLOG entry).
+  - The round-1 BACKLOG entries filed for the history rewrite and a pre-commit check duplicated that G5 entry; they are tagged `possible-dup-of` it.
+
+**Tests**:
+- Full unit suite: 2,375 → 2,431 passed, 1 skipped.
+- E2E: 236 passed and 7 skipped, on both RUN pushes.
+- One unrelated load flake refused a Task 1 commit: `path-grants`' `fsutil` test hit the 5 s timeout. It is filed as 🟤.
+
+**Learnings**:
+- A worktree's pre-commit hook exports absolute `GIT_DIR` and `GIT_INDEX_FILE`, so temp-repo tests must scrub them.
+- The consumer of a fail-safe token must fail safe too: compare against the skip token, not the run token.
+- Stubs on PATH need the execute bit under POSIX `sh`, and an absence-only control cannot show a stub ran.
+- Before filing a BACKLOG entry, grep for an existing one.
+
+**Follow-ups**:
+- BACKLOG 🟤 [2026-10-30] "From: G1 closeout" (6 entries).
+- 🔵 [2026-10-26]'s options 2–4.
+- 🟤 "Add CLI-layer regression tests…": git failure and stdin failure → RUN are still untested.
 
 ### 2026-10-27 — Group G6: Weekly Reviews ⚪ (2026-10-27 run, Oct 19–23, run after the week) — **4/4, MERGED `c5ac35f`** (PR #92)
 

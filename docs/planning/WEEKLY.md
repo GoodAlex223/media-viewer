@@ -12,7 +12,7 @@
 
 - **Auto-deploy: no** (Electron desktop app; a single `main` trunk with no production branch; no `.github/` directory and no deploy step — GOALS § Constraints "No CI service"). No Deploy Window group.
 - **User-in-the-loop steps** (part of their groups; listed here so they are visible in one place):
-  - **G1 (Wed)**: the LICENSE copyright line, whose year and holder name are yours to choose (the BACKLOG entry); and the delete of the untracked local `.mcp.json`, which is your file, so it is confirmed before it goes.
+  - **G1 (Wed)**: the LICENSE copyright line, whose year and holder name are yours to choose (the BACKLOG entry); and the delete of the untracked local `.mcp.json`, which is your file, so it is confirmed before it goes. ✅ Both settled 2026-10-28: `Copyright (c) 2025 GoodAlex223`, and the delete was approved, then done after a masked re-read showed the file unchanged.
   - **G4 (Sat)**: name the like and dislike folders for the harness run, and rule on deleting the parked local branch `g3-departed-clips-parked`.
   - **G6 (Sun)**: the run's rulings, as every week.
   - **Any time**: TODO 🔴 "G1 I1 post-merge check (user)". The first `npm start` on `main` moves your settings to the app origin once; check them, then delete the pre-merge profile copy. If it is already done, tell the G1 session, which checks it off.
@@ -28,9 +28,9 @@
 > **First, on Wednesday**: once G1 merges, a push that changes only `.claude/`, unit tests, `scripts/`, `.husky/` or the lint, format and test configs skips the 10–12 min E2E run, so G2's and G5's pushes get cheaper. The week's 🔵 exception, sized 3 SP (my call, delegated by the user at planning; Cleanup Week #3's was 3, #4's 7). One branch, one PR. The gate edit is the only part that can let an untested push through, so every path class is unit-tested both ways and every unlisted path stays RUN (fail-safe). The plan decides whether `prototypes/` (G4's research tree, which the app never loads) joins the SKIP list.
 > **Model:** start Opus · `medium` (stepped up from the 3–4 SP row's Sonnet: a pre-push gate is a commit hook, which § 1.0 escalates regardless of size) → execute Sonnet · `high` (verification is the acceptance: each path class tested both ways); review `max` (the row's `high`, one level up for the hook) — first guess; the plan confirms or revises it (WORKFLOW.md § 1.0)
 
-- [ ] **Skip the pre-push E2E run when a push changes only paths the app never loads** — per TODO 🟠 (option 1 of 🔵 [2026-10-26] "Cut the pre-push E2E gate's cost: 10–12 min on every push that touches a non-docs file"): add an explicit SKIP list to `classifyPaths` — `.claude/`, unit tests (`tests/*.test.js`, `tests/integration/`, never `tests/e2e/`), `scripts/`, `.husky/`, and the lint, format and test configs; every other path stays RUN. Unit-test each class both ways, and update `CLAUDE.md`'s pre-push description. At the closeout, annotate 🟡 [2026-07-10] "Re-evaluate pre-push E2E-gate friction after real-world use" (option 1 shipped; options 2–4 stay in the 🔵 entry). `scripts/check-e2e-needed.js`, `tests/check-e2e-needed.test.js`, `CLAUDE.md` (2) — TODO 🟠 [2026-10-26] ← 🔵 [2026-10-26] G4 session
-- [ ] **Retire the unused Context7 MCP server** — per 🔵 [2026-10-28] "Retire the unused Context7 MCP server from `.mcp.json` and `.mcp.json.example`": delete the untracked local `.mcp.json` (asked first) and delete `.mcp.json.example` or empty its `mcpServers`; drop the then-inert `disabledMcpjsonServers` line from `.claude/settings.local.json`; keep `.gitignore:1`; correct REVIEW-QUEUE.md § 1's "Already in use here" line. `.mcp.json.example`, `.mcp.json` (untracked), `.claude/settings.local.json` (gitignored), `docs/planning/REVIEW-QUEUE.md` (0.5) — 🔵 [2026-10-28] sibling G1 RAM session (user-relayed)
-- [ ] **Add a LICENSE file** — per 🔵 [2026-10-22] "Add a LICENSE file (MIT, as `package.json` already declares)": the standard MIT text with a copyright line whose year and holder you choose; `README.md`'s "License: MIT" section points at it; the vendored libraries keep their own notices. New `LICENSE`, `README.md` (0.5) — 🔵 [2026-10-22] v2 modules brainstorm
+- [x] **Skip the pre-push E2E run when a push changes only paths the app never loads** — per TODO 🟠 (option 1 of 🔵 [2026-10-26] "Cut the pre-push E2E gate's cost: 10–12 min on every push that touches a non-docs file"): add an explicit SKIP list to `classifyPaths` — `.claude/`, unit tests (`tests/*.test.js`, `tests/integration/`, never `tests/e2e/`), `scripts/`, `.husky/`, and the lint, format and test configs; every other path stays RUN. Unit-test each class both ways, and update `CLAUDE.md`'s pre-push description. At the closeout, annotate 🟡 [2026-07-10] "Re-evaluate pre-push E2E-gate friction after real-world use" (option 1 shipped; options 2–4 stay in the 🔵 entry). `scripts/check-e2e-needed.js`, `tests/check-e2e-needed.test.js`, `CLAUDE.md` (2) — TODO 🟠 [2026-10-26] ← 🔵 [2026-10-26] G4 session
+- [x] **Retire the unused Context7 MCP server** — per 🔵 [2026-10-28] "Retire the unused Context7 MCP server from `.mcp.json` and `.mcp.json.example`": delete the untracked local `.mcp.json` (asked first) and delete `.mcp.json.example` or empty its `mcpServers`; drop the then-inert `disabledMcpjsonServers` line from `.claude/settings.local.json`; keep `.gitignore:1`; correct REVIEW-QUEUE.md § 1's "Already in use here" line. `.mcp.json.example`, `.mcp.json` (untracked), `.claude/settings.local.json` (gitignored), `docs/planning/REVIEW-QUEUE.md` (0.5) — 🔵 [2026-10-28] sibling G1 RAM session (user-relayed)
+- [x] **Add a LICENSE file** — per 🔵 [2026-10-22] "Add a LICENSE file (MIT, as `package.json` already declares)": the standard MIT text with a copyright line whose year and holder you choose; `README.md`'s "License: MIT" section points at it; the vendored libraries keep their own notices. New `LICENSE`, `README.md` (0.5) — 🔵 [2026-10-22] v2 modules brainstorm
 
 ### G2. Pre-push gate `[batch]` 🟤 — hooks and tests — 4 SP
 
@@ -87,7 +87,7 @@
 
 > G1 first: its merge is what lets G2's and G5's pushes skip E2E.
 
-- **[G1](#g1-repo-chores-batch---repo-tooling--3-sp)** 🔵 — the SKIP list with both-ways tests, Context7, the LICENSE; review; merge.
+- **[G1](#g1-repo-chores-batch---repo-tooling--3-sp)** 🔵 — the SKIP list with both-ways tests, Context7, the LICENSE; review; merge. ✅ PR #93 (merge `4894a13`, 2026-10-30, after three review rounds).
 - **[G2](#g2-pre-push-gate-batch---hooks-and-tests--4-sp)** 🟤 — the ratchet's plan, with the five planted cases written first (part 1 of 2).
 
 **Daily total**: ~4 SP
@@ -126,7 +126,7 @@
 
 | ID  | Group                                         | Domain                  | Source      | Tasks  | Total SP | Day     | Status     |
 | --- | --------------------------------------------- | ----------------------- | ----------- | ------ | -------- | ------- | ---------- |
-| G1  | Repo chores `[batch]`                         | Repo tooling            | 🔵 User     | 3      | 3        | Mon     | ☐ Planned  |
+| G1  | Repo chores `[batch]`                         | Repo tooling            | 🔵 User     | 3      | 3        | Mon     | ✅ PR #93  |
 | G2  | Pre-push gate `[batch]`                       | Hooks and tests         | 🟤 Auto     | 2      | 4        | Mon–Tue | ☐ Planned  |
 | G3  | Rating data that can't go wrong `[batch]` 🏆 | File and rating safety  | 🟤 Auto     | 7      | 8        | Tue–Thu | ☐ Planned  |
 | G4  | AI research loose ends `[batch]`              | AI sorting research     | 🟤 Auto     | 3      | 3        | Thu     | ☐ Planned  |

@@ -2,10 +2,10 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Task Reference**: [WEEKLY.md § G1](../WEEKLY.md#g1-repo-chores-batch---repo-tooling--3-sp) · TODO 🟠 "Skip the pre-push E2E run when a push changes only paths the app never loads" (option 1 of BACKLOG 🔵 [2026-10-26] "Cut the pre-push E2E gate's cost: 10–12 min on every push that touches a non-docs file") · BACKLOG 🔵 [2026-10-28] "Retire the unused Context7 MCP server from `.mcp.json` and `.mcp.json.example`" · BACKLOG 🔵 [2026-10-22] "Add a LICENSE file (MIT, as `package.json` already declares)"
+**Task Reference**: [WEEKLY.md § G1](../../planning/WEEKLY.md#g1-repo-chores-batch---repo-tooling--3-sp) · TODO 🟠 "Skip the pre-push E2E run when a push changes only paths the app never loads" (option 1 of BACKLOG 🔵 [2026-10-26] "Cut the pre-push E2E gate's cost: 10–12 min on every push that touches a non-docs file") · BACKLOG 🔵 [2026-10-28] "Retire the unused Context7 MCP server from `.mcp.json` and `.mcp.json.example`" · BACKLOG 🔵 [2026-10-22] "Add a LICENSE file (MIT, as `package.json` already declares)"
 **Created**: 2026-10-28
-**Status**: Executed (Native, 2026-10-28); PR #93 open; review round 1 fixed 2026-10-30, round 2 pending
-**Last Updated**: 2026-10-28
+**Status**: Complete — merged 2026-10-30 via PR #93 (merge `4894a13`) after three review rounds (15 + 7 held back → 2 + 5 → 0) and a close-out
+**Last Updated**: 2026-10-30
 
 **Goal:** A push that changes only paths the app never loads skips the 10–12 min E2E run; the unused Context7 configuration is gone; the repo has a LICENSE file.
 
@@ -314,11 +314,26 @@ describe('classifyPaths — near misses and look-alikes run E2E', () => {
 - **My own miss, surfaced by held-back item 2**: the 🔵 and 🟤 entries I filed in round 1 repeat the open 🟤 [2026-10-27] G5 entry "Remove the user's local profile paths and real folder names from the live docs, and add a check that stops new ones" (its "History" and "The control" bullets). I filed them without checking for it. Both are now tagged `possible-dup-of`, as the intake rules require, and the G5 entry has a progress note.
   - That entry also makes redacting frozen docs the user's call. `4e8b54d` redacted four frozen files the relayed note did not name (two archived plans and two specs). That was disclosed there and to the user, who kept all four and ruled that such redactions are allowed in frozen docs. The ruling is recorded in that entry's "Frozen docs" bullet.
 
+
+### 2026-10-30 — PHASE: Merge and closeout
+
+- **Round 3** found no issues, and its close-out found none either. It gave a ruling on every round-2 bullet, re-ran the full suite (2,431 passed, 1 skipped) and checked the gate on every push range. Four items were held back:
+  - the BACKLOG Last Updated line, refreshed here;
+  - the ruling living only in the G5 entry: § 6 Spawned Tasks, and memory;
+  - the stale "~2min/52-test" figure in 🟡 [2026-07-10] and a 🟤/🟡 tag mislabel: both annotated or corrected here;
+  - an unmeasured `noexec` temp dir.
+- **Merged** with `--merge` as `4894a13`. The branch is deleted on the remote and locally.
+- **Closeout**, per § 9 and in one commit on `main`. Before filing, each improvement was checked against BACKLOG, which round 2's miss had shown was needed. Only the path-grants timeout has a related entry, now cross-referenced.
 ---
 
 ## 5. Key Discoveries
 
 - `git diff --name-only` lists only the post-image path of a rename (diff.renames defaults on), so a path classifier sees only where a file went.
+- **A pre-commit hook hands git variables to the unit tests.** Measured with git 2.38: a normal checkout exports only a relative `GIT_INDEX_FILE=.git/index`. A worktree exports absolute `GIT_DIR` and `GIT_INDEX_FILE`, so a test that builds a temp repo must delete them, or its git calls reach the real repo (`acd19e0`).
+- **A consumer of a fail-safe token must fail safe too.** The gate printed RUN on every failure, but the hook ran E2E only on an exact `RUN`. So `RUNRUN`, `SKIPRUN`, empty output and stray output all skipped E2E silently. It now compares against the skip token (`a1e59c2`).
+- **POSIX `sh` passes over a non-executable file on PATH.** So a test that puts stubs first on PATH needs the execute bit, which `fs.writeFileSync`'s `mode` alone does not guarantee under a umask. It also needs a positive control: an assertion that a marker is absent passes when the stub never ran. Git for Windows' `sh` hides all of this, because it treats a `#!` file as executable (`7fdebf7`).
+- `gh api … --jq .body` adds a newline after a body that already ends in one. A diff against the same output cannot see that, so `LICENSE` shipped with a blank last line until review round 1.
+- The first live SKIP pushes (`4e8b54d..735f014`, `735f014..ff4cccc`) took seconds; the RUN pushes took 9.9–11.2 min.
 
 ---
 
@@ -339,7 +354,7 @@ describe('classifyPaths — near misses and look-alikes run E2E', () => {
 
 | Task | Origin | Priority | Added to TODO.md |
 |------|--------|----------|------------------|
-| — | | | |
+| Carry the user's frozen-doc redaction ruling (2026-10-30) into `~/.claude/rules/planning-closeout.md`, outside this repo | PR #93 review rounds 3 and its close-out, held back | L | No: the user's call, offered at closeout. The ruling is kept in the 🟤 [2026-10-27] G5 BACKLOG entry's "Frozen docs" bullet and in the memory note on user names in the public repo |
 
 ---
 
@@ -351,7 +366,7 @@ describe('classifyPaths — near misses and look-alikes run E2E', () => {
 - [x] Full `npx vitest run` from the repo root, with an uppercase drive letter: expect 49 files, and 2,375 + 43 = 2,418 passed, 1 skipped (Task 1 adds 38, Task 2 adds 3, Task 3 adds 2). Check the count, not just the exit code
 - [x] `npm run lint`; `npx prettier --check scripts/check-e2e-needed.js tests/check-e2e-needed.test.js`; `node scripts/check-docs-index.js`
 - [x] **Dogfood, both ways, on this branch's history.** `printf "refs/heads/g1-repo-chores <Task-3 SHA> refs/heads/g1-repo-chores $(git rev-parse origin/main)\n" | node scripts/check-e2e-needed.js` should print `SKIP`. The same with `HEAD` should print `RUN`, because Task 4 deletes `.mcp.json.example` and Task 5 adds `LICENSE`
-- [ ] Push: the hook prints RUN and the full E2E suite passes. If only the known flake fails (TODO 🟠 "Ctrl+A undo restores the previous pair after a pick", G2's item), re-push once and record it here
+- [x] Push: the hook prints RUN and the full E2E suite passes (236 passed on both RUN pushes; no flake, so no re-push). If only the known flake fails (TODO 🟠 "Ctrl+A undo restores the previous pair after a pick", G2's item), re-push once and record it here
 
 ### Test Results
 
@@ -365,14 +380,17 @@ describe('classifyPaths — near misses and look-alikes run E2E', () => {
 | Dogfood vs `origin/main` `a3d00e8` | `c4e9411` (Task 3) → SKIP; HEAD → RUN | stderr "no path the app loads changed" / "runtime code changed"; HEAD's RUN comes from `.mcp.json.example` and `LICENSE`, the only RUN paths in the range |
 | Push (pre-push E2E) | RUN; 236 passed, 7 skipped, none flaky (11.2 min) | `23e1115`, pushed 2026-10-28 as PR #93 |
 | Review round 1 fixes | test file 67/67; full suite 2,431 passed, 1 skipped | see § 4, 2026-10-30 |
+| Push `23e1115..4e8b54d` (round 1) | RUN (`LICENSE`); 236 passed, 7 skipped, none flaky (9.9 min) | the edited hook decided |
+| Pushes `4e8b54d..735f014`, `735f014..ff4cccc` (round 2, ruling) | SKIP, seconds each | the first live SKIPs |
+| Review rounds 2, 3 and the close-out | 2 findings + 5 held back → fixed; then 0 and 0 | the reviewer re-ran the full suite at `ff4cccc`: 2,431 passed, 1 skipped |
 
 ---
 
 ## 8. Review
 
 - [x] Self-review complete
-- [ ] Code review in a separate session at `max` (round 1: 15 findings + 7 held back, all answered in the PR; round 2 pending)
-- [ ] User approved
+- [x] Code review in a separate session at `max`: round 1 had 15 findings + 7 held back, round 2 had 2 + 5, and round 3 and its close-out found none; all answered in the PR
+- [x] User approved (merge, 2026-10-30)
 
 ---
 
@@ -380,13 +398,13 @@ describe('classifyPaths — near misses and look-alikes run E2E', () => {
 
 | Artifact | Done / N/A + reason |
 |----------|---------------------|
-| `BACKLOG.md` — improvements extracted (min 2, routed by source); annotate 🔵 [2026-10-26] (option 1 shipped, options 2–4 stay) and 🟡 [2026-07-10]; close 🔵 [2026-10-28] Context7 and 🔵 [2026-10-22] LICENSE | |
-| `TODO.md` — tick the 🟠 SKIP-list item | |
-| `DONE.md` — entry with plan link, summary, key changes | |
-| `WEEKLY.md` — G1's Summary-Table Status and its Daily-Schedule row, each `✅ <merge-SHA>` | |
-| `BACKLOG.md` — annotate 🟤 "Add CLI-layer regression tests for `scripts/check-e2e-needed.js`": PR #93 delivered the moved-file, new-branch merge-base and exit-status cases; still missing are git failure → RUN and stdin failure → RUN (review finding 12) | |
-| `docs/README.md` — plan under Archived Plans (no spec), and its Active Plans row removed | |
-| `docs/archive/plans/` — plan moved here, original deleted | |
+| `BACKLOG.md` — improvements extracted (min 2, routed by source); annotate 🔵 [2026-10-26] (option 1 shipped, options 2–4 stay) and 🟡 [2026-07-10]; close 🔵 [2026-10-28] Context7 and 🔵 [2026-10-22] LICENSE | Done: 6 🟤 under `[2026-10-30] From: G1 closeout`, each checked for an existing entry; both entries annotated (and 🔵 [2026-10-26]'s tag corrected to 🟡); both closed; the Last Updated line also records round 2's edits |
+| `TODO.md` — tick the 🟠 SKIP-list item | Done, ticked in place with its merge |
+| `DONE.md` — entry with plan link, summary, key changes | Done |
+| `WEEKLY.md` — G1's Summary-Table Status and its Daily-Schedule row, each `✅ <merge-SHA>` | Done in WEEKLY's own form, `✅ PR #93` (its § note: "`✅ PR #N` where a PR was opened"); G1's three task boxes ticked |
+| `BACKLOG.md` — annotate 🟤 "Add CLI-layer regression tests for `scripts/check-e2e-needed.js`": PR #93 delivered the moved-file, new-branch merge-base and exit-status cases; still missing are git failure → RUN and stdin failure → RUN (review finding 12) | Done |
+| `docs/README.md` — plan under Archived Plans (no spec), and its Active Plans row removed | Done |
+| `docs/archive/plans/` — plan moved here, original deleted | Done with `git mv`; `plans/README.md`'s row became a dated comment |
 | Deploy record | N/A: a dev-tooling change, nothing deploy-tied |
-| Live docs — every late finding corrected where a live doc asserts it (round 1 corrected `GOALS.md:83` and `CLAUDE.md`'s pre-push sentence; re-sweep after each round) | |
-| Memory — durable decisions and patterns captured | |
+| Live docs — every late finding corrected where a live doc asserts it (round 1 corrected `GOALS.md:83` and `CLAUDE.md`'s pre-push sentence; re-sweep after each round) | Done: re-swept at closeout for "docs-only" and the old hook rule; `CLAUDE.md:31`, `PROJECT.md:65` and `GOALS.md:83` state the shipped gate |
+| Memory — durable decisions and patterns captured | Done |
