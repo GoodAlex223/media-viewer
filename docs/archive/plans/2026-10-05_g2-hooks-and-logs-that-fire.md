@@ -96,8 +96,8 @@ Task 1 first (the old Prettier hook taxes every later edit). Task 2 needs Task 1
 - [x] **Step 1: Back up the files that tracking will expose to branch switches (spec F8)**
 
 ```bash
-cd /c/Users/alexm/Projects/media_viewer
-BK="C:/Users/alexm/AppData/Local/Temp/claude/c--Users-alexm-Projects-media-viewer/fceea8c9-28f3-4cdf-83c5-53fe18294cb9/scratchpad/g2-backup"
+cd /c/Users/<user>/Projects/media_viewer
+BK="C:/Users/<user>/AppData/Local/Temp/claude/c--Users-<user>-Projects-media-viewer/fceea8c9-28f3-4cdf-83c5-53fe18294cb9/scratchpad/g2-backup"
 mkdir -p "$BK" && cp -r .claude/settings.json .claude/settings.local.json .claude/skills "$BK/" && find "$BK" -type f
 ```
 Expected: three files listed (`settings.json`, `settings.local.json`, `skills/new-e2e-test/SKILL.md`).
@@ -392,13 +392,13 @@ Expected: `?? .claude/hooks/format-edited-file.js`, `?? .claude/settings.json`, 
     }
 }
 ```
-Then check it carries no machine-specific path: `grep -n -i -E "c:|users|alexm|appdata" .claude/settings.json` → no output.
+Then check it carries no machine-specific path: `grep -n -i -E "c:|users|<user>|appdata" .claude/settings.json` → no output.
 
 - [x] **Step 9: Probe the formatter — it must fire on the edited file, and only on it.** The two-file setup **discriminates** the new hook from the old one (the old one would format both). Create both via Bash (Bash does not trigger the hook):
 
 ```bash
 printf 'const   a  =  {b:1}\n' > scripts/__probe_a.js && printf 'const   a  =  {b:1}\n' > scripts/__probe_b.js
-SP="C:/Users/alexm/AppData/Local/Temp/claude/c--Users-alexm-Projects-media-viewer/fceea8c9-28f3-4cdf-83c5-53fe18294cb9/scratchpad"
+SP="C:/Users/<user>/AppData/Local/Temp/claude/c--Users-<user>-Projects-media-viewer/fceea8c9-28f3-4cdf-83c5-53fe18294cb9/scratchpad"
 printf 'const   a  =  {b:1}\n' > "$SP/__probe_c.js" && sha256sum "$SP/__probe_c.js"
 ```
 Then, with the **Read tool** followed by the **Edit tool** (Edit refuses a file not Read in the session): in `scripts/__probe_a.js` replace `{b:1}` with `{b:2}`; in `$SP/__probe_c.js` replace `{b:1}` with `{b:2}`. Then:
@@ -406,11 +406,11 @@ Then, with the **Read tool** followed by the **Edit tool** (Edit refuses a file 
 cat scripts/__probe_a.js scripts/__probe_b.js "$SP/__probe_c.js"; sha256sum "$SP/__probe_c.js"
 ```
 Expected: `__probe_a.js` → `const a = { b: 2 };` (**must fire**); `__probe_b.js` → still `const   a  =  {b:1}` (**must not fire**); `__probe_c.js` → `const   a  =  {b:2}` unformatted (**must not fire** — outside the repo). If `__probe_a.js` is unformatted, the hook did not reload: ask the user to run `/hooks` and confirm the PostToolUse entry, then repeat.
-**Only after that passes**, the subdirectory probe: `cd docs/planning` in a Bash call, then use the Edit tool to make a one-character change to `docs/planning/TODO.md`'s `**Last Updated**` line (and revert it the same way), then `cd /c/Users/alexm/Projects/media_viewer && git status --short docs/` → empty (**must not fire** — no planning doc reformatted). Clean up: `rm scripts/__probe_a.js scripts/__probe_b.js "$SP/__probe_c.js"`.
+**Only after that passes**, the subdirectory probe: `cd docs/planning` in a Bash call, then use the Edit tool to make a one-character change to `docs/planning/TODO.md`'s `**Last Updated**` line (and revert it the same way), then `cd /c/Users/<user>/Projects/media_viewer && git status --short docs/` → empty (**must not fire** — no planning doc reformatted). Clean up: `rm scripts/__probe_a.js scripts/__probe_b.js "$SP/__probe_c.js"`.
 
 - [x] **Step 10: Probe the guard — USER AT THE KEYBOARD (~2 min).** Tell the user each prompt is expected and which answer to give:
   1. **Write tool** → create `.env` at the repo root with content `PROBE=1` → **must prompt**; user answers **No**. Then `ls -a | grep -c '^\.env$'` → `0`.
-  2. **Read** `preload.js` (reads are not guarded), then `cd docs/planning` in a Bash call; then **Edit tool** on `preload.js` replacing its last line with that same line plus a trailing blank line → **must prompt** even from a subdirectory cwd (the `/` anchor); user answers **No**. Then `cd /c/Users/alexm/Projects/media_viewer && git status --short preload.js` → empty.
+  2. **Read** `preload.js` (reads are not guarded), then `cd docs/planning` in a Bash call; then **Edit tool** on `preload.js` replacing its last line with that same line plus a trailing blank line → **must prompt** even from a subdirectory cwd (the `/` anchor); user answers **No**. Then `cd /c/Users/<user>/Projects/media_viewer && git status --short preload.js` → empty.
   3. Bash: `grep -c contextBridge preload.js` → **must prompt** (the Bash rule); user answers **Yes** (a read).
   4. **Write tool** → create `scripts/__probe_ok.txt` with `ok` → **must NOT prompt**. Then `rm scripts/__probe_ok.txt`.
 

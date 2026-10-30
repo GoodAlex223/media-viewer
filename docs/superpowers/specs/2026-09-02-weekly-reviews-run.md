@@ -124,7 +124,7 @@ feature-dev, Context7, Playwright MCP, `pr-review-toolkit`, `security-guidance`,
 - One lightweight research pass per category — **no deep-research harness, no parallel fan-out**
   (methodology rules #1 and #2). Budget **8–12 web calls** total.
 - §4 is a **local scan** — this repo's git log/docs plus the sibling repo's planning docs at
-  `C:\Users\alexm\Projects\claude-code-universal-config`. No web calls, and **no edits to the sibling
+  `C:\Users\<user>\Projects\claude-code-universal-config`. No web calls, and **no edits to the sibling
   repo** from this branch.
 - If a category surfaces nothing worth adopting, record a `pass` with a "no strong candidate" note
   rather than forcing an adopt. With a six-day window this is the likely outcome, not a shortfall.

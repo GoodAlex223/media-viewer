@@ -301,6 +301,7 @@ describe('classifyPaths — near misses and look-alikes run E2E', () => {
   - This commit: the docs.
 - **The test file**: 55 → 67 tests, 8.0 s in the full run (the review measured 6.7–13.9 s at `23e1115`). Full suite: 2,431 passed, 1 skipped.
 - **A slip during the mutation runs**: a mutation script's `print` crashed on the console's cp1252 encoding after it had written a mutant into the test file. I restored the file from its backup and checked it byte for byte before going on. The script was then rewritten to restore in a `finally` and to log to a UTF-8 file.
+- **Profile-path cleanup on `main`'s files** (a side agent's note, relayed by the user): a sweep for the account name in every form found 13 path lines in 6 tracked files beyond the plan's two. Each now reads `<user>`. One was a plain-text quote, which became a code span so GitHub keeps the placeholder. The remaining 6 lines are the real name and email, which the commit author fields already publish; 🟡 [2026-06-11] "Decide on commit-author PII…" tracks those, and they are left as written. Filed 🔵 [2026-10-30] "Remove the local profile path from the repo's git history" (the owner's call: a rewrite and force-push of `main`) and 🟤 [2026-10-30] "Flag profile paths in staged text at pre-commit".
 
 ---
 
