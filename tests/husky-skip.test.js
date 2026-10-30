@@ -7,8 +7,8 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const shAvailable = spawnSync('sh', ['-c', 'exit 0']).status === 0;
 
 // Source .husky/skip.sh in a fresh sh and run `script` against a given SKIP value.
-function runSkip(script, skipValue) {
-    const env = { ...process.env, HOOK_NAME: 'test-hook' };
+function runSkip(script, skipValue, hookName = 'test-hook') {
+    const env = { ...process.env, HOOK_NAME: hookName };
     delete env.SKIP;
     if (skipValue !== undefined) {
         env.SKIP = skipValue;
@@ -46,13 +46,22 @@ describe.skipIf(!shAvailable)('.husky/skip.sh (needs sh on PATH — Git Bash on 
     it('check_failed keeps the failing exit status and names the SKIP token', () => {
         const result = runSkip('(exit 1) || check_failed vitest', undefined);
         expect(result.status).toBe(1);
-        expect(result.stderr).toContain('vitest failed — fix it, or waive this check only: SKIP=vitest');
+        expect(result.stderr).toContain('vitest failed — fix it, or waive this check only: SKIP=vitest git commit');
+    });
+
+    it('check_failed names git push in the pre-push hook', () => {
+        const result = runSkip('(exit 1) || check_failed ratchet', undefined, 'pre-push');
+        expect(result.status).toBe(1);
+        expect(result.stderr).toContain('SKIP=ratchet git push');
+        expect(result.stderr).not.toContain('git commit');
     });
 
     it('check_failed reports a missing command (127) instead of suggesting SKIP', () => {
         const result = runSkip('(exit 127) || check_failed lint-staged', undefined);
         expect(result.status).toBe(127);
         expect(result.stderr).toContain('lint-staged could not run — command not found (exit 127)');
+        // node itself may be the missing command (a GUI client's PATH), which npm install does not fix.
+        expect(result.stderr).toContain('check that node is on the PATH the hook gets');
         expect(result.stderr).not.toContain('SKIP=');
     });
 

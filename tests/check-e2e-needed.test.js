@@ -81,6 +81,7 @@ describe('classifyPaths — paths the app never loads skip E2E', () => {
         'tests/integration/tournament-flow.test.js',
         'tests/feature-cache-harness.js',
         'tests/hash-pool-harness.js',
+        'tests/ratchet-repo-harness.js',
         'vitest.config.js',
         'eslint.config.mjs',
         '.prettierrc.json',
@@ -243,29 +244,58 @@ describe('CLI on a real repo', { timeout: 30_000 }, () => {
     });
 });
 
-// `.husky/pre-push` itself, with stub `node` (the gate) and `npx` (the E2E run) first on PATH. The stub
-// gate prints its canned answer, and a stderr marker, only when it received git's ref lines, so the SKIP
-// control fails if a hook step before the gate swallows stdin (the real gate would then see no refs and
-// skip) or if the stub never runs. The stubs must be executable: POSIX sh passes over a file without the
-// execute bit and takes the next match on PATH, which here is the real gate and the real E2E run.
+// `.husky/pre-push` itself, with stub `node` (the ratchet and the gate) and `npx` (the E2E run) first on
+// PATH. Git sends the ref lines once, and the real gate prints SKIP for an empty stdin, so each stub
+// prints a stderr marker, and the gate its canned answer, only when it received the ref lines: the SKIP
+// control and the stdin proof fail if a hook step swallows stdin before the gate (E2E would then be off
+// for every push) or if a stub never runs. A stub gate that lost the lines prints STDIN-LOST, which is
+// not SKIP. The stubs must be executable: POSIX sh passes over a file without the execute bit and takes
+// the next match on PATH, which here is the real ratchet, the real gate and the real E2E run. Any other
+// `node` call goes to the real node.
 const shAvailable = spawnSync('sh', ['-c', 'exit 0']).status === 0;
 describe.skipIf(!shAvailable)(
-    'the pre-push hook runs E2E unless the gate prints exactly SKIP',
+    'the pre-push hook: the ratchet first, then E2E unless the gate prints exactly SKIP',
     { timeout: 30_000 },
     () => {
         const ROOT = fileURLToPath(new URL('..', import.meta.url));
-        const REFS = `refs/heads/x ${SHA_A} refs/heads/x ${SHA_B}`;
+        // Two lines, so a hook that keeps only git's first ref line (`head -n1`, `read -r`) fails the stdin proof.
+        const REFS = `refs/heads/x ${SHA_A} refs/heads/x ${SHA_B}\nrefs/heads/y ${SHA_B} refs/heads/y ${ZEROS}`;
         let bin;
 
-        const stubEnv = () => ({ ...process.env, PATH: bin + path.delimiter + process.env.PATH });
+        // REAL_NODE is the stub's way to the real node: an absolute path, so the stub never looks itself up on
+        // PATH (where it could find itself again, whatever order `sh` builds PATH in).
+        const stubEnv = () => ({
+            ...process.env,
+            PATH: bin + path.delimiter + process.env.PATH,
+            REAL_NODE: process.execPath,
+        });
 
         beforeAll(() => {
             bin = fs.mkdtempSync(path.join(os.tmpdir(), 'mv-pre-push-'));
             const stubs = {
-                node:
-                    '#!/bin/sh\ninput=$(cat)\nif [ "$input" = "$EXPECT_STDIN" ]; then\n' +
-                    '    echo "STUB-GATE got the ref lines" >&2; printf "%s" "$STUB_OUT"\n' +
-                    'else printf STDIN-LOST; fi\nexit "${STUB_EXIT:-0}"\n',
+                node: [
+                    '#!/bin/sh',
+                    'case "$1" in',
+                    'scripts/check-line-ratchet.js)',
+                    '    input=$(cat)',
+                    '    [ "$input" = "$EXPECT_STDIN" ] && echo "STUB-RATCHET got the ref lines" >&2',
+                    '    exit "${RATCHET_EXIT:-0}" ;;',
+                    'scripts/check-e2e-needed.js)',
+                    '    input=$(cat)',
+                    '    if [ "$input" = "$EXPECT_STDIN" ]; then',
+                    '        echo "STUB-GATE got the ref lines" >&2; printf "%s" "$STUB_OUT"',
+                    '    else printf STDIN-LOST; fi',
+                    '    exit "${STUB_EXIT:-0}" ;;',
+                    // Any other script, whichever argument names it (`node -- scripts/…` puts an option first), is a
+                    // hook line this stub does not model: fail loudly, never run the real one (the real ratchet
+                    // would fetch from GitHub inside the unit suite).
+                    '*) for arg in "$@"; do',
+                    '       case "$arg" in *scripts/*) echo "stub node: unexpected script $arg" >&2; exit 99 ;; esac',
+                    '   done',
+                    '   exec "$REAL_NODE" "$@" ;;',
+                    'esac',
+                    '',
+                ].join('\n'),
                 npx: '#!/bin/sh\necho "E2E-RAN $*"\n',
             };
             for (const [name, body] of Object.entries(stubs)) {
@@ -289,10 +319,18 @@ describe.skipIf(!shAvailable)(
             }
         });
 
-        const runHook = (stubOut, stubExit = 0) => {
-            const env = { ...stubEnv(), STUB_OUT: stubOut, STUB_EXIT: String(stubExit), EXPECT_STDIN: REFS };
+        // `sh -e`, as Husky runs a hook. `skip` is the SKIP value, set only when given.
+        const runHook = ({ out = 'SKIP', exit = 0, ratchetExit = 0, skip } = {}) => {
+            const env = {
+                ...stubEnv(),
+                STUB_OUT: out,
+                STUB_EXIT: String(exit),
+                RATCHET_EXIT: String(ratchetExit),
+                EXPECT_STDIN: REFS,
+            };
             delete env.SKIP;
-            return spawnSync('sh', ['.husky/pre-push', 'origin', 'url'], {
+            if (skip !== undefined) env.SKIP = skip;
+            return spawnSync('sh', ['-e', '.husky/pre-push', 'origin', 'url'], {
                 cwd: ROOT,
                 env,
                 input: `${REFS}\n`,
@@ -301,10 +339,19 @@ describe.skipIf(!shAvailable)(
         };
 
         it('skips E2E when the gate prints SKIP (control: the stubs reach the hook)', () => {
-            const result = runHook('SKIP');
+            const result = runHook({ out: 'SKIP' });
             expect(result.status).toBe(0);
             expect(result.stderr).toContain('STUB-GATE got the ref lines');
             expect(result.stdout).not.toContain('E2E-RAN');
+        });
+
+        it('gives the ratchet and then the gate the same ref lines (the stdin proof)', () => {
+            const result = runHook({ out: 'SKIP' });
+            expect(result.status).toBe(0);
+            const ratchet = result.stderr.indexOf('STUB-RATCHET got the ref lines');
+            const gate = result.stderr.indexOf('STUB-GATE got the ref lines');
+            expect(ratchet).toBeGreaterThanOrEqual(0);
+            expect(gate).toBeGreaterThan(ratchet);
         });
 
         it.each([
@@ -314,7 +361,65 @@ describe.skipIf(!shAvailable)(
             ['', 0],
             ['RUN\nwarning: something', 0],
         ])('runs E2E when the gate prints %j and exits %i', (out, code) => {
-            expect(runHook(out, code).stdout).toContain('E2E-RAN playwright test');
+            expect(runHook({ out, exit: code }).stdout).toContain('E2E-RAN playwright test');
+        });
+
+        it('stops the push when the ratchet refuses: neither the gate nor E2E runs', () => {
+            const result = runHook({ ratchetExit: 1, out: 'RUN' });
+            expect(result.status).toBe(1);
+            expect(result.stderr).toContain('ratchet failed');
+            expect(result.stderr).toContain('SKIP=ratchet git push');
+            expect(result.stderr).not.toContain('STUB-GATE');
+            expect(result.stdout).not.toContain('E2E-RAN');
+        });
+
+        it('reports a missing ratchet command (exit 127) and stops the push', () => {
+            const result = runHook({ ratchetExit: 127 });
+            expect(result.status).toBe(127);
+            expect(result.stderr).toContain('ratchet could not run — command not found (exit 127)');
+            expect(result.stderr).not.toContain('STUB-GATE');
+        });
+
+        it('SKIP=ratchet waives only the ratchet, and the gate still gets the ref lines', () => {
+            const result = runHook({ skip: 'ratchet' });
+            expect(result.status).toBe(0);
+            expect(result.stderr).not.toContain('STUB-RATCHET');
+            expect(result.stderr).not.toContain('unknown SKIP token');
+            expect(result.stderr).toContain('SKIP=ratchet — the ratchet check did NOT run');
+            expect(result.stderr).toContain('STUB-GATE got the ref lines');
+        });
+
+        it('SKIP=e2e still runs the ratchet', () => {
+            const result = runHook({ skip: 'e2e', out: 'RUN' });
+            expect(result.stderr).toContain('STUB-RATCHET got the ref lines');
+            expect(result.stderr).toContain('SKIP=e2e — the e2e check did NOT run');
+            expect(result.stdout).not.toContain('E2E-RAN');
+        });
+
+        it('the stub hands any other node call to the real node', () => {
+            const result = spawnSync('sh', ['-c', 'node -e "process.stdout.write(String(6*7))"'], {
+                env: stubEnv(),
+                encoding: 'utf8',
+                timeout: 10_000,
+            });
+            expect(result.stdout).toBe('42');
+        });
+
+        // Any argument that names a script counts, not just the first: an option before it (`node --
+        // scripts/…`, `node --no-warnings scripts/…`) must not slip through to the real node, which would run
+        // the real ratchet and fetch from GitHub inside the unit suite.
+        it.each([
+            ['./scripts/check-line-ratchet.js', './scripts/check-line-ratchet.js'],
+            ['-- scripts/check-line-ratchet.js', 'scripts/check-line-ratchet.js'],
+            ['--no-warnings scripts/check-e2e-needed.js', 'scripts/check-e2e-needed.js'],
+        ])('the stub fails loudly on `node %s`, instead of running the real script', (args, script) => {
+            const result = spawnSync('sh', ['-c', `node ${args}`], {
+                env: stubEnv(),
+                encoding: 'utf8',
+                timeout: 10_000,
+            });
+            expect(result.status).toBe(99);
+            expect(result.stderr).toContain(`stub node: unexpected script ${script}`);
         });
     }
 );

@@ -289,7 +289,8 @@ test.describe('Tournament Mode', () => {
     });
 
     test('Ctrl+A undo restores the previous pair after a pick', async () => {
-        tmpFixtures = await createTempFixtureDir(['red-1x1.png', 'green-1x1.png', 'blue-1x1.png', 'tiny.mp4']);
+        // No tiny.mp4: its decode-failure skip can land after the pair is read and change it (G2; undo past a skip is G3 E7's).
+        tmpFixtures = await createTempFixtureDir(['red-1x1.png', 'green-1x1.png', 'blue-1x1.png']);
         await loadFolder(page, tmpFixtures.dir);
         await waitForMedia(page);
 
@@ -348,7 +349,8 @@ test.describe('Tournament Mode', () => {
     });
 
     test('leave-prompt Save persists state; re-enter Continue resumes', async () => {
-        tmpFixtures = await createTempFixtureDir(['red-1x1.png', 'green-1x1.png', 'blue-1x1.png', 'tiny.mp4']);
+        // No tiny.mp4: its decode-failure skip can push a tracked prune after Continue, which the raw history read below counts (G2).
+        tmpFixtures = await createTempFixtureDir(['red-1x1.png', 'green-1x1.png', 'blue-1x1.png']);
         await loadFolder(page, tmpFixtures.dir);
         await waitForMedia(page);
 
@@ -415,7 +417,8 @@ test.describe('Tournament Mode', () => {
     });
 
     test('mouse wheel does not navigate pairs in tournament mode', async () => {
-        tmpFixtures = await createTempFixtureDir(['red-1x1.png', 'green-1x1.png', 'blue-1x1.png', 'tiny.mp4']);
+        // No tiny.mp4: its decode-failure skip can land after the pair is read and change it (G2; undo past a skip is G3 E7's).
+        tmpFixtures = await createTempFixtureDir(['red-1x1.png', 'green-1x1.png', 'blue-1x1.png']);
         await loadFolder(page, tmpFixtures.dir);
         await waitForMedia(page);
 
@@ -431,11 +434,23 @@ test.describe('Tournament Mode', () => {
 
         // Wheel over the tournament header — empty space, not a .media-wrapper, so the handler
         // would otherwise fall through to nextMedia()/previousMedia(). nextMedia mutates
-        // currentIndex synchronously (compare branch: currentIndex += 2), so no wait is needed.
+        // currentIndex synchronously (compare branch: currentIndex += 2), so no wait is needed. On three
+        // files that step wraps back to 0 and the engine's pair never changes, so the index and the pair
+        // cannot show the guard missing: count the calls instead.
         await page.evaluate(() => {
+            const mv = window.mediaViewer;
+            window.__navCalls = 0;
+            for (const name of ['nextMedia', 'previousMedia']) {
+                const original = mv[name].bind(mv);
+                mv[name] = (...args) => {
+                    window.__navCalls += 1;
+                    return original(...args);
+                };
+            }
             const el = document.getElementById('tournamentHeader');
             el.dispatchEvent(new WheelEvent('wheel', { deltaY: 120, bubbles: true, cancelable: true }));
         });
+        expect(await page.evaluate(() => window.__navCalls)).toBe(0);
 
         const after = await page.evaluate(() => ({
             index: window.mediaViewer.currentIndex,

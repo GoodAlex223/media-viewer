@@ -26,13 +26,17 @@ skipped() {
 
 # check_failed <token> — after `<check> || check_failed <token>`: keep the check's exit status and
 # say what to do. 127 means the command itself is missing (run npm install), where suggesting SKIP
-# would be wrong — and Husky reports "command not found" only when it sees the 127.
+# would be wrong — and Husky reports "command not found" only when it sees the 127. The command may
+# be a local tool (npm install) or node itself, missing from the PATH a GUI client or a shell-only
+# version manager gives the hook.
 check_failed() {
     status=$?
     if [ "$status" -eq 127 ]; then
-        echo "$HOOK_NAME: $1 could not run — command not found (exit 127). Run npm install." >&2
+        echo "$HOOK_NAME: $1 could not run — command not found (exit 127). Run npm install, or check that node is on the PATH the hook gets." >&2
     else
-        echo "$HOOK_NAME: $1 failed — fix it, or waive this check only: SKIP=$1 git commit …" >&2
+        verb=commit
+        [ "$HOOK_NAME" = "pre-push" ] && verb=push
+        echo "$HOOK_NAME: $1 failed — fix it, or waive this check only: SKIP=$1 git $verb …" >&2
     fi
     exit "$status"
 }

@@ -47,6 +47,7 @@ const SKIP_DIRS = ['docs/', '.claude/', 'scripts/', '.husky/', 'prototypes/', 't
 const SKIP_FILES = new Set([
     'tests/feature-cache-harness.js',
     'tests/hash-pool-harness.js',
+    'tests/ratchet-repo-harness.js',
     'vitest.config.js',
     'eslint.config.mjs',
     '.prettierrc.json',
