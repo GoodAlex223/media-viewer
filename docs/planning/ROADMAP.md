@@ -2,7 +2,7 @@
 
 Long-term vision, active themes, and releases.
 
-**Last Updated**: 2026-10-28 <!-- Weekly planning (Cleanup Week #5, Oct 26–30): a status edit only, not a refresh. v2's weekly 🔵 share is set to ~12 SP ("Most", user ruling 2026-10-28), so the v2 date moves to about May 2027. The 2-month clock still runs from 2026-10-27. --> <!-- G5 strategic-doc refresh (plan 2026-10-27_g5-strategic-doc-refresh.md): v2 replaces the v2.0 release (v2 spec D1), the board follows the spec's § 14 build order, and two drained notes are added, by the user's rulings of 2026-10-27. The 2-month clock restarts here. Earlier: 2026-10-09 was a status flip only, not a refresh. -->
+**Last Updated**: 2026-10-30 <!-- G2 closeout (PR #94, merge a80cc37): a status edit only. The blocking renderer line ratchet is built (lines 34 and 96), and the LICENSE file (G1, PR #93) is marked done beside it. --> <!-- Prior (2026-10-28): Weekly planning (Cleanup Week #5, Oct 26–30): a status edit only, not a refresh. v2's weekly 🔵 share is set to ~12 SP ("Most", user ruling 2026-10-28), so the v2 date moves to about May 2027. The 2-month clock still runs from 2026-10-27. --> <!-- G5 strategic-doc refresh (plan 2026-10-27_g5-strategic-doc-refresh.md): v2 replaces the v2.0 release (v2 spec D1), the board follows the spec's § 14 build order, and two drained notes are added, by the user's rulings of 2026-10-27. The 2-month clock restarts here. Earlier: 2026-10-09 was a status flip only, not a refresh. -->
 
 ---
 
@@ -30,8 +30,8 @@ Work flows each planning session from [BACKLOG.md](BACKLOG.md) → [WEEKLY.md](W
 - **Small tasks, any week, before or beside P1a**:
   - the AI research harness on the user's own like/dislike folders, with only overall numbers committed;
   - then **A1**, the like-model learner fix (spec § 12.3);
-  - the LICENSE file;
-  - the blocking renderer line ratchet (user ruling 2026-10-27, spec D23), in place before P1a's PR merges so P1a is its first measured phase.
+  - the LICENSE file (✅ done 2026-10-30, Cleanup Week #5 G1, PR #93);
+  - the blocking renderer line ratchet (user ruling 2026-10-27, spec D23), in place before P1a's PR merges so P1a is its first measured phase (✅ built 2026-10-30, Cleanup Week #5 G2, PR #94: `scripts/check-line-ratchet.js`, ceiling 11,529).
 
 ### Next
 
@@ -93,7 +93,7 @@ Shipped far beyond the v1.1 scope (Feb–Aug 2026): Tournament mode (Swiss engin
 | P7 | Finish: responsive pass, UI zoom, CompareManager, install from a file | ⬜ Planned |
 | P8 | Packaging (optional) | ⬜ Optional |
 
-**Every phase** shows net `wc -l media-viewer.js` ≤ 0 in its PR (spec § 11.1), enforced by the blocking line ratchet once built. `media-viewer.js` was 11,529 lines at `e0b2a16` (2026-10-27).
+**Every phase** shows net `wc -l media-viewer.js` ≤ 0 in its PR (spec § 11.1), enforced by the blocking line ratchet (in place since 2026-10-30, PR #94: a pre-push check on the merge into `origin/main`). `media-viewer.js` was 11,529 lines at `e0b2a16` (2026-10-27).
 
 **Target**: about May 2027 (soft) — about 131–136 SP nominal, with estimates historically ~1.9× low (spec § 14, whose end-of-Q1 date assumed the whole 🔵 share)
 

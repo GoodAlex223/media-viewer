@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Task Reference**: [WEEKLY.md § G2](../WEEKLY.md#g2-pre-push-gate-batch---hooks-and-tests--4-sp) · BACKLOG 🟤 [2026-10-27] "Build the blocking renderer line ratchet: a pre-push check that fails when `media-viewer.js` is over a committed ceiling" · TODO 🟠 "Fix the flaky tournament E2E 'Ctrl+A undo restores the previous pair after a pick'" (← BACKLOG 🟤 [2026-10-11])
+**Task Reference**: [WEEKLY.md § G2](../../planning/WEEKLY.md#g2-pre-push-gate-batch---hooks-and-tests--4-sp) · BACKLOG 🟤 [2026-10-27] "Build the blocking renderer line ratchet: a pre-push check that fails when `media-viewer.js` is over a committed ceiling" · TODO 🟠 "Fix the flaky tournament E2E 'Ctrl+A undo restores the previous pair after a pick'" (← BACKLOG 🟤 [2026-10-11])
 **Created**: 2026-10-30
-**Status**: In progress — Task 4 Step 4 done (pushed); the PR and the `max` review remain (Step 5); PR #94 is open
+**Status**: Complete — merged 2026-10-30 via PR #94 (merge `a80cc37`)
 **Last Updated**: 2026-10-30
 
 **Goal:** A push whose merge into `origin/main` would carry a `media-viewer.js` over a committed ceiling is refused in seconds, a push to `main` is refused while the ceiling is above the count, E2E still gets git's ref lines, and three tournament E2E tests stop failing at random.
@@ -50,12 +50,12 @@
 **Context**: the renderer went 11,451 → 11,945 → 11,529 lines in a week planned to stop its growth (spec § 1). On 2026-10-27 the user ruled that v2's "net `wc -l media-viewer.js` ≤ 0 per phase" rule gets a blocking control. It must be in place before v2 P1a's PR merges. In the same week, the tournament flake failed the pre-push E2E run twice.
 
 **Success Criteria** (spec § 1):
-- [ ] A push whose merge into `origin/main` carries a renderer over the ceiling is refused, in seconds, before the E2E decision (Task 1 cases 1, 3; Task 4).
+- [x] A push whose merge into `origin/main` carries a renderer over the ceiling is refused, in seconds, before the E2E decision (Task 1 cases 1, 3; Task 4).
 - [x] Each planted case fails against its wrong rule and passes against the built check (Task 1, mutants M1–M9).
 - [x] A push to `main` is refused while the ceiling is above the count (case 6a).
 - [x] The E2E gate still receives git's ref lines after the ratchet has run (Task 2's stdin row, shown able to fail).
 - [x] The flake is reproduced on demand before its fix, and the fixed tests pass on repeat (Task 3).
-- [ ] The unit and E2E suites pass (Task 4).
+- [x] The unit and E2E suites pass (Task 4).
 
 ---
 
@@ -453,7 +453,7 @@ Re-estimated after planning: **~4.25 SP** against WEEKLY's 4 and the spec's 4–
   - If the ratchet fails structurally inside the real push, stop and ask the user (spec § 4).
   - If only an unrelated flake fails, re-push once and record it.
 
-- [ ] **Step 5: The PR and the review.** Open the PR when the user asks. The review runs at `max` in a separate session, asked first.
+- [x] **Step 5: The PR and the review.** Open the PR when the user asks. The review runs at `max` in a separate session, asked first.
 
 ---
 
@@ -599,8 +599,8 @@ The user chose three calls: keep D3 for finding 1 (record the limit), fix 3 and 
 ## 8. Review
 
 - [x] Self-review complete
-- [ ] Code review at `max` in a separate session, all findings answered in the PR
-- [ ] User approved (merge)
+- [x] Code review at `max` in a separate session, all findings answered in the PR
+- [x] User approved (merge)
 
 ---
 
@@ -608,16 +608,16 @@ The user chose three calls: keep D3 for finding 1 (record the limit), fix 3 and 
 
 | Artifact | Done / N/A + reason |
 |----------|---------------------|
-| `BACKLOG.md`: improvements extracted (≥ 2, 🟤 under `[YYYY-MM-DD] From: G2 closeout`, each checked against BACKLOG first) | |
-| `BACKLOG.md`: check off 🟤 [2026-10-27] "Build the blocking renderer line ratchet…", noting that D2's merge-tree measurement replaced its arithmetic; check off 🟤 [2026-10-11]'s flaky-test entry; annotate 🟤 "Extract one shared temp-repo git-env helper for the unit tests": add `tests/ratchet-repo-harness.js` (the fourth copy, shared by the three ratchet CLI files) to its Affected list, and name the planted-env row that file now has (`row 19` in `tests/check-line-ratchet-cli-c.test.js`), so the extraction moves the copy with its control | |
-| `TODO.md`: tick the 🟠 flaky-test item | |
-| `DONE.md`: entry with plan link, summary, key changes | |
-| `WEEKLY.md`: G2's Summary-Table Status and both Daily-Schedule entries (lines 96 and 102) in WEEKLY's own form (`✅ PR #N`); G2's task boxes | |
-| `docs/README.md`: plan under Archived Plans, spec row marked implemented, Active Plans row removed | |
-| `docs/archive/plans/`: plan moved with `git mv`; `plans/README.md`'s row becomes a dated comment | |
-| The ceiling equals `main`'s count after the merge (D3 makes the closeout push prove it) | |
-| Branches cut before G2's merge (§ 2, Edge cases): list them with `git branch -a --no-merged origin/main`. Then add a ↳ note to the WEEKLY entry of each group still open (G3 and G4 as of 2026-10-30): "merge `main` before your next push, so the line ratchet runs". If `g3-departed-clips-parked` still exists, add the same line to 🟤 [2026-10-16] "Decide the parked source-CLIP reuse branch" (+83 renderer lines) | |
-| Cited commit SHAs verified as ancestors of `main` | |
+| `BACKLOG.md`: improvements extracted (≥ 2, 🟤 under `[YYYY-MM-DD] From: G2 closeout`, each checked against BACKLOG first) | Done: 9 🟤 entries under `[2026-10-30] From: G2 closeout`, each grep-checked against BACKLOG first. The ref-line parser one is tagged `possible-dup-of` the stdin entry. |
+| `BACKLOG.md`: check off 🟤 [2026-10-27] "Build the blocking renderer line ratchet…", noting that D2's merge-tree measurement replaced its arithmetic; check off 🟤 [2026-10-11]'s flaky-test entry; annotate 🟤 "Extract one shared temp-repo git-env helper for the unit tests": add `tests/ratchet-repo-harness.js` (the fourth copy, shared by the three ratchet CLI files) to its Affected list, and name the planted-env row that file now has (`row 19` in `tests/check-line-ratchet-cli-c.test.js`), so the extraction moves the copy with its control | Done: the ratchet entry is `[x]` with a ↳ naming D2 and D3; the flaky-test entry is `[x]`; the `gitEnv` entry names the harness and row 19; the stdin entry and the parked-branch entry carry ↳ notes. |
+| `TODO.md`: tick the 🟠 flaky-test item | Done: ticked in place with the result. |
+| `DONE.md`: entry with plan link, summary, key changes | Done. |
+| `WEEKLY.md`: G2's Summary-Table Status and both Daily-Schedule entries (lines 96 and 102) in WEEKLY's own form (`✅ PR #N`); G2's task boxes | Done: the Summary Table reads `✅ PR #94`; lines 96 and 102 read `✅ PR #94 (merge a80cc37, 2026-10-30, after three review rounds)`; both task boxes are ticked. |
+| `docs/README.md`: plan under Archived Plans, spec row marked implemented, Active Plans row removed | Done: the plan is under Archived Plans, the spec row says implemented, and Active Plans reads none. |
+| `docs/archive/plans/`: plan moved with `git mv`; `plans/README.md`'s row becomes a dated comment | Done: `git mv`; the `plans/README.md` row became a dated comment. |
+| The ceiling equals `main`'s count after the merge (D3 makes the closeout push prove it) | Done: `wc -l media-viewer.js` is 11,529 on `main` at `a80cc37` and the ceiling file reads 11529; the closeout push to `main` measures it again. |
+| Branches cut before G2's merge (§ 2, Edge cases): list them with `git branch -a --no-merged origin/main`. Then add a ↳ note to the WEEKLY entry of each group still open (G3 and G4 as of 2026-10-30): "merge `main` before your next push, so the line ratchet runs". If `g3-departed-clips-parked` still exists, add the same line to 🟤 [2026-10-16] "Decide the parked source-CLIP reuse branch" (+83 renderer lines) | Done: `git branch -a --no-merged origin/main` lists `g3-departed-clips-parked` (+83 renderer lines) and `research/local-ai-sorting` (no renderer change). The ↳ note is on WEEKLY G3 and G4 and on 🟤 [2026-10-16] "Decide the parked source-CLIP reuse branch". |
+| Cited commit SHAs verified as ancestors of `main` | Done: `5d72f64`, `e42e8ec`, `25bc288`, `7ff9a47`, `7787f4d`, `6edb762`, `bdf984a`, `286d8c5`, `4fa92ed`, `56e36c5`, `020890d`, `a43c337`, `230775a` and the merge `a80cc37` (plus `4054d11`, `4894a13`) are ancestors of `main`. |
 | Deploy record | N/A: a dev-tooling change, nothing deploy-tied |
-| Live docs: every late finding corrected where a live doc states it (re-sweep `CLAUDE.md:31`, `PROJECT.md:65`, `GOALS.md:31,83`, and `ROADMAP.md:34,96`, which still lists the ratchet as pending: the review's held-back item) | |
-| Memory: durable decisions and patterns captured | |
+| Live docs: every late finding corrected where a live doc states it (re-sweep `CLAUDE.md:31`, `PROJECT.md:65`, `GOALS.md:31,83`, and `ROADMAP.md:34,96`, which still lists the ratchet as pending: the review's held-back item) | Done: `CLAUDE.md:31` (the branch-pass clause, git 2.38+), `PROJECT.md:65–66`, `GOALS.md:31,83`, `ROADMAP.md:34,96` (and the LICENSE item beside it) and `MILESTONES.md:34` were re-swept; the spec's D2 wording was fixed in round 3. |
+| Memory: durable decisions and patterns captured | Done: the session note, three durable notes (an editor-tool escape near-miss, counting processes not wall time, a new tests/ helper joining the SKIP list) and the index. |

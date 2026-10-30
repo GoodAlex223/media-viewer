@@ -2,7 +2,8 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-10-30 <!-- Group G1: Repo chores (🔵, Cleanup Week #5, Oct 26–30, run Oct 28–30). MERGED 2026-10-30 via PR #93 (merge 4894a13) after three review rounds (15 + 7 held back → 2 + 5 → 0) and a close-out: the pre-push SKIP list, --no-renames, the hook fail-safe, Context7 retired, MIT LICENSE. -->
+**Last Updated**: 2026-10-30 <!-- Group G2: Pre-push gate (🟤, Cleanup Week #5, Oct 26–30, run Oct 30). MERGED 2026-10-30 via PR #94 (merge a80cc37) after three review rounds (15 + 10 held back → 3 + 1 → 0, then a close-out with two small re-raised answers): the blocking renderer line ratchet, the single read of git's ref lines, and the flaky tournament test. -->
+<!-- Previous: Group G1: Repo chores (🔵, Cleanup Week #5, Oct 26–30, run Oct 28–30). MERGED 2026-10-30 via PR #93 (merge 4894a13) after three review rounds (15 + 7 held back → 2 + 5 → 0) and a close-out: the pre-push SKIP list, --no-renames, the hook fail-safe, Context7 retired, MIT LICENSE. -->
 <!-- Previous: Group G6: Weekly Reviews (2026-10-27 run, ⚪ Overhead, Oct 19–23, run 2026-10-27). MERGED 2026-10-27 via PR #92 (merge c5ac35f) after two review rounds: 6 findings and 2 nits (one finding fixed differently), then 1 optional nit; a round-3 close-out found no issue. -->
 <!-- Previous: Group G5: Strategic-doc refresh (🟡, Oct 19–23, run 2026-10-27). MERGED 2026-10-27 via PR #91 (merge 7fb9978) after three review rounds (7 → 1 → 0 findings) and a close-out that accepted every response. -->
 <!-- Previous: Group G3: ZoomManager extraction (🔵, Oct 19–23, run 2026-10-26). MERGED 2026-10-26 via PR #90 (merge 082e3b2) after four review rounds (15 → 1 → 0 → 0 findings) and a close-out that accepted every response. -->
@@ -34,6 +35,53 @@ Completed tasks with implementation details and learnings.
 <!-- Organize by month, newest first. -->
 
 ## 2026-10 (October)
+
+### 2026-10-30 — Group G2: Pre-push gate 🟤 (Cleanup Week #5, Oct 26–30, run Oct 30) — **2/2, MERGED `a80cc37`** (PR #94)
+
+**Plan**: [2026-10-30_g2-pre-push-gate.md](../archive/plans/2026-10-30_g2-pre-push-gate.md). **Spec**: [G2 Pre-Push Gate](../superpowers/specs/2026-10-30-g2-pre-push-gate-design.md) (approved 2026-10-30, with the user's rulings D2 and D3). Executed natively by Claude on Sonnet · `high`, with the review at `max` in a separate session.
+**Branch**: `g2-pre-push-gate`, cut from `main` at `4054d11`. It was deleted on the remote and locally after the merge.
+
+✅ **Status: 2/2 tasks. MERGED 2026-10-30 via PR #94** (merge `a80cc37`, with `--merge`). Three review rounds ran in a separate session at `max`:
+- **Round 1** (head `286d8c5`): 15 findings and 10 held back, each checked first-hand, none refuted. Answered in `4fa92ed`, `56e36c5` and `020890d`: 12 fixed, 1 fixed differently, 2 recorded (the user kept D3 for the slack-on-`main` gap; the force-push gap was filed).
+  - The design gaps: a shrink on `main` could be given back with no ceiling edit; an over-ceiling `main` refused every branch; the fetch moved the user's own `origin/main` (the lease of a later `--force-with-lease`); a force push to `main` was measured on the merge.
+  - The test gaps: the wheel E2E could no longer fail on three files; the hook test's one-line ref input hid a hook that kept only the first line; the stub `node` could run the real ratchet or recurse.
+- **Round 2** (head `020890d`): 3 findings and 1 held back. The pass for "a branch that adds no lines to an over-ceiling `main`" also let a push *to* `main` through; the stub missed `node -- scripts/…`; my claim that the BOM was an escape sequence was wrong (the editor tools had written the literal character). Fixed in `a43c337`.
+- **Round 3 and its close-out** (head `a43c337`): no issues; two small answers re-raised (the spec's "in memory" wording; the `gitEnv` BACKLOG entry omitted the new harness and had no planted-env row), fixed in `230775a`.
+
+**Summary**:
+- **The blocking renderer line ratchet** (`scripts/check-line-ratchet.js`, ceiling in `scripts/renderer-line-ceiling.txt`, 11,529 lines).
+  - It runs first in `.husky/pre-push`, before the E2E decision. For each pushed branch it fetches `origin/main` into a private ref, merges the tip with `git merge-tree --write-tree` (git 2.38+), and counts `media-viewer.js` and reads the ceiling from that merge (D2). A change made on both sides counts once, and a ceiling changed on both sides is a conflict.
+  - Over the ceiling refuses everywhere. Under it passes with a reminder, except a push to `main`, which refuses until the ceiling equals the count (D3). A conflict in either file, or any failure to fetch, merge, read or parse, refuses (fail closed). `SKIP=ratchet git push` waives it for one push.
+  - An over-ceiling `main` passes a branch that adds no lines, with a note naming main's overage; a push to `main` itself still refuses. A `main` with no ceiling file passes with a note. A symlinked renderer is refused.
+  - **Known limit**: git runs the pre-push hook from the checked-out branch, so a branch cut before this merged runs no ratchet until it merges `main`. The push to `main` is the backstop.
+- **The hook reads git's ref lines once** and gives each check its own copy: the E2E gate prints SKIP for an empty stdin, so a ratchet that read git's stdin first would have turned E2E off for every push. `check_failed` names `git push` in this hook, and the exit-127 advice names `node` on the PATH.
+- **The flaky tournament test**: reproduced on demand first (seeding that deals `tiny.mp4` against `blue-1x1.png`, with its skip held, fails at `expect(after).toEqual(before)`), then fixed by dropping `tiny.mp4` from the three tests it made flaky. The five tests passed 50 of 50 on repeat. The wheel test counts `nextMedia`/`previousMedia` calls, since the index wraps on three files.
+
+**Key changes**:
+- `scripts/check-line-ratchet.js` (new) and `scripts/renderer-line-ceiling.txt` (new); `scripts/check-e2e-needed.js` lists the new test harness as unit-only.
+- `.husky/pre-push`: the ref lines are kept once; the ratchet runs first. `.husky/skip.sh`: the per-hook `check_failed` hint and the 127 advice.
+- Tests: `tests/check-line-ratchet.test.js` (the pure functions), three CLI files `tests/check-line-ratchet-cli-{a,b,c}.test.js` and `tests/ratchet-repo-harness.js` (a local bare origin, one `git fast-import` per commit); the hook test in `tests/check-e2e-needed.test.js` (a stub `node` for the ratchet and the gate, two-line ref input, the stdin proof, `SKIP=ratchet`, `SKIP=e2e` still runs the ratchet); `tests/husky-skip.test.js`; `tests/e2e/tournament-mode.test.js`.
+- Docs: `CLAUDE.md`, `PROJECT.md`, `GOALS.md` (G-7 and the pre-push row), the spec's § 12 amendments, `ROADMAP.md`.
+- The mutants (a wrong rule applied one at a time) each fail their named rows: 12 against the first script, and 10 more for the review fixes (18 of them re-run against the faster harness).
+
+**Tests**:
+- Full unit suite: 2,431 → 2,535 passed, 1 skipped (49 → 53 files).
+- E2E: 236 passed and 7 skipped on both RUN pushes (11.2 and 12.5 min); the later round pushes skipped E2E.
+- The ratchet's CLI files started 777 git processes with the first harness and 466 after the `fast-import` rewrite; the full unit suite ran in 16 to 17 s, against 23.5 to 40 s before.
+- One unrelated load flake: `lint-guard`'s first test hit its 5 s timeout once under that load (it takes about 2 s alone). It is filed as 🟤.
+
+**Learnings**:
+- A change that adds a step before another reader of a one-shot stream starves that reader: git's pre-push stdin can be read once, and the E2E gate's empty-stdin SKIP would have switched E2E off silently. Read it once and hand each check a copy.
+- A refusal row must pin a message only the built check prints: node exits 1 for a missing module too, so an exit code alone passes vacuously.
+- Measure the merge git would make, not arithmetic over it (`merge-tree --write-tree`); take every input (count and ceiling) from the same merge.
+- The editor tools wrote a `\u` escape as the literal character; check such a claim at byte level (`grep -c`) and write the escape with a script.
+- A new helper under `tests/` is a RUN path to the E2E gate until it is on the SKIP list, and the import guard refuses it while it names a SKIP path.
+- On a loaded Windows machine wall times swing about twofold; count git processes (`GIT_TRACE2_EVENT`) and interleave the runs.
+- A pre-existing guard (`lint-guard`'s 5 s default) becomes a flake when a neighbour starts many processes.
+
+**Follow-ups**:
+- BACKLOG 🟤 [2026-10-30] "From: G2 closeout" (9 entries): the `core/*.js` ceiling, one ref-line parser, `npm run ratchet`, the slack-on-`main` gap, measuring what a push to `main` lands, comparing the merged ceiling with `main`'s, smaller ratchet cleanups, `lint-guard`'s timeout and a git-version check.
+- Branches cut before this merged (`g3-departed-clips-parked`, and G3 and G4's future branches) need `main` merged before their next push, so the line ratchet runs; noted in WEEKLY G3 and G4 and in 🟤 [2026-10-16] "Decide the parked source-CLIP reuse branch".
 
 ### 2026-10-30 — Group G1: Repo chores 🔵 (Cleanup Week #5, Oct 26–30, run Oct 28–30) — **3/3, MERGED `4894a13`** (PR #93)
 

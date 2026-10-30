@@ -2,7 +2,7 @@
 
 Key targets with dates.
 
-**Last Updated**: 2026-10-28 <!-- Weekly planning (Cleanup Week #5, Oct 26–30): a status edit only, not a refresh. v2's weekly 🔵 share is set to ~12 SP ("Most", user ruling 2026-10-28): v2 complete moves to about May 2027, and the pilot, scaled the same way, to early January 2027 (the planner's call). The 2-month clock still runs from 2026-10-27. --> <!-- G5 strategic-doc refresh (plan 2026-10-27_g5-strategic-doc-refresh.md): the v2 pilot and v2-complete milestones replace "v2.0 modularization complete", which is retired as absorbed into v2 (spec D1); the 24k scope note closed; the Health Summary's Count column dropped (derived counts). The 2-month clock restarts here. Earlier: 2026-10-09 was a status flip only, not a refresh. -->
+**Last Updated**: 2026-10-30 <!-- G2 closeout (PR #94, merge a80cc37): a status edit only; the blocking line ratchet is in place (Dependencies, v2 pilot). --> <!-- Prior (2026-10-28): Weekly planning (Cleanup Week #5, Oct 26–30): a status edit only, not a refresh. v2's weekly 🔵 share is set to ~12 SP ("Most", user ruling 2026-10-28): v2 complete moves to about May 2027, and the pilot, scaled the same way, to early January 2027 (the planner's call). The 2-month clock still runs from 2026-10-27. --> <!-- G5 strategic-doc refresh (plan 2026-10-27_g5-strategic-doc-refresh.md): the v2 pilot and v2-complete milestones replace "v2.0 modularization complete", which is retired as absorbed into v2 (spec D1); the 24k scope note closed; the Health Summary's Count column dropped (derived counts). The 2-month clock restarts here. Earlier: 2026-10-09 was a status flip only, not a refresh. -->
 
 ---
 
@@ -31,7 +31,7 @@ Milestones are significant checkpoints. They should be:
 - [ ] The user's 24k smoke after P1b, with startup, navigation and sort timings recorded against today's (§ 15)
 - [ ] Net `wc -l media-viewer.js` ≤ 0 in each phase's PR, under the blocking line ratchet
 
-**Dependencies**: Cleanup Week #5 first; the blocking line ratchet in place before P1a's PR merges
+**Dependencies**: Cleanup Week #5 first; the blocking line ratchet in place before P1a's PR merges (✅ in place since 2026-10-30, PR #94)
 
 **Risks**:
 
