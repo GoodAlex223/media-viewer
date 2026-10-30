@@ -9,7 +9,7 @@
 
 **Goal:** A push whose merge into `origin/main` would carry a `media-viewer.js` over a committed ceiling is refused in seconds, a push to `main` is refused while the ceiling is above the count, E2E still gets git's ref lines, and three tournament E2E tests stop failing at random.
 
-**Architecture:** A new CommonJS script, `scripts/check-line-ratchet.js`, fetches `origin`'s `main`, merges each pushed branch tip into it in memory with `git merge-tree --write-tree`, and compares the merged renderer's newline count with the merged `scripts/renderer-line-ceiling.txt`. Every failure refuses. `.husky/pre-push` reads git's ref lines once and gives the ratchet, then the unchanged E2E gate, its own copy. The flaky tests drop `tiny.mp4` from their fixtures.
+**Architecture:** A new CommonJS script, `scripts/check-line-ratchet.js`, fetches `origin`'s `main`, merges each pushed branch tip into it (no ref or working-tree change) with `git merge-tree --write-tree`, and compares the merged renderer's newline count with the merged `scripts/renderer-line-ceiling.txt`. Every failure refuses. `.husky/pre-push` reads git's ref lines once and gives the ratchet, then the unchanged E2E gate, its own copy. The flaky tests drop `tiny.mp4` from their fixtures.
 
 **Tech Stack:** Node CJS (`scripts/`), git 2.38 (`merge-tree --write-tree`), POSIX `sh` under Husky v9 (`sh -e`), Vitest, Playwright + Electron.
 
@@ -489,6 +489,31 @@ Re-estimated after planning: **~4.25 SP** against WEEKLY's 4 and the spec's 4–
 
 - **Task 4, Step 4**: the user approved, and `git push -u origin g2-pre-push-gate` went through. The real hook printed `refs/heads/g2-pre-push-gate: media-viewer.js 11529 lines, ceiling 11529 — at the ceiling`, the gate chose RUN (`tests/e2e/` changed), and the E2E suite finished with 236 passed and 7 skipped in 11.2 minutes. The remote branch holds exactly the six commits `5d72f64`..`6edb762`; no foreign commit landed on it.
 
+### 2026-10-30 — PHASE: Review round 1 (PR #94, the `max` review at `286d8c5`: 15 findings, 10 held back)
+
+The user chose three calls: keep D3 for finding 1 (record the limit), fix 3 and file 4, and split the test file for 14. Every finding was checked against the code before a change, and each fix has a row that failed first.
+
+| # | Finding | Disposition |
+|---|---|---|
+| 1 | Slack on `main` is used up with no ceiling edit | D3 kept by the user. Recorded as a known limit (spec § 12) and filed (§ 6). |
+| 2 | An over-ceiling `main` blames every branch | Fixed: rows 14a–c. A push that adds no lines passes with a note; one that adds lines refuses and names main's overage. |
+| 3 | The fetch moves the user's `origin/main` and `FETCH_HEAD` | Fixed: a private ref `refs/ratchet/origin-main`, row 13. Mutants N1a, N1b each fail it. |
+| 4 | A force push to `main` is measured on the merge | Filed (§ 6): it needs a forced push, against policy. |
+| 5 | The wheel test could no longer fail on three files | Fixed: it counts `nextMedia`/`previousMedia` calls. With the guard deleted it fails (`Expected: 0, Received: 1`). |
+| 6 | One-line `REFS` hid a first-line-only hook | Fixed: two lines. A `head -n1` hook now fails the control, the stdin proof and the two SKIP rows. |
+| 7 | `selectUpdates` refused spaces and no-break spaces | Fixed: split from the right on ASCII spaces; pure rows and CLI row 18. Mutant N6 fails the no-break-space row. |
+| 8 | The same ways out for every refusal | Fixed: per refusal; the SKIP token is named once, by the hook. Cases 1, 5, 6a, 9a pin it. |
+| 9 | The stub `node` could run the real ratchet or recurse | Fixed: `REAL_NODE` is `process.execPath`, an unexpected script exits 99, and the spawn rows have timeouts. |
+| 10 | `merge-tree` failures were opaque; unrelated histories failed | Fixed: `--allow-unrelated-histories` (row 17, mutant N5), the stderr line shown, git 2.38+ documented in `CLAUDE.md` and the script. |
+| 11 | A branch cut before the ratchet is refused when `main` has no ceiling file | Fixed: row 15, mutant N3. |
+| 12 | A symlinked renderer is measured as 0 lines | Fixed: `ls-tree` mode check, row 16, mutant N4. |
+| 13 | Exit 127 advised `npm install` when `node` is missing | Fixed: the text names the PATH too; `husky-skip` pins it. |
+| 14 | The ratchet test file is the critical path | Split into a pure file and three CLI files with a shared harness. Interleaved on this machine: 24.5–28.5 s for the old file against 20 s for the three (91 tests against 80), and the full suite stayed near 23.5 s, so the saving is real but modest: git spawns dominate. One full run timed out an unrelated `lint-guard` test at 5 s under load; the next two runs passed. |
+| 15 | `CLAUDE.md` overstated "a conflict refuses" | Fixed: "a conflict in either file". |
+
+- Held back by the reviewer and answered: `ROADMAP.md:34,96` goes in the closeout (§ 9); `plans/README.md:81` is fixed now; `--no-auto-maintenance` is added to the fetch; "in memory" wording is corrected in the spec and plan; the duplicate parser, the fourth `gitEnv` copy, the double `rev-parse`, the redundant BOM `replace` (now an escaped `﻿`) and the E2E readiness helpers are filed or left as cleanups (§ 6).
+- Ruling: finding 2 is fixed by letting a push that adds no lines to an over-ceiling `main` pass, which the spec's "count > ceiling refuses everywhere" did not say; the user did not rule on it. It costs a branch passing while `main` is over, with the note naming main. Revert if you want the stricter reading.
+
 ---
 
 ## 5. Key Discoveries
@@ -508,6 +533,10 @@ Re-estimated after planning: **~4.25 SP** against WEEKLY's 4 and the spec's 4–
 | Extend the ceiling to "the renderer plus `core/*.js`" once v2 P1a creates `core/` (🟤) | GOALS G-7 sets that target, but the ruling and this check name only `media-viewer.js` (spec § 3, non-goals), so code moved into `core/` is not counted | S | M |
 | One ref-line parser for both pre-push scripts (🟤) | The gate drops a malformed line (and prints SKIP for garbage), while the ratchet refuses it (§ 2, call 2). A shared parser with the ratchet's policy would also close 🟤 "Make the gate print RUN for stdin that is not git's ref lines" | XS | L |
 | A way to run the ratchet on the current branch without pushing (`npm run ratchet`) (🟤) | It would let a PR author see the merged count and set the ceiling before the push refuses it. Today that needs Task 4, Step 3's hand-built ref line | XS | L |
+| Close the slack-on-`main` gap (🟤) | Review finding 1: a branch that shrinks the renderer without lowering the ceiling leaves slack that the next branch can use up with no ceiling edit. D3 (the user's ruling) accepts it. Options when it bites: refuse a branch push whose merged count is below main's ceiling, or lower the ceiling in the merge automatically | S | M |
+| Measure what a push to `main` lands, not the merge (🟤) | Review finding 4: with `origin/main` at 90/100 and a stale tip at 110/100, `git push --force origin HEAD:main` measures 100/100 and passes. Measure the tip's own tree on `refs/heads/main`, or refuse when `remoteSha` is not an ancestor of the tip. Needs a forced push, against policy | XS | L |
+| Make the ratchet's fixtures cheaper (🟤) | The CLI rows spend most of their time in git spawns (about 10 per test). Building the base commits once per file, or with `git fast-import`, would cut the file from about 20 s to a few | S | M |
+| Smaller review cleanups (🟤) | `readBlob` spawns git twice per file (`ls-tree`, `cat-file`); the per-tip `rev-parse` duplicates a guard in `parseMergeTree`; the E2E readiness helpers report idle while a dealt file's failure is pending (a documented choice) | XS | L |
 
 ### Spawned Tasks
 
@@ -540,6 +569,7 @@ Re-estimated after planning: **~4.25 SP** against WEEKLY's 4 and the spec's 4–
 | Repeat run (50) | 50 passed | 2.7 minutes |
 | Local end-to-end probe | (a) passed, (b) refused with the ref unchanged, (c) fast-forwarded | 1.3 s, 1.0 s, 1.3 s |
 | Dogfood | 11529 / 11529 on both refs | 1.2 s, 1.1 s |
+| Review round 1 | Full suite 53 files, 2,530 passed, 1 skipped (2,518 + 12); lint clean | Mutants N1a, N1b, N2a, N2b, N3, N4, N5, N6, N7 each failed their rows |
 | First push | Pushed; E2E 236 passed, 7 skipped, 11.2 min | The ratchet line: `11529 lines, ceiling 11529 — at the ceiling`; the gate chose RUN (`tests/e2e/` changed) |
 
 ---
@@ -567,5 +597,5 @@ Re-estimated after planning: **~4.25 SP** against WEEKLY's 4 and the spec's 4–
 | Branches cut before G2's merge (§ 2, Edge cases): list them with `git branch -a --no-merged origin/main`. Then add a ↳ note to the WEEKLY entry of each group still open (G3 and G4 as of 2026-10-30): "merge `main` before your next push, so the line ratchet runs". If `g3-departed-clips-parked` still exists, add the same line to 🟤 [2026-10-16] "Decide the parked source-CLIP reuse branch" (+83 renderer lines) | |
 | Cited commit SHAs verified as ancestors of `main` | |
 | Deploy record | N/A: a dev-tooling change, nothing deploy-tied |
-| Live docs: every late finding corrected where a live doc states it (re-sweep `CLAUDE.md:31`, `PROJECT.md:65`, `GOALS.md:31,83`) | |
+| Live docs: every late finding corrected where a live doc states it (re-sweep `CLAUDE.md:31`, `PROJECT.md:65`, `GOALS.md:31,83`, and `ROADMAP.md:34,96`, which still lists the ratchet as pending: the review's held-back item) | |
 | Memory: durable decisions and patterns captured | |

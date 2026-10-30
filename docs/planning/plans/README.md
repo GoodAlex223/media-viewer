@@ -78,7 +78,7 @@ mv docs/planning/plans/YYYY-MM-DD_task.md docs/archive/plans/
 
 | Plan | Group | Status |
 | --- | --- | --- |
-| [2026-10-30_g2-pre-push-gate.md](2026-10-30_g2-pre-push-gate.md) | G2 (Cleanup Week #5) | In progress — Tasks 1–3 done, awaiting the first push |
+| [2026-10-30_g2-pre-push-gate.md](2026-10-30_g2-pre-push-gate.md) | G2 (Cleanup Week #5) | In review — PR #94, review round 1 answered |
 
 <!-- 2026-10-30 (Group G1 closeout, Cleanup Week #5): 2026-10-28_g1-repo-chores.md left this table on archive.
      Merged `4894a13` via PR #93, moved to docs/archive/plans/ with `git mv`, and indexed in

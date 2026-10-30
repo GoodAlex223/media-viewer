@@ -60,6 +60,8 @@ describe.skipIf(!shAvailable)('.husky/skip.sh (needs sh on PATH — Git Bash on 
         const result = runSkip('(exit 127) || check_failed lint-staged', undefined);
         expect(result.status).toBe(127);
         expect(result.stderr).toContain('lint-staged could not run — command not found (exit 127)');
+        // node itself may be the missing command (a GUI client's PATH), which npm install does not fix.
+        expect(result.stderr).toContain('check that node is on the PATH the hook gets');
         expect(result.stderr).not.toContain('SKIP=');
     });
 

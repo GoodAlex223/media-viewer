@@ -434,11 +434,23 @@ test.describe('Tournament Mode', () => {
 
         // Wheel over the tournament header — empty space, not a .media-wrapper, so the handler
         // would otherwise fall through to nextMedia()/previousMedia(). nextMedia mutates
-        // currentIndex synchronously (compare branch: currentIndex += 2), so no wait is needed.
+        // currentIndex synchronously (compare branch: currentIndex += 2), so no wait is needed. On three
+        // files that step wraps back to 0 and the engine's pair never changes, so the index and the pair
+        // cannot show the guard missing: count the calls instead.
         await page.evaluate(() => {
+            const mv = window.mediaViewer;
+            window.__navCalls = 0;
+            for (const name of ['nextMedia', 'previousMedia']) {
+                const original = mv[name].bind(mv);
+                mv[name] = (...args) => {
+                    window.__navCalls += 1;
+                    return original(...args);
+                };
+            }
             const el = document.getElementById('tournamentHeader');
             el.dispatchEvent(new WheelEvent('wheel', { deltaY: 120, bubbles: true, cancelable: true }));
         });
+        expect(await page.evaluate(() => window.__navCalls)).toBe(0);
 
         const after = await page.evaluate(() => ({
             index: window.mediaViewer.currentIndex,

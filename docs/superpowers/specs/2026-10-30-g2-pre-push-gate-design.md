@@ -90,7 +90,7 @@ The new order:
 
 1. Parse the ref lines. Select each update whose remote ref is under `refs/heads/` and whose local sha is not all zeros. Deletes and tags pass unchecked. If nothing is selected, pass without fetching.
 2. Fetch `main` from `origin` once, quietly. A failure refuses.
-3. For each selected update, merge the tip into `origin/main` in memory (§ 4's probe: resolve both commits first, and require a tree OID on the first line).
+3. For each selected update, merge the tip into `origin/main` with no ref, index or working-tree change (`merge-tree` does write the merged objects to the object store; § 4's probe: resolve both commits first, and require a tree OID on the first line).
    - The renderer or the ceiling file among the conflicted paths → refuse with "merge `origin/main` first".
    - `media-viewer.js` missing from the merged tree → refuse. If v2 ever moves the renderer, that PR updates the check.
    - The ceiling file missing or unparseable in the merged tree → refuse.
@@ -216,3 +216,17 @@ Made by me, not ruled by the user:
 ## 11. Size
 
 Re-estimated at ~4–4.5 SP against WEEKLY's 4: the ratchet ~3–3.5 (the script, the temp-repo cases with their mutants, the hook and its test, the docs), and the flaky tests ~1. The execution model and the review depth follow WEEKLY G2's model line; the plan confirms or revises them.
+
+## 12. Amendments after review round 1 (PR #94, 2026-10-30)
+
+The review's findings were checked first-hand. What changed the design, and what stays as ruled:
+
+- **D3 stands; its limit is recorded (finding 1).** A shrinking PR that leaves the ceiling above the count gets only the reminder on a branch, so the next PR can use up the slack with no ceiling edit. The user kept D3 (2026-10-30). The push to `main` still refuses while the ceiling is above the count.
+- **A main that is itself over its ceiling (finding 2).** When a merge is over, the check reads `origin/main`'s own count and ceiling. A push that adds no lines to such a main passes with a note naming main's overage. A push that adds lines refuses, and says main is over too.
+- **A main with no ceiling file passes, saying so (finding 11).** A merge that lacks the file while main has it still refuses.
+- **The fetch goes to `refs/ratchet/origin-main` (finding 3).** `--refmap=` and `--no-write-fetch-head` leave the user's `origin/main` (the lease of a later `--force-with-lease`) and `FETCH_HEAD` alone. This supersedes § 10's reading that a fresher `origin/main` is harmless.
+- **Ref lines split from the right on ASCII spaces (finding 7).** A local ref can be an expression with spaces (`HEAD^{/fix the bug}`), and a ref name can hold a no-break space.
+- **The ways out are per refusal (finding 8).** § 5.4's three bullets apply to an over-ceiling refusal only. A `main` refusal names `lower the ceiling to N` alone, a conflict says `merge origin/main first`, and the SKIP token is named once, by the hook.
+- **`merge-tree` takes `--allow-unrelated-histories`, and its first stderr line is shown (finding 10).** The check needs git 2.38 or newer, and CLAUDE.md says so.
+- **The renderer and the ceiling file must be regular files (finding 12).**
+- **Not changed here:** finding 4 (a force push to `main` is measured on the merge, not on what lands) goes to BACKLOG, since it needs a forced push, against policy.

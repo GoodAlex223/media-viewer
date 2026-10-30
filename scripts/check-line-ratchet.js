@@ -7,10 +7,19 @@
 // same merge. Over the ceiling refuses the push. Under it passes with a reminder to lower the ceiling,
 // except on `refs/heads/main`, where it refuses until the ceiling equals the count.
 //
-// Fails closed: a failed fetch or merge, an unreadable or unparsable file, or a malformed ref line
-// refuses the push (`SKIP=ratchet git push` is the bypass). A conflict in the renderer or the ceiling
-// file refuses too, since the merge's blob then carries conflict markers. It never writes the ceiling.
-// Exit 0 passes and exit 1 refuses; every message goes to stderr.
+// A main that is itself over its ceiling (two PRs that each fitted the slack, a SKIP, a web-UI commit)
+// refuses only a push that adds lines to it, and says whose overage it is. A main with no ceiling file
+// yet (before this check reaches it) passes with a note.
+//
+// Fails closed: a failed fetch or merge, an unreadable or unparsable file, a renderer or ceiling file
+// that is not a regular file, or a malformed ref line refuses the push (`SKIP=ratchet git push` is the
+// bypass, which the hook names). A conflict in the renderer or the ceiling file refuses too, since the
+// merge's blob then carries conflict markers; a conflict elsewhere does not matter here and is measured
+// past. It never writes the ceiling. Exit 0 passes and exit 1 refuses; every message goes to stderr.
+//
+// Needs git 2.38 or newer (`merge-tree --write-tree`). The fetch goes to a private ref,
+// `refs/ratchet/origin-main`, so it never moves the user's own `origin/main` (the implicit lease of a
+// later `--force-with-lease`) or `FETCH_HEAD`.
 //
 // `countLines`, `parseCeiling`, `selectUpdates`, `parseMergeTree` and `decide` are pure and unit-tested;
 // the CLI section is a thin git wrapper.
@@ -21,6 +30,7 @@ const fs = require('fs');
 const RENDERER = 'media-viewer.js';
 const CEILING_FILE = 'scripts/renderer-line-ceiling.txt';
 const MAIN_REF = 'refs/heads/main';
+const FETCHED_MAIN = 'refs/ratchet/origin-main';
 const PREFIX = 'pre-push ratchet: ';
 // The default 1 MiB would truncate the renderer (over 500 kB today, and growing with the ceiling).
 const MAX_BUFFER = 64 * 1024 * 1024;
@@ -59,19 +69,26 @@ function parseCeiling(text) {
 
 /**
  * The branch updates in git's pre-push stdin, keyed on the remote ref. Deletes (a zero local sha) and
- * every ref outside `refs/heads/` are dropped. A non-blank line that is not four fields with valid
- * shas throws: the ratchet cannot tell what such a push carries.
+ * every ref outside `refs/heads/` are dropped. A non-blank line that is not a local ref, two valid shas
+ * and a remote ref throws: the ratchet cannot tell what such a push carries.
+ *
+ * Fields split on ASCII spaces only, taken from the right. The local ref is the source expression of
+ * `git push origin '<expr>:<ref>'`, written verbatim, so it can hold spaces (`HEAD^{/fix the bug}`); `\s`
+ * and `trim()` would also split a ref name on a no-break space, which `check-ref-format` accepts.
  * @param {string} stdin
  * @returns {Array<{localRef:string, localSha:string, remoteRef:string, remoteSha:string}>}
  */
 function selectUpdates(stdin) {
     const updates = [];
     for (const raw of stdin.split('\n')) {
-        const line = raw.trim();
-        if (!line) continue;
-        const fields = line.split(/\s+/);
-        const [localRef, localSha, remoteRef, remoteSha] = fields;
-        if (fields.length !== 4 || !SHA.test(localSha) || !SHA.test(remoteSha)) {
+        const line = raw.replace(/\r$/, '');
+        if (!line.trim()) continue;
+        const fields = line.split(' ');
+        const remoteSha = fields.pop();
+        const remoteRef = fields.pop();
+        const localSha = fields.pop();
+        const localRef = fields.join(' ');
+        if (!localRef || !remoteRef || !SHA.test(localSha) || !SHA.test(remoteSha)) {
             throw new Error(`malformed ref line: ${JSON.stringify(line)}`);
         }
         if (ZERO_SHA.test(localSha) || !remoteRef.startsWith('refs/heads/')) continue;
@@ -113,10 +130,6 @@ function decide(count, ceiling, remoteRef) {
 
 if (require.main === module) {
     const say = (text) => process.stderr.write(`${PREFIX}${text}\n`);
-    const waysOut = () =>
-        say(
-            `to push anyway: shrink ${RENDERER}, raise the ceiling in ${CEILING_FILE}, or skip this check once with SKIP=ratchet git push.`
-        );
 
     // spawnSync, since exit 1 must not throw (merge-tree) and a missing path is an answer, not a failure.
     const git = (args, options = {}) => {
@@ -126,71 +139,139 @@ if (require.main === module) {
     };
     const text = (result) => result.stdout.toString('utf8').trim();
 
-    // The blob at `path` in `tree`: a Buffer, or null when the tree has no such path.
+    // The blob at `file` in `tree`: a Buffer, or null when the tree has no such path. A path that is not a
+    // regular file (a symlink would count as its link text, 0 lines) throws.
     const readBlob = (tree, file) => {
-        const spec = `${tree}:${file}`;
-        const found = git(['rev-parse', '--verify', '--quiet', spec]);
-        if (found.status === 1 && !found.stderr.length) return null;
-        if (found.status !== 0) throw new Error(`cannot read ${file} from the merge`);
-        const blob = git(['cat-file', 'blob', text(found)]);
+        const listed = git(['ls-tree', '-z', '--full-tree', tree, '--', file]);
+        if (listed.status !== 0) throw new Error(`cannot read ${file} from the merge`);
+        const entry = listed.stdout.toString('utf8').split('\0')[0];
+        if (!entry) return null;
+        const [mode, type, oid] = entry.split('\t')[0].split(' ');
+        if (type !== 'blob' || (mode !== '100644' && mode !== '100755')) {
+            throw new Error(`${file} is not a regular file in the merge`);
+        }
+        const blob = git(['cat-file', 'blob', oid]);
         if (blob.status !== 0) throw new Error(`cannot read ${file} from the merge`);
         return blob.stdout;
     };
 
     const measure = () => {
         const updates = selectUpdates(fs.readFileSync(0, 'utf8'));
-        if (updates.length === 0) return false;
+        if (updates.length === 0) return null;
 
-        const fetched = git(['fetch', '--quiet', '--no-tags', 'origin', '+refs/heads/main:refs/remotes/origin/main'], {
-            timeout: 60_000,
-            encoding: 'utf8',
-        });
+        // Into a private ref: `--refmap=` stops git from also updating `origin/main` (a fetch with an explicit
+        // refspec still does, opportunistically) and `--no-write-fetch-head` leaves FETCH_HEAD alone, so a later
+        // `--force-with-lease` keeps the lease the user earned. `--no-auto-maintenance` keeps a gc out of the
+        // 60 s the fetch is allowed.
+        const fetched = git(
+            [
+                'fetch',
+                '--quiet',
+                '--no-tags',
+                '--no-write-fetch-head',
+                '--no-auto-maintenance',
+                '--refmap=',
+                'origin',
+                `+refs/heads/main:${FETCHED_MAIN}`,
+            ],
+            { timeout: 60_000, encoding: 'utf8' }
+        );
         if (fetched.status !== 0) {
             const detail = (fetched.stderr || '').trim().split('\n')[0];
             throw new Error(`could not fetch main from origin${detail ? ` (${detail})` : ''}`);
         }
-        const originMain = git(['rev-parse', '--verify', '--quiet', 'refs/remotes/origin/main^{commit}']);
+        const originMain = git(['rev-parse', '--verify', '--quiet', `${FETCHED_MAIN}^{commit}`]);
         if (originMain.status !== 0) throw new Error('cannot resolve origin/main');
+        const mainTree = git(['rev-parse', '--verify', '--quiet', `${FETCHED_MAIN}^{tree}`]);
+        if (mainTree.status !== 0) throw new Error('cannot resolve the tree of origin/main');
 
-        let refused = false;
+        // origin/main's own count and ceiling, read when the merge alone would mislead; null if unreadable.
+        const mainState = () => {
+            try {
+                const renderer = readBlob(text(mainTree), RENDERER);
+                const ceilingBlob = readBlob(text(mainTree), CEILING_FILE);
+                const ceiling = ceilingBlob && parseCeiling(ceilingBlob.toString('utf8'));
+                return renderer && ceiling ? { count: countLines(renderer), ceiling } : null;
+            } catch (_err) {
+                return null;
+            }
+        };
+
+        const outcome = { refused: false, overAdvice: false };
         for (const { localSha, remoteRef } of updates) {
             const tip = git(['rev-parse', '--verify', '--quiet', `${localSha}^{commit}`]);
             if (tip.status !== 0) throw new Error(`cannot resolve ${localSha}`);
 
             const merge = git(
-                ['merge-tree', '--write-tree', '--name-only', '--no-messages', text(originMain), text(tip)],
-                {
-                    encoding: 'utf8',
-                }
+                [
+                    'merge-tree',
+                    '--write-tree',
+                    '--name-only',
+                    '--no-messages',
+                    '--allow-unrelated-histories',
+                    text(originMain),
+                    text(tip),
+                ],
+                { encoding: 'utf8' }
             );
             const merged = parseMergeTree(merge.stdout, merge.status);
-            if (!merged) throw new Error(`git could not merge ${localSha} into origin/main`);
+            if (!merged) {
+                const detail = (merge.stderr || '').trim().split('\n')[0];
+                throw new Error(
+                    `git could not merge ${localSha} into origin/main${detail ? ` (${detail})` : ''}; ` +
+                        'this check needs git 2.38 or newer'
+                );
+            }
 
             const conflicted = [RENDERER, CEILING_FILE].filter((file) => merged.conflicts.includes(file));
             if (conflicted.length > 0) {
                 for (const file of conflicted)
                     say(`${remoteRef}: ${file} conflicts with origin/main — merge origin/main first`);
-                refused = true;
+                outcome.refused = true;
                 continue;
             }
 
             const renderer = readBlob(merged.tree, RENDERER);
             if (!renderer) throw new Error(`${RENDERER} is missing from the merge`);
             const ceilingBlob = readBlob(merged.tree, CEILING_FILE);
-            if (!ceilingBlob) throw new Error(`${CEILING_FILE} is missing from the merge`);
+            if (!ceilingBlob) {
+                // A merge that lacks the ceiling file is only a problem once main has one: before this check
+                // reaches main, a branch cut without it has nothing to be measured against.
+                if (readBlob(text(mainTree), CEILING_FILE) === null) {
+                    say(
+                        `${remoteRef}: origin/main has no ${CEILING_FILE} yet — nothing to measure against, not measured`
+                    );
+                    continue;
+                }
+                throw new Error(`${CEILING_FILE} is missing from the merge`);
+            }
             const ceiling = parseCeiling(ceilingBlob.toString('utf8'));
             if (ceiling === null) throw new Error(`${CEILING_FILE} does not parse`);
 
             const count = countLines(renderer);
             const head = `${remoteRef}: ${RENDERER} ${count} lines, ceiling ${ceiling}`;
             switch (decide(count, ceiling, remoteRef)) {
-                case 'over':
-                    say(`${head} — over by ${count - ceiling}`);
-                    refused = true;
+                case 'over': {
+                    const main = mainState();
+                    const over = `${head} — over by ${count - ceiling}`;
+                    if (main && main.count > main.ceiling) {
+                        const itself = `origin/main is itself over its ceiling (${main.count} lines, ceiling ${main.ceiling})`;
+                        if (count <= main.count) {
+                            say(`${over}, but ${itself} and this push adds no lines. Fix main.`);
+                            break;
+                        }
+                        say(`${over}. ${itself}.`);
+                    } else {
+                        say(over);
+                    }
+                    outcome.refused = true;
+                    outcome.overAdvice = true;
                     break;
+                }
                 case 'lower':
-                    say(`${head} — lower the ceiling to ${count}`);
-                    refused = true;
+                    // Shrinking or raising would widen the gap, so only the one remedy is named.
+                    say(`${head} — lower the ceiling to ${count} in ${CEILING_FILE}`);
+                    outcome.refused = true;
                     break;
                 case 'remind':
                     say(`${head} — lower the ceiling to ${count} before this reaches main`);
@@ -199,17 +280,19 @@ if (require.main === module) {
                     say(`${head} — at the ceiling`);
             }
         }
-        return refused;
+        return outcome;
     };
 
     try {
-        if (measure()) {
-            waysOut();
+        const outcome = measure();
+        if (outcome && outcome.refused) {
+            // The hook names the SKIP token (check_failed), so only the remedy for being over is named here.
+            if (outcome.overAdvice)
+                say(`to get under the ceiling: shrink ${RENDERER}, or raise the ceiling in ${CEILING_FILE}.`);
             process.exit(1);
         }
     } catch (err) {
         say(`cannot measure — ${err.message}. Refusing the push.`);
-        waysOut();
         process.exit(1);
     }
 }

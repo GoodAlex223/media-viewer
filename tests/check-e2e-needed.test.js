@@ -81,6 +81,7 @@ describe('classifyPaths — paths the app never loads skip E2E', () => {
         'tests/integration/tournament-flow.test.js',
         'tests/feature-cache-harness.js',
         'tests/hash-pool-harness.js',
+        'tests/ratchet-repo-harness.js',
         'vitest.config.js',
         'eslint.config.mjs',
         '.prettierrc.json',
@@ -257,10 +258,17 @@ describe.skipIf(!shAvailable)(
     { timeout: 30_000 },
     () => {
         const ROOT = fileURLToPath(new URL('..', import.meta.url));
-        const REFS = `refs/heads/x ${SHA_A} refs/heads/x ${SHA_B}`;
+        // Two lines, so a hook that keeps only git's first ref line (`head -n1`, `read -r`) fails the stdin proof.
+        const REFS = `refs/heads/x ${SHA_A} refs/heads/x ${SHA_B}\nrefs/heads/y ${SHA_B} refs/heads/y ${ZEROS}`;
         let bin;
 
-        const stubEnv = () => ({ ...process.env, PATH: bin + path.delimiter + process.env.PATH });
+        // REAL_NODE is the stub's way to the real node: an absolute path, so the stub never looks itself up on
+        // PATH (where it could find itself again, whatever order `sh` builds PATH in).
+        const stubEnv = () => ({
+            ...process.env,
+            PATH: bin + path.delimiter + process.env.PATH,
+            REAL_NODE: process.execPath,
+        });
 
         beforeAll(() => {
             bin = fs.mkdtempSync(path.join(os.tmpdir(), 'mv-pre-push-'));
@@ -278,7 +286,10 @@ describe.skipIf(!shAvailable)(
                     '        echo "STUB-GATE got the ref lines" >&2; printf "%s" "$STUB_OUT"',
                     '    else printf STDIN-LOST; fi',
                     '    exit "${STUB_EXIT:-0}" ;;',
-                    '*) exec "$(PATH=${PATH#*:} command -v node)" "$@" ;;',
+                    // Any other script is a hook line this stub does not model: fail loudly, never run the real one
+                    // (the real ratchet would fetch from GitHub inside the unit suite).
+                    '*scripts/*) echo "stub node: unexpected script $1" >&2; exit 99 ;;',
+                    '*) exec "$REAL_NODE" "$@" ;;',
                     'esac',
                     '',
                 ].join('\n'),
@@ -386,8 +397,19 @@ describe.skipIf(!shAvailable)(
             const result = spawnSync('sh', ['-c', 'node -e "process.stdout.write(String(6*7))"'], {
                 env: stubEnv(),
                 encoding: 'utf8',
+                timeout: 10_000,
             });
             expect(result.stdout).toBe('42');
+        });
+
+        it('the stub fails loudly on a script it does not model, instead of running the real one', () => {
+            const result = spawnSync('sh', ['-c', 'node ./scripts/check-line-ratchet.js'], {
+                env: stubEnv(),
+                encoding: 'utf8',
+                timeout: 10_000,
+            });
+            expect(result.status).toBe(99);
+            expect(result.stderr).toContain('stub node: unexpected script ./scripts/check-line-ratchet.js');
         });
     }
 );
