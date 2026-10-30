@@ -526,6 +526,16 @@ The user chose three calls: keep D3 for finding 1 (record the limit), fix 3 and 
 
 - The reviewer's visible messages (`edfddf3c…`, 15 assistant text blocks) hold no remark that is not in its two comments.
 
+### 2026-10-30 — PHASE: Review round 3 (PR #94, the re-review and close-out at `a43c337`: no issues; 3 remarks to answer, all small)
+
+| # | Remark | Disposition |
+|---|---|---|
+| 1 | Held back: `CLAUDE.md:31` does not say a branch can pass while `origin/main` is itself over | Fixed: a clause now says so (67,944 bytes, under 69,000). The reviewer had dropped it as not durable-rule material; the sentence was inexact for that state, and the clause is one line. |
+| 2 | The spec's D2 row still says `merge-tree` merges "in memory" | Fixed: "with no ref or working-tree change". A grep for "in memory" in the spec and plan now finds none that describe the merge. |
+| 3 | The `gitEnv` BACKLOG entry omits the harness copy, and the ratchet files have no planted-env row | Fixed differently: instead of only carrying the gap, row 19 plants `GIT_DIR` and `GIT_INDEX_FILE` and runs the harness's commit and the CLI under them. Deleting the harness's `GIT_DIR` scrub fails it. Deleting the `GIT_INDEX_FILE` scrub does not, because no call in those files reads the index (fast-import, push, merge-tree, ls-tree): the comment says so. The § 9 closeout row now names the harness and row 19 for the BACKLOG annotation. |
+
+- The reviewer's visible messages since round 2 (8 more text blocks) hold nothing that is not in its two comments.
+
 ---
 
 ## 5. Key Discoveries
@@ -599,7 +609,7 @@ The user chose three calls: keep D3 for finding 1 (record the limit), fix 3 and 
 | Artifact | Done / N/A + reason |
 |----------|---------------------|
 | `BACKLOG.md`: improvements extracted (≥ 2, 🟤 under `[YYYY-MM-DD] From: G2 closeout`, each checked against BACKLOG first) | |
-| `BACKLOG.md`: check off 🟤 [2026-10-27] "Build the blocking renderer line ratchet…", noting that D2's merge-tree measurement replaced its arithmetic; check off 🟤 [2026-10-11]'s flaky-test entry; annotate 🟤 "Extract one shared temp-repo git-env helper for the unit tests" (a fourth copy landed in `tests/check-line-ratchet.test.js`) | |
+| `BACKLOG.md`: check off 🟤 [2026-10-27] "Build the blocking renderer line ratchet…", noting that D2's merge-tree measurement replaced its arithmetic; check off 🟤 [2026-10-11]'s flaky-test entry; annotate 🟤 "Extract one shared temp-repo git-env helper for the unit tests": add `tests/ratchet-repo-harness.js` (the fourth copy, shared by the three ratchet CLI files) to its Affected list, and name the planted-env row that file now has (`row 19` in `tests/check-line-ratchet-cli-c.test.js`), so the extraction moves the copy with its control | |
 | `TODO.md`: tick the 🟠 flaky-test item | |
 | `DONE.md`: entry with plan link, summary, key changes | |
 | `WEEKLY.md`: G2's Summary-Table Status and both Daily-Schedule entries (lines 96 and 102) in WEEKLY's own form (`✅ PR #N`); G2's task boxes | |

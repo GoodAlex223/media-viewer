@@ -30,7 +30,7 @@ The user's rulings:
 | #  | Question | Ruling |
 | -- | -------- | ------ |
 | D1 | Warning or control? (2026-10-27, G5, on v2 spec D23) | A blocking pre-push check. The ceiling lives in a committed file. The check measures the pushed tip, so a branch may grow partway through and only its tip counts. Each v2 phase's PR lowers the ceiling to its new count. Raising it is an explicit edit of that file, visible in the diff. |
-| D2 | How is the merge measured? (2026-10-30, this chat) | With git's own merge. `git merge-tree --write-tree` merges the pushed tip into `origin/main` in memory, and the check counts the merged renderer and reads the merged ceiling. This replaces the BACKLOG entry's arithmetic (`origin/main`'s count plus the branch's net change since the merge base; the ceiling from whichever side changed it). |
+| D2 | How is the merge measured? (2026-10-30, this chat) | With git's own merge. `git merge-tree --write-tree` merges the pushed tip into `origin/main` with no ref or working-tree change, and the check counts the merged renderer and reads the merged ceiling. This replaces the BACKLOG entry's arithmetic (`origin/main`'s count plus the branch's net change since the merge base; the ceiling from whichever side changed it). |
 | D3 | Is the lowering enforced? (2026-10-30) | Yes, at `main`: a push to `main` is refused while the ceiling is above the count. A push to any other branch passes, with a reminder line. |
 | D4 | The rest of the chat playback (2026-10-30) | Agreed ("looks right"): the check runs before the E2E decision; the hook reads git's ref lines once and gives each check its own copy; a failed fetch or merge refuses; deletes and tags are not checked; the flaky test drops `tiny.mp4`. |
 

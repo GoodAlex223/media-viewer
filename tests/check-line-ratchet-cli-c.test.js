@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import { ZEROS, S1, S2, R, C, body, ceiling, git, useRatchetRepo } from './ratchet-repo-harness.js';
@@ -78,5 +78,24 @@ describe('CLI on a real repo with a local origin (C)', { timeout: 120_000 }, () 
         expect(git(repo.work, 'rev-parse', 'refs/remotes/origin/main')).toBe(old);
         expect(fs.existsSync(fetchHead)).toBe(false);
         expect(git(repo.work, 'rev-parse', 'refs/ratchet/origin-main')).toBe(b);
+    });
+
+    // Vitest runs inside the pre-commit hook, which exports GIT_INDEX_FILE (and, in a worktree, an absolute
+    // GIT_DIR). A regressed scrub in the harness would aim these rows' git calls (the fast-import, the push
+    // and the CLI's own) at the real repo, and no other row would notice. Pointed at a folder with no repo,
+    // an inherited GIT_DIR makes git fail. Nothing here reads the index (fast-import, push, merge-tree,
+    // ls-tree), so GIT_INDEX_FILE changes no result today; it is planted too, for the day a call does.
+    it('row 19: keeps its git calls off the GIT_DIR and GIT_INDEX_FILE a hook exports', () => {
+        const b = repo.baseMain();
+        const nowhere = path.join(repo.root, 'no-such-dir', '.git');
+        vi.stubEnv('GIT_DIR', nowhere);
+        vi.stubEnv('GIT_INDEX_FILE', path.join(nowhere, 'index'));
+        try {
+            const tip = repo.commit(b, { 'docs/a.md': 'a\n' }, 'tip, committed under the planted variables');
+            repo.expectPassed(repo.run([repo.branch(tip)]), 'media-viewer.js 100 lines, ceiling 100');
+            expect(git(repo.work, 'rev-parse', tip)).toBe(tip);
+        } finally {
+            vi.unstubAllEnvs();
+        }
     });
 });
