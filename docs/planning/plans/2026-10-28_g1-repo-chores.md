@@ -19,7 +19,7 @@
 
 - **Fail-safe**: a path that is not on the SKIP list is RUN, and any git, stdin or parse failure prints RUN. Both are unchanged from today.
 - These never skip: `tests/e2e/`, `playwright.config.js`, `package.json` and `package-lock.json`.
-- The CLI's stdout is exactly `RUN` or `SKIP`, and it never exits non-zero for a decision. `.husky/pre-push` is not edited.
+- The CLI's stdout is exactly `RUN` or `SKIP`, and it never exits non-zero for a decision. `.husky/pre-push` is not edited. _Superseded 2026-10-30: review round 1 edited the hook in `a1e59c2`, so it runs E2E unless the output is exactly `SKIP`. This clause was a scope line, not the user's ruling. See § 4, "Review round 1"._
 - The copyright line is exactly `Copyright (c) 2025 GoodAlex223` (the user's ruling, 2026-10-28).
 - This repository is public: no user file names, folder names or profile paths go into committed text.
 - Code style: CommonJS in `scripts/`, Prettier (tabWidth 4, singleQuote, printWidth 120), LF.
@@ -302,6 +302,17 @@ describe('classifyPaths — near misses and look-alikes run E2E', () => {
 - **The test file**: 55 → 67 tests, 8.0 s in the full run (the review measured 6.7–13.9 s at `23e1115`). Full suite: 2,431 passed, 1 skipped.
 - **A slip during the mutation runs**: a mutation script's `print` crashed on the console's cp1252 encoding after it had written a mutant into the test file. I restored the file from its backup and checked it byte for byte before going on. The script was then rewritten to restore in a `finally` and to log to a UTF-8 file.
 - **Profile-path cleanup on `main`'s files** (a side agent's note, relayed by the user): a sweep for the account name in every form found 13 path lines in 6 tracked files beyond the plan's two. Each now reads `<user>`. One was a plain-text quote, which became a code span so GitHub keeps the placeholder. The remaining 6 lines are the real name and email, which the commit author fields already publish; 🟡 [2026-06-11] "Decide on commit-author PII…" tracks those, and they are left as written. Filed 🔵 [2026-10-30] "Remove the local profile path from the repo's git history" (the owner's call: a rewrite and force-push of `main`) and 🟤 [2026-10-30] "Flag profile paths in staged text at pre-commit".
+
+### 2026-10-30 — PHASE: Review round 2 (PR #93)
+
+- **The review**: round 2 at `4e8b54d`, with 2 findings and 5 held back. It accepted every round-1 response. The transcript holds nothing beyond the comment.
+- **Finding 1, the hook-test stubs**: they were written without the execute bit. POSIX `sh` passes over such a file on PATH, so on Linux or macOS the hook tests would have run the real gate and the real E2E suite, and the SKIP control still passed. I reproduced the PATH lookup in WSL: `-rw-r--r--` gave `/usr/bin/ls`, and after `chmod 755` the stub won.
+  - Fix: both stubs are written with mode `0o755` and then `chmodSync`'d, since the umask masks `mode`.
+  - The stub gate now prints a stderr marker, which the SKIP control asserts. RED: the control failed against the old stub.
+  - `beforeAll` refuses unless `sh` resolves both stubs. Mutation: deleting the node stub made it throw "sh resolves node to `/c/Program Files/nodejs/node`, not the stub", and no hook test ran.
+- **Finding 2**: the Global Constraint "`.husky/pre-push` is not edited" is now marked superseded.
+- **My own miss, surfaced by held-back item 2**: the 🔵 and 🟤 entries I filed in round 1 repeat the open 🟤 [2026-10-27] G5 entry "Remove the user's local profile paths and real folder names from the live docs, and add a check that stops new ones" (its "History" and "The control" bullets). I filed them without checking for it. Both are now tagged `possible-dup-of`, as the intake rules require, and the G5 entry has a progress note.
+  - That entry also makes redacting frozen docs the user's call. `4e8b54d` redacted four frozen files the relayed note did not name (two archived plans and two specs). That is disclosed there and to the user, and those four can be reverted.
 
 ---
 
