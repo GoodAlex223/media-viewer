@@ -512,6 +512,7 @@ The user chose three calls: keep D3 for finding 1 (record the limit), fix 3 and 
 | 15 | `CLAUDE.md` overstated "a conflict refuses" | Fixed: "a conflict in either file". |
 
 - Held back by the reviewer and answered: `ROADMAP.md:34,96` goes in the closeout (§ 9); `plans/README.md:81` is fixed now; `--no-auto-maintenance` is added to the fetch; "in memory" wording is corrected in the spec and plan; the duplicate parser, the fourth `gitEnv` copy, the double `rev-parse`, the redundant BOM `replace` (now an escaped `﻿`) and the E2E readiness helpers are filed or left as cleanups (§ 6).
+- Found by the pre-commit guard, not by the review: the new `tests/ratchet-repo-harness.js` is a RUN path that names SKIP paths (`scripts/…`), which the guard "nothing a RUN path loads is on the SKIP list" refuses. It is unit-only, so it joined `SKIP_FILES` in `scripts/check-e2e-needed.js` beside the two older harnesses, with a SKIP row that failed first. The first commit attempt was refused and left everything staged, so the plan and spec edits landed in the same commit (`4fa92ed`) as the code.
 - Ruling: finding 2 is fixed by letting a push that adds no lines to an over-ceiling `main` pass, which the spec's "count > ceiling refuses everywhere" did not say; the user did not rule on it. It costs a branch passing while `main` is over, with the note naming main. Revert if you want the stricter reading.
 
 ---
