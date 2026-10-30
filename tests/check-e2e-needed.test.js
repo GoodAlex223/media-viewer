@@ -244,8 +244,10 @@ describe('CLI on a real repo', { timeout: 30_000 }, () => {
 });
 
 // `.husky/pre-push` itself, with stub `node` (the gate) and `npx` (the E2E run) first on PATH. The stub
-// gate prints its canned answer only when it received git's ref lines, so the SKIP control also fails
-// if a hook step before the gate swallows stdin (the real gate would then see no refs and skip).
+// gate prints its canned answer, and a stderr marker, only when it received git's ref lines, so the SKIP
+// control fails if a hook step before the gate swallows stdin (the real gate would then see no refs and
+// skip) or if the stub never runs. The stubs must be executable: POSIX sh passes over a file without the
+// execute bit and takes the next match on PATH, which here is the real gate and the real E2E run.
 const shAvailable = spawnSync('sh', ['-c', 'exit 0']).status === 0;
 describe.skipIf(!shAvailable)(
     'the pre-push hook runs E2E unless the gate prints exactly SKIP',
@@ -255,15 +257,29 @@ describe.skipIf(!shAvailable)(
         const REFS = `refs/heads/x ${SHA_A} refs/heads/x ${SHA_B}`;
         let bin;
 
+        const stubEnv = () => ({ ...process.env, PATH: bin + path.delimiter + process.env.PATH });
+
         beforeAll(() => {
             bin = fs.mkdtempSync(path.join(os.tmpdir(), 'mv-pre-push-'));
-            fs.writeFileSync(
-                path.join(bin, 'node'),
-                '#!/bin/sh\ninput=$(cat)\n' +
-                    'if [ "$input" = "$EXPECT_STDIN" ]; then printf "%s" "$STUB_OUT"; else printf STDIN-LOST; fi\n' +
-                    'exit "${STUB_EXIT:-0}"\n'
-            );
-            fs.writeFileSync(path.join(bin, 'npx'), '#!/bin/sh\necho "E2E-RAN $*"\n');
+            const stubs = {
+                node:
+                    '#!/bin/sh\ninput=$(cat)\nif [ "$input" = "$EXPECT_STDIN" ]; then\n' +
+                    '    echo "STUB-GATE got the ref lines" >&2; printf "%s" "$STUB_OUT"\n' +
+                    'else printf STDIN-LOST; fi\nexit "${STUB_EXIT:-0}"\n',
+                npx: '#!/bin/sh\necho "E2E-RAN $*"\n',
+            };
+            for (const [name, body] of Object.entries(stubs)) {
+                fs.writeFileSync(path.join(bin, name), body, { mode: 0o755 });
+                fs.chmodSync(path.join(bin, name), 0o755); // `mode` above is masked by the umask
+            }
+            // Refuse to go on unless sh finds both stubs first: a test that reached the real gate would
+            // run the real E2E suite inside a synchronous spawn that the test timeout cannot stop.
+            for (const name of Object.keys(stubs)) {
+                const found = spawnSync('sh', ['-c', `command -v ${name}`], { env: stubEnv(), encoding: 'utf8' });
+                if (!found.stdout.trim().endsWith(`${path.basename(bin)}/${name}`)) {
+                    throw new Error(`sh resolves ${name} to ${JSON.stringify(found.stdout.trim())}, not the stub`);
+                }
+            }
         });
         afterAll(() => {
             try {
@@ -274,8 +290,7 @@ describe.skipIf(!shAvailable)(
         });
 
         const runHook = (stubOut, stubExit = 0) => {
-            const env = { ...process.env, PATH: bin + path.delimiter + process.env.PATH };
-            Object.assign(env, { STUB_OUT: stubOut, STUB_EXIT: String(stubExit), EXPECT_STDIN: REFS });
+            const env = { ...stubEnv(), STUB_OUT: stubOut, STUB_EXIT: String(stubExit), EXPECT_STDIN: REFS };
             delete env.SKIP;
             return spawnSync('sh', ['.husky/pre-push', 'origin', 'url'], {
                 cwd: ROOT,
@@ -288,6 +303,7 @@ describe.skipIf(!shAvailable)(
         it('skips E2E when the gate prints SKIP (control: the stubs reach the hook)', () => {
             const result = runHook('SKIP');
             expect(result.status).toBe(0);
+            expect(result.stderr).toContain('STUB-GATE got the ref lines');
             expect(result.stdout).not.toContain('E2E-RAN');
         });
 
