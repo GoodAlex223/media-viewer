@@ -2,8 +2,10 @@
 . "$(dirname "$0")/skip.sh"
 check_skip_tokens "e2e"
 
+# Run unless the gate printed exactly SKIP: a crash after its token (RUNRUN, SKIPRUN), no output or
+# stray output all mean the decision is uncertain.
 decision=$(node scripts/check-e2e-needed.js || echo RUN)
-if [ "$decision" = "RUN" ] && ! skipped e2e; then
+if [ "$decision" != "SKIP" ] && ! skipped e2e; then
     echo "pre-push: running the E2E suite before push (skip it for one push with: SKIP=e2e git push)…"
     npx playwright test
 fi

@@ -164,7 +164,7 @@ surviving findings.
 
 - Installed `claude-security@claude-plugins-official` **0.12.0**, project scope, from a lowercase `c:` cwd
   (`cmd //c "cd /d c:\… && claude plugin install …"`); `claude plugin list --json` records
-  `projectPath: c:\Users\alexm\Projects\media_viewer`, enabled, installed `2026-10-08T08:05:33Z`.
+  `projectPath: c:\Users\<user>\Projects\media_viewer`, enabled, installed `2026-10-08T08:05:33Z`.
 - **Always-on cost: ~778 tokens** (`claude plugin details`, Claude Code 2.1.289): the skill ~150 plus nine
   agent descriptions ~50–140 each. Four hooks (`UserPromptExpansion`, `PostToolUse`, `PostToolUseFailure`,
   `PermissionRequest`) are labelled "harness-only — no model context cost" — a floor, per the 2026-09-24
