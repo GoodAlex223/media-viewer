@@ -1,6 +1,6 @@
 # G3: rating data that can't go wrong
 
-**Status**: Written 2026-11-02, awaiting the user's read. The user skipped the brainstorm's questions ("lets skip the questions"), so every decision below is my call unless it quotes a ruling, and each is listed in § 4 for checking.
+**Status**: Approved by the user 2026-11-02 ("Looks right, go"); built. The user skipped the brainstorm's questions ("lets skip the questions"), so every decision below is my call unless it quotes a ruling, and each is listed in § 4 for checking.
 **Branch**: `g3-rating-data-safety`, cut from `main` at `65d8b71`.
 **Scheduled**: [WEEKLY.md](../../planning/WEEKLY.md) G3 (Oct 26–30, Cleanup Week #5, the week's 🏆).
 **Origin**: seven members, nine BACKLOG 🟤 entries, listed by title in § 2. A tenth, "A special move of a bulk-rated file weighs 0 in the out-of-date count", joins by my call (§ 4, call 8).
@@ -152,7 +152,7 @@ No file-move handler changes, so PROJECT.md's Tier 1 approval does not apply.
 
 ### 3.8 The renderer ceiling
 
-The renderer sits exactly at its 11,529-line ceiling. The helpers in §§ 3.1 and 3.3 remove about 65 repeated lines and the rest add about 85, so the estimate is about +20. If it lands over, a small `_fileFromHistory(entry)` for the six repeated list-entry literals in the undo branches saves about 36 more. That is the same code being touched, and it is the plan's first resort before a raise. WEEKLY allows G3 an explicit raise (v2's net ≤ 0 binds v2 phases), so a raise stays legal, and the PR must then state it.
+**Result**: 11,527 lines, with `_fileFromHistory` applied at seven sites, so no raise; the ceiling moved down to the count. The renderer sat exactly at its 11,529-line ceiling. The helpers in §§ 3.1 and 3.3 remove about 65 repeated lines and the rest add about 85, so the estimate was about +20. If it lands over, a small `_fileFromHistory(entry)` for the six repeated list-entry literals in the undo branches saves about 36 more. That is the same code being touched, and it is the plan's first resort before a raise. WEEKLY allows G3 an explicit raise (v2's net ≤ 0 binds v2 phases), so a raise stays legal, and the PR must then state it.
 
 The ceiling must **equal** the count when this merges, whichever way it moved, because the ratchet refuses the closeout's push to `main` if the count is under the ceiling too.
 

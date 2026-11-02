@@ -2,7 +2,7 @@
 
 **Task Reference**: [WEEKLY.md](../WEEKLY.md) G3 (Cleanup Week #5, 🏆)
 **Created**: 2026-11-02
-**Status**: Implementation: the user approved the spec and plan on 2026-11-02 ("Looks right, go"). Phase 1 done
+**Status**: Implementation: the user approved the spec and plan on 2026-11-02 ("Looks right, go"). Phases 1–4 done, Phase 5 in progress
 **Last Updated**: 2026-11-02
 **Design**: [spec](../../superpowers/specs/2026-11-02-g3-rating-data-safety-design.md), which holds the analysis, the Phase 0 table and my ten calls. This plan does not restate them.
 
@@ -89,25 +89,25 @@ Commit together: spec § 6.
 - [x] Member 6's E2E turns green; add the two-coalesced-saves E2E and prove it by removing the flush
 
 #### Phase 2: capture and restore (member 3, call 8)
-- [ ] `_captureUndoFields` at all five sites; restore inside `restoreFeatureCachesFromHistory`; delete the batch's two lines
-- [ ] `trainingWeight`, test first, both ways
-- [ ] Member 3's three E2Es turn green
+- [x] `_captureUndoFields` at all five sites; restore inside `restoreFeatureCachesFromHistory`; delete the batch's two lines
+- [x] `trainingWeight`, test first, both ways
+- [x] Member 3's three E2Es turn green
 
 #### Phase 3: the folder-load guard and the undo target (member 1)
-- [ ] The guard table, test first
-- [ ] `_moveBackFromHistory` at the six `handleCancel` sites and the batch; the tournament's `targetFolder`; the source-level control
-- [ ] Both E2Es turn green. Add a guard row per method only where a real interleaving is not already covered
+- [x] The guard table, test first
+- [x] `_moveBackFromHistory` at the six `handleCancel` sites and the batch; the tournament's `targetFolder`; the source-level control
+- [x] Both E2Es turn green. Add a guard row per method only where a real interleaving is not already covered
 
 #### Phase 4: the small ones (members 4, 5, 7)
-- [ ] `applyPredictionSortResult` through `alignToLive`
-- [ ] Continue reads the live list and refuses during a file action or a load
-- [ ] `installCrashLogging`, called at the top of `main.js`
+- [x] `applyPredictionSortResult` through `alignToLive`
+- [x] Continue reads the live list and refuses during a file action or a load
+- [x] `installCrashLogging`, called at the top of `main.js`
 
 #### Phase 5: verify and document
-- [ ] Measure the renderer; apply `_fileFromHistory` if over; set the ceiling to the exact count
+- [x] Measure the renderer; apply `_fileFromHistory` if over; set the ceiling to the exact count
 - [ ] Full unit suite, lint, `format:check`; full E2E (it runs at pre-push anyway)
 - [ ] Mutation checks from spec § 5; re-run each member's E2E with its fix reverted if any looks suspect
-- [ ] Live-surface edits from the preflight; `docs/MANUAL_TESTING.md` scenarios; comment sweep
+- [x] Live-surface edits from the preflight; `docs/MANUAL_TESTING.md` scenarios; comment sweep
 - [ ] Manual smoke on the running app: rate, undo, Both good then undo, quit during extraction, reopen. Ask the user to confirm before the push
 
 #### Phase 6: PR and close-out (after approval)
@@ -141,6 +141,10 @@ Commit together: spec § 6.
 - Also needed: `coalescing-saver.js` joined the renderer lists in `eslint.config.mjs` and `tests/media-url.test.js`.
 - Three more leave-alone items went to spec § 7.
 - Renderer now 11,595 lines (+66, against the ceiling of 11,529). Phases 2–3 are where the helpers remove lines; Phase 5 judges the total.
+- **Phase 2 done** (member 3, call 8). Deviation, in the spec: a batch undo passes `{ deferBulkSave: true }` and saves once, so the existing one-save test stays as written instead of relying on coalescing.
+- **Phase 3 done** (member 1). Traced every internal caller of the newly guarded methods: `loadFolder` calls none of them while the flag is held, and Apply's `switchMode` runs after it drops. Existing undo tests reach the new helpers through a `withUndoHelpers` wrapper that fills in only what a context leaves out; no assertion was loosened.
+- **Phase 4 done** (members 4, 5, 7). `main.js` gained one line at the top, outside the file-move handlers.
+- **Phase 5**: `_fileFromHistory` at seven sites brought the renderer to 11,527, under the 11,529 it started at, so no raise; the ceiling moves down to the count. Two source-level tests now check the helpers instead of the repeated literals, and each still fails if the property goes.
 
 ---
 

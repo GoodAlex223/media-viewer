@@ -42,13 +42,14 @@ function extract(name) {
     throw new Error(`Unbalanced braces in: ${name}`);
 }
 
-// handleCancel and _undoSkipBatch now reach two helpers and path.dirname. Filled in only where a context leaves them
+// The undo methods now reach these helpers and path.dirname. Filled in only where a context leaves them
 // out, so a context that sets its own keeps it.
 function withUndoHelpers(method) {
     return function (...args) {
         this._moveBackFromHistory ??= extract('_moveBackFromHistory');
         this._followRestoredFile ??= extract('_followRestoredFile');
         this._refuseIfFolderLoadInFlight ??= extract('_refuseIfFolderLoadInFlight');
+        this._fileFromHistory ??= extract('_fileFromHistory');
         const api = globalThis.window?.electronAPI;
         if (api) {
             api.path = { basename: (p) => p.slice(p.lastIndexOf('/') + 1), ...api.path };

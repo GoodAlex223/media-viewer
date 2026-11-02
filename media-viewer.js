@@ -1593,6 +1593,16 @@ class MediaViewer {
         this._followRestoredFile(entry, result); // land where it was actually put back
     }
 
+    _fileFromHistory(entry) {
+        return {
+            name: entry.fileName,
+            path: entry.originalPath,
+            size: entry.fileSize,
+            mtimeMs: entry.fileMtimeMs,
+            type: entry.fileType,
+        };
+    }
+
     // What removeFileFromList is about to destroy for this file, for a history entry: every move site spreads this in
     // before the removal, and restoreFeatureCachesFromHistory gives it back. A field the file lacks is omitted.
     _captureUndoFields(file) {
@@ -1851,13 +1861,8 @@ class MediaViewer {
     }
 
     previousMedia() {
-        if (
-            this._folderLoadInFlight ||
-            this.mediaFiles.length === 0 ||
-            this.isLoading ||
-            this.mediaNavigationInProgress ||
-            this._fileOpInFlight
-        ) {
+        if (this._folderLoadInFlight) return;
+        if (this.mediaFiles.length === 0 || this.isLoading || this.mediaNavigationInProgress || this._fileOpInFlight) {
             return;
         }
 
@@ -5316,13 +5321,7 @@ class MediaViewer {
                     }
 
                     // Calculate where to insert the restored file
-                    const restoredFile = {
-                        name: lastMove.fileName,
-                        path: lastMove.originalPath,
-                        size: lastMove.fileSize,
-                        mtimeMs: lastMove.fileMtimeMs,
-                        type: lastMove.fileType,
-                    };
+                    const restoredFile = this._fileFromHistory(lastMove);
 
                     // Insert remaining file back to its original position
                     if (remainingFile) {
@@ -5372,21 +5371,9 @@ class MediaViewer {
                     await this._moveBackFromHistory(secondMove);
 
                     // Add both files back to mediaFiles
-                    this.mediaFiles.push({
-                        name: firstMove.fileName,
-                        path: firstMove.originalPath,
-                        size: firstMove.fileSize,
-                        mtimeMs: firstMove.fileMtimeMs,
-                        type: firstMove.fileType,
-                    });
+                    this.mediaFiles.push(this._fileFromHistory(firstMove));
 
-                    this.mediaFiles.push({
-                        name: secondMove.fileName,
-                        path: secondMove.originalPath,
-                        size: secondMove.fileSize,
-                        mtimeMs: secondMove.fileMtimeMs,
-                        type: secondMove.fileType,
-                    });
+                    this.mediaFiles.push(this._fileFromHistory(secondMove));
 
                     this.restoreFeatureCachesFromHistory(firstMove);
                     this.restoreFeatureCachesFromHistory(secondMove);
@@ -5428,20 +5415,8 @@ class MediaViewer {
 
                     await this._moveBackFromHistory(secondMove);
 
-                    this.mediaFiles.push({
-                        name: firstMove.fileName,
-                        path: firstMove.originalPath,
-                        size: firstMove.fileSize,
-                        mtimeMs: firstMove.fileMtimeMs,
-                        type: firstMove.fileType,
-                    });
-                    this.mediaFiles.push({
-                        name: secondMove.fileName,
-                        path: secondMove.originalPath,
-                        size: secondMove.fileSize,
-                        mtimeMs: secondMove.fileMtimeMs,
-                        type: secondMove.fileType,
-                    });
+                    this.mediaFiles.push(this._fileFromHistory(firstMove));
+                    this.mediaFiles.push(this._fileFromHistory(secondMove));
 
                     this.restoreFeatureCachesFromHistory(firstMove);
                     this.restoreFeatureCachesFromHistory(secondMove);
@@ -5465,13 +5440,7 @@ class MediaViewer {
                     await this._moveBackFromHistory(undoMove);
 
                     // Insert file back at current position to maintain order
-                    this.mediaFiles.splice(this.currentIndex, 0, {
-                        name: undoMove.fileName,
-                        path: undoMove.originalPath,
-                        size: undoMove.fileSize,
-                        mtimeMs: undoMove.fileMtimeMs,
-                        type: undoMove.fileType,
-                    });
+                    this.mediaFiles.splice(this.currentIndex, 0, this._fileFromHistory(undoMove));
 
                     this.restoreFeatureCachesFromHistory(undoMove);
                     this.showNotification(`✅ Restored ${undoMove.fileName}`, 'success');
@@ -6572,13 +6541,7 @@ class MediaViewer {
             // engine.files from the snapshot, so the file re-pairs and reports its real tier.
             this._followRestoredFile(move, { targetPath: restoredPath }); // only now: see above
             this.tournament.engine.undoUserAction();
-            this.mediaFiles.push({
-                name: move.fileName,
-                path: move.originalPath,
-                size: move.fileSize,
-                mtimeMs: move.fileMtimeMs,
-                type: move.fileType,
-            });
+            this.mediaFiles.push(this._fileFromHistory(move));
             this.restoreFeatureCachesFromHistory(move);
             const moveIdx = this.moveHistory.lastIndexOf(move);
             if (moveIdx !== -1) this.moveHistory.splice(moveIdx, 1);

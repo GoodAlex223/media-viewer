@@ -228,13 +228,14 @@ const computeSortProgressView = extractMethod('computeSortProgressView');
 const insertNewFilesInSortedOrder = extractAsyncMethod('insertNewFilesInSortedOrder');
 const applyCachedSortOrder = extractAsyncMethod('applyCachedSortOrder');
 
-// handleCancel and _undoSkipBatch now reach two helpers and path.dirname. Filled in only where a context leaves them
+// The undo methods now reach these helpers and path.dirname. Filled in only where a context leaves them
 // out, so a context that sets its own keeps it.
 function withUndoHelpers(method) {
     return function (...args) {
         this._moveBackFromHistory ??= extractAsyncMethod('_moveBackFromHistory');
         this._followRestoredFile ??= extractMethod('_followRestoredFile');
         this._refuseIfFolderLoadInFlight ??= extractMethod('_refuseIfFolderLoadInFlight');
+        this._fileFromHistory ??= extractMethod('_fileFromHistory');
         const api = globalThis.window?.electronAPI;
         if (api) {
             api.path = { basename: (p) => p.slice(p.lastIndexOf('/') + 1), ...api.path };
@@ -2889,17 +2890,16 @@ describe('handleCancel feature restore', () => {
 
     it('every undo that puts a file back on the list gives it the mtime its history entry recorded (review #6)', () => {
         // Source check over the seven list restores (handleCancel's six: single, the bulk pair's remaining file, two
-        // pair branches of two; the tournament's one): each `size: <entry>.fileSize` is followed by its mtimeMs.
+        // pair branches of two; the tournament's one): each goes through _fileFromHistory, which carries the mtimeMs.
         for (const [name, sites] of [
             ['handleCancel', 6],
             ['handleTournamentUndo', 1],
         ]) {
             const body = methodSource(name);
-            const restores = [...body.matchAll(/size: (\w+)\.fileSize,\s*mtimeMs: (\w+)\.fileMtimeMs,/g)];
-            expect(restores, name).toHaveLength(sites);
-            for (const m of restores) expect(m[2], name).toBe(m[1]);
-            expect([...body.matchAll(/size: \w+\.fileSize,/g)], name).toHaveLength(sites);
+            expect([...body.matchAll(/this\._fileFromHistory\(\w+\)/g)], name).toHaveLength(sites);
+            expect([...body.matchAll(/size: \w+\.fileSize,/g)], name).toHaveLength(0);
         }
+        expect(methodSource('_fileFromHistory')).toMatch(/size: entry\.fileSize,\s*mtimeMs: entry\.fileMtimeMs,/);
     });
 
     it('compare-mode pair-undo restores caches for both files', async () => {
