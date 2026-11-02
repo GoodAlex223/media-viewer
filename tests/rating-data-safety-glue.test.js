@@ -29,6 +29,189 @@ function extract(name) {
     throw new Error(`Unbalanced braces in: ${name}`);
 }
 
+describe('member 1: nothing acts on files while a folder opens', () => {
+    const LOADING = 'Wait for the folder to finish loading';
+    const files = [
+        { name: 'a.jpg', path: '/f/a.jpg' },
+        { name: 'b.jpg', path: '/f/b.jpg' },
+    ];
+    let moveFile;
+
+    function makeCtx(over = {}) {
+        return {
+            _folderLoadInFlight: true,
+            _fileOpInFlight: false,
+            isLoading: false,
+            mediaNavigationInProgress: false,
+            mediaFiles: [...files],
+            currentIndex: 0,
+            moveHistory: [],
+            customSpecialFolder: '/special',
+            isSortedByPrediction: true,
+            isCompareMode: true,
+            isTournamentMode: false,
+            isPredictionSorting: false,
+            isComputingHashes: false,
+            showNotification: vi.fn(),
+            showDropZone: vi.fn(),
+            signalUserActivity: vi.fn(),
+            // Each is the first thing its method reaches past the guard, ending it there.
+            areFoldersConfigured: vi.fn(() => false),
+            _refuseIfNeedsRegrant: vi.fn(() => true),
+            _refuseIfFileOpInFlight: () => false,
+            _refuseIfFolderLoadInFlight: extract('_refuseIfFolderLoadInFlight'),
+            removeFailedFile: vi.fn(),
+            likeOrSkip: { active: true, skippedIn: vi.fn(() => []) },
+            get compareLeftFile() {
+                this.pairRead = true;
+                return null;
+            },
+            compareRightFile: null,
+            ...over,
+        };
+    }
+
+    beforeEach(() => {
+        moveFile = vi.fn(async () => ({ success: true }));
+        globalThis.window = { electronAPI: { moveFile } };
+    });
+    afterEach(() => {
+        delete globalThis.window;
+    });
+
+    // [method, args, did it get past the guard?] With the flag down, the same call must reach its check.
+    const QUIET = [
+        ['moveCurrentFile', ['like'], (c) => c.areFoldersConfigured.mock.calls.length > 0],
+        ['moveToSpecialFolder', [], (c) => c._refuseIfNeedsRegrant.mock.calls.length > 0],
+        ['moveComparePair', ['left', 'like', 'dislike'], (c) => c.areFoldersConfigured.mock.calls.length > 0],
+        ['applyBulkRating', ['good'], (c) => c.pairRead === true],
+        ['dislikeSkippedFiles', [], (c) => c.likeOrSkip.skippedIn.mock.calls.length > 0, { isCompareMode: false }],
+    ];
+
+    it.each(QUIET)('%s refuses quietly and takes no flag', async (name, args, reached, over = {}) => {
+        const method = extract(name);
+        const ctx = makeCtx(over);
+        await method.apply(ctx, args);
+        expect(reached(ctx)).toBe(false);
+        expect(ctx._fileOpInFlight).toBe(false);
+        expect(ctx.showNotification).not.toHaveBeenCalled();
+        expect(moveFile).not.toHaveBeenCalled();
+
+        const control = makeCtx({ ...over, _folderLoadInFlight: false });
+        await method.apply(control, args);
+        expect(reached(control)).toBe(true);
+    });
+
+    it('nextMedia returns first thing: not even the empty-list branch runs', () => {
+        const nextMedia = extract('nextMedia');
+        const ctx = makeCtx({ mediaFiles: [] });
+        nextMedia.call(ctx);
+        expect(ctx.showDropZone).not.toHaveBeenCalled();
+        const control = makeCtx({ mediaFiles: [], _folderLoadInFlight: false });
+        nextMedia.call(control);
+        expect(control.showDropZone).toHaveBeenCalledOnce();
+    });
+
+    it('previousMedia returns before it acts', () => {
+        const previousMedia = extract('previousMedia');
+        const ctx = makeCtx();
+        previousMedia.call(ctx);
+        expect(ctx.signalUserActivity).not.toHaveBeenCalled();
+    });
+
+    it('an undo says why, ahead of "No moves to undo"', async () => {
+        const ctx = makeCtx();
+        await extract('handleCancel').call(ctx);
+        expect(ctx.showNotification.mock.calls).toEqual([[LOADING, 'info']]);
+        expect(moveFile).not.toHaveBeenCalled();
+
+        const control = makeCtx({ _folderLoadInFlight: false });
+        await extract('handleCancel').call(control);
+        expect(control.showNotification.mock.calls).toEqual([['No moves to undo', 'error']]);
+    });
+
+    it('a tournament undo says why, and leaves the stack alone', async () => {
+        const peekUndoEntry = vi.fn(() => null);
+        const ctx = makeCtx({ isTournamentMode: true, tournament: { engine: { peekUndoEntry } } });
+        await extract('handleTournamentUndo').call(ctx);
+        expect(ctx.showNotification.mock.calls).toEqual([[LOADING, 'info']]);
+        expect(peekUndoEntry).not.toHaveBeenCalled();
+    });
+
+    it("the load-error toast's Remove refuses", () => {
+        const ctx = makeCtx();
+        extract('_removeFailedFileByPath').call(ctx, files[0].path);
+        expect(ctx.removeFailedFile).not.toHaveBeenCalled();
+        expect(ctx.showNotification.mock.calls).toEqual([[LOADING, 'info']]);
+    });
+
+    it('a mode switch refuses', async () => {
+        const ctx = makeCtx();
+        await extract('switchMode').call(ctx, 'tournament');
+        expect(ctx.showNotification.mock.calls).toEqual([[LOADING, 'info']]);
+    });
+});
+
+describe('member 1: an undo puts a file back where it came from', () => {
+    const moveBack = () => extract('_moveBackFromHistory');
+    const body = (name) => extract(name).toString();
+
+    afterEach(() => {
+        delete globalThis.window;
+    });
+
+    function api(result) {
+        const moveFile = vi.fn(async () => result);
+        globalThis.window = {
+            electronAPI: {
+                moveFile,
+                path: {
+                    dirname: (p) => p.slice(0, p.lastIndexOf('/')),
+                    basename: (p) => p.slice(p.lastIndexOf('/') + 1),
+                },
+            },
+        };
+        return moveFile;
+    }
+
+    const ctx = () => ({ baseFolderPath: '/another', _followRestoredFile: extract('_followRestoredFile') });
+
+    it('targets the folder the file came from, whatever folder is open', async () => {
+        const moveFile = api({ success: true, targetPath: '/from/a.jpg' });
+        const entry = { fileName: 'a.jpg', originalPath: '/from/a.jpg', newPath: '/liked/a.jpg' };
+        await moveBack().call(ctx(), entry);
+        expect(moveFile.mock.calls).toEqual([
+            [{ sourcePath: '/liked/a.jpg', targetFolder: '/from', fileName: 'a.jpg' }],
+        ]);
+    });
+
+    it('follows a suffixed landing, and throws on a failure with the entry as it was', async () => {
+        api({ success: true, targetPath: '/from/a (1).jpg' });
+        const entry = { fileName: 'a.jpg', originalPath: '/from/a.jpg', newPath: '/liked/a.jpg' };
+        await moveBack().call(ctx(), entry);
+        expect(entry).toMatchObject({ fileName: 'a (1).jpg', originalPath: '/from/a (1).jpg' });
+
+        api({ success: false, error: 'EBUSY' });
+        const failing = { fileName: 'b.jpg', originalPath: '/from/b.jpg', newPath: '/liked/b.jpg' };
+        await expect(moveBack().call(ctx(), failing)).rejects.toThrow('EBUSY');
+        expect(failing.originalPath).toBe('/from/b.jpg');
+    });
+
+    // A convention would not hold: this fails on any new undo site that targets the open folder.
+    it('no method moves a file back into the open folder', () => {
+        expect(source).not.toContain('targetFolder: this.baseFolderPath');
+    });
+
+    it('every undo branch goes through the helper; the tournament keeps its own move', () => {
+        const calls = (name) => body(name).split('this._moveBackFromHistory(').length - 1;
+        expect(calls('handleCancel')).toBe(6);
+        expect(calls('_undoSkipBatch')).toBe(1);
+        expect(body('handleTournamentUndo')).toContain(
+            'targetFolder: window.electronAPI.path.dirname(move.originalPath)'
+        );
+    });
+});
+
 describe('member 3: an undo gives a file back what its removal destroyed', () => {
     const captureUndoFields = extract('_captureUndoFields');
     const restore = extract('restoreFeatureCachesFromHistory');

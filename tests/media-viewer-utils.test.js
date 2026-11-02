@@ -228,6 +228,22 @@ const computeSortProgressView = extractMethod('computeSortProgressView');
 const insertNewFilesInSortedOrder = extractAsyncMethod('insertNewFilesInSortedOrder');
 const applyCachedSortOrder = extractAsyncMethod('applyCachedSortOrder');
 
+// handleCancel and _undoSkipBatch now reach two helpers and path.dirname. Filled in only where a context leaves them
+// out, so a context that sets its own keeps it.
+function withUndoHelpers(method) {
+    return function (...args) {
+        this._moveBackFromHistory ??= extractAsyncMethod('_moveBackFromHistory');
+        this._followRestoredFile ??= extractMethod('_followRestoredFile');
+        this._refuseIfFolderLoadInFlight ??= extractMethod('_refuseIfFolderLoadInFlight');
+        const api = globalThis.window?.electronAPI;
+        if (api) {
+            api.path = { basename: (p) => p.slice(p.lastIndexOf('/') + 1), ...api.path };
+            api.path.dirname ??= (p) => p.slice(0, p.lastIndexOf('/'));
+        }
+        return method.apply(this, args);
+    };
+}
+
 describe('formatElapsed', () => {
     it('returns "?" for NaN', () => {
         expect(formatElapsed.call({}, NaN)).toBe('?');
@@ -2742,7 +2758,7 @@ describe('_waitForRenderIdle (G2 final review F4)', () => {
 });
 
 describe('handleCancel feature restore', () => {
-    const handleCancel = extractAsyncMethod('handleCancel');
+    const handleCancel = withUndoHelpers(extractAsyncMethod('handleCancel'));
 
     function make576() {
         const v = new Float32Array(576);
@@ -3945,7 +3961,7 @@ describe('bulkRatedPairs key capture + restore across undo (G1 T3)', () => {
 });
 
 describe('handleCancel reinstates bulkRatedPairs keys (G1 T3)', () => {
-    const handleCancel = extractAsyncMethod('handleCancel');
+    const handleCancel = withUndoHelpers(extractAsyncMethod('handleCancel'));
     const bulkPairKey = extractMethod('bulkPairKey');
     let origWindow;
     beforeEach(() => {
@@ -6115,7 +6131,7 @@ describe('extraction progress sink', () => {
 });
 
 describe('handleTournamentUndo (unified undo stack)', () => {
-    const handleTournamentUndo = extractAsyncMethod('handleTournamentUndo');
+    const handleTournamentUndo = withUndoHelpers(extractAsyncMethod('handleTournamentUndo'));
 
     function makeCtx(pending, overrides = {}) {
         const engine = {
@@ -8141,7 +8157,7 @@ const IN_FLIGHT_NOTICE = 'A move is still in progress — press Undo again in a 
 describe('_fileOpInFlight — one file action at a time (G1)', () => {
     const moveCurrentFile = extractAsyncMethod('moveCurrentFile');
     const moveToSpecialFolder = extractAsyncMethod('moveToSpecialFolder');
-    const handleCancel = extractAsyncMethod('handleCancel');
+    const handleCancel = withUndoHelpers(extractAsyncMethod('handleCancel'));
     const nextMedia = extractMethod('nextMedia');
     const previousMedia = extractMethod('previousMedia');
 
@@ -9023,7 +9039,7 @@ describe('grant refresh is single-flight (deep review #3)', () => {
 // source folder after a move, undo restores to "name (n).ext". The restore legs rebuilt the list
 // entry (and the feature caches) from the OLD name, pointing at the other file.
 describe('undo follows where a file was actually put back (PR #78 review #2)', () => {
-    const handleCancel = extractAsyncMethod('handleCancel');
+    const handleCancel = withUndoHelpers(extractAsyncMethod('handleCancel'));
     const _followRestoredFile = extractMethod('_followRestoredFile');
     let origWindow;
 

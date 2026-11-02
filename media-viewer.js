@@ -1579,6 +1579,20 @@ class MediaViewer {
         move.fileName = window.electronAPI.path.basename(restoredPath);
     }
 
+    // An undo puts a file back where it came from, whichever folder is open (G3 member 1). Throws when the move fails,
+    // leaving the entry as it was.
+    async _moveBackFromHistory(entry) {
+        const result = await window.electronAPI.moveFile({
+            sourcePath: entry.newPath,
+            targetFolder: window.electronAPI.path.dirname(entry.originalPath),
+            fileName: entry.fileName,
+        });
+        if (!result.success) {
+            throw new Error(result.error);
+        }
+        this._followRestoredFile(entry, result); // land where it was actually put back
+    }
+
     // What removeFileFromList is about to destroy for this file, for a history entry: every move site spreads this in
     // before the removal, and restoreFeatureCachesFromHistory gives it back. A field the file lacks is omitted.
     _captureUndoFields(file) {
@@ -1652,7 +1666,7 @@ class MediaViewer {
     // the failing file by path now, and do nothing if it is no longer listed. Refused while a file action
     // is in flight — the removal is a list change plus a render.
     _removeFailedFileByPath(filePath, side = null) {
-        if (this._refuseIfFileOpInFlight()) {
+        if (this._refuseIfFileOpInFlight() || this._refuseIfFolderLoadInFlight()) {
             return;
         }
         const index = this.mediaFiles.findIndex((f) => f.path === filePath);
@@ -1797,6 +1811,9 @@ class MediaViewer {
     }
 
     nextMedia() {
+        // First thing: a render racing the load's own render leaves the screen and the cursor on different files, and
+        // the list may simply not be in place yet (G3 member 1).
+        if (this._folderLoadInFlight) return;
         if (this.mediaFiles.length === 0) {
             this.showDropZone();
             return;
@@ -1834,7 +1851,13 @@ class MediaViewer {
     }
 
     previousMedia() {
-        if (this.mediaFiles.length === 0 || this.isLoading || this.mediaNavigationInProgress || this._fileOpInFlight) {
+        if (
+            this._folderLoadInFlight ||
+            this.mediaFiles.length === 0 ||
+            this.isLoading ||
+            this.mediaNavigationInProgress ||
+            this._fileOpInFlight
+        ) {
             return;
         }
 
@@ -1874,8 +1897,9 @@ class MediaViewer {
         // One file action at a time (G1). A second Like arriving during this method's awaits read
         // the same currentFile and failed at fs.rename with ENOENT — and, with a video on screen,
         // raced forceVideoCleanup against the next render. Refused rather than queued: the press
-        // targets a file the user has not seen yet.
-        if (this._fileOpInFlight) return;
+        // targets a file the user has not seen yet. So does a press while a folder opens (G3 member 1): the new list is
+        // in place before its first file is on screen.
+        if (this._fileOpInFlight || this._folderLoadInFlight) return;
         if (this.mediaFiles.length === 0 || this.isLoading) return;
         if (!this.areFoldersConfigured()) {
             this.showNotification('Configure like/dislike folders in Settings (F1)', 'error');
@@ -2003,7 +2027,7 @@ class MediaViewer {
         }
 
         // Shared by all three modes; see moveCurrentFile for why a second file action is refused.
-        if (this.isLoading || this._fileOpInFlight) return;
+        if (this.isLoading || this._fileOpInFlight || this._folderLoadInFlight) return;
         // Before the pane/video cleanup below (G1 re-pick, review C1).
         if (this._refuseIfNeedsRegrant(['special'], 'move')) return;
         this.signalUserActivity();
@@ -4965,7 +4989,7 @@ class MediaViewer {
     // Holds _fileOpInFlight across the dialog and every rename, and never calls moveCurrentFile — a
     // guarded method calling another is silently refused. One history entry; one Ctrl+A undoes it.
     async dislikeSkippedFiles() {
-        if (this._fileOpInFlight || this.isLoading) {
+        if (this._fileOpInFlight || this._folderLoadInFlight || this.isLoading) {
             return;
         }
         if (this.isCompareMode || this.isTournamentMode || !this.likeOrSkip.active) {
@@ -5144,16 +5168,8 @@ class MediaViewer {
         let firstError = null;
         for (const sub of entry.files) {
             try {
-                const result = await window.electronAPI.moveFile({
-                    sourcePath: sub.newPath,
-                    targetFolder: this.baseFolderPath,
-                    fileName: sub.fileName,
-                });
-                if (!result.success) {
-                    throw new Error(result.error);
-                }
                 const wasOnScreen = sub.originalPath === targetPath;
-                this._followRestoredFile(sub, result); // lands at "name (n).ext" if the name was taken
+                await this._moveBackFromHistory(sub); // lands at "name (n).ext" if the name was taken
                 if (wasOnScreen) {
                     targetPath = sub.originalPath;
                 }
@@ -5224,6 +5240,9 @@ class MediaViewer {
             this.showNotification('A move is still in progress — press Undo again in a moment', 'info');
             return;
         }
+        if (this._refuseIfFolderLoadInFlight()) {
+            return;
+        }
 
         if (this.moveHistory.length === 0) {
             this.showNotification('No moves to undo', 'error');
@@ -5285,16 +5304,7 @@ class MediaViewer {
 
                 try {
                     // Restore the moved file from special folder
-                    const moveResult = await window.electronAPI.moveFile({
-                        sourcePath: lastMove.newPath,
-                        targetFolder: this.baseFolderPath,
-                        fileName: lastMove.fileName,
-                    });
-
-                    if (!moveResult.success) {
-                        throw new Error(moveResult.error);
-                    }
-                    this._followRestoredFile(lastMove, moveResult); // land where it was actually put back
+                    await this._moveBackFromHistory(lastMove);
 
                     // Find the remaining file (should be at the end of the list)
                     const remainingFileIndex = this.mediaFiles.findIndex((f) => f.path === lastMove.remainingFile.path);
@@ -5356,28 +5366,10 @@ class MediaViewer {
 
                 try {
                     // Restore first file
-                    const firstMoveResult = await window.electronAPI.moveFile({
-                        sourcePath: firstMove.newPath,
-                        targetFolder: this.baseFolderPath,
-                        fileName: firstMove.fileName,
-                    });
-
-                    if (!firstMoveResult.success) {
-                        throw new Error(firstMoveResult.error);
-                    }
-                    this._followRestoredFile(firstMove, firstMoveResult); // land where it was actually put back
+                    await this._moveBackFromHistory(firstMove);
 
                     // Restore second file
-                    const secondMoveResult = await window.electronAPI.moveFile({
-                        sourcePath: secondMove.newPath,
-                        targetFolder: this.baseFolderPath,
-                        fileName: secondMove.fileName,
-                    });
-
-                    if (!secondMoveResult.success) {
-                        throw new Error(secondMoveResult.error);
-                    }
-                    this._followRestoredFile(secondMove, secondMoveResult); // land where it was actually put back
+                    await this._moveBackFromHistory(secondMove);
 
                     // Add both files back to mediaFiles
                     this.mediaFiles.push({
@@ -5432,25 +5424,9 @@ class MediaViewer {
                 const firstMove = this.moveHistory.pop();
 
                 try {
-                    const firstMoveResult = await window.electronAPI.moveFile({
-                        sourcePath: firstMove.newPath,
-                        targetFolder: this.baseFolderPath,
-                        fileName: firstMove.fileName,
-                    });
-                    if (!firstMoveResult.success) {
-                        throw new Error(firstMoveResult.error);
-                    }
-                    this._followRestoredFile(firstMove, firstMoveResult); // land where it was actually put back
+                    await this._moveBackFromHistory(firstMove);
 
-                    const secondMoveResult = await window.electronAPI.moveFile({
-                        sourcePath: secondMove.newPath,
-                        targetFolder: this.baseFolderPath,
-                        fileName: secondMove.fileName,
-                    });
-                    if (!secondMoveResult.success) {
-                        throw new Error(secondMoveResult.error);
-                    }
-                    this._followRestoredFile(secondMove, secondMoveResult); // land where it was actually put back
+                    await this._moveBackFromHistory(secondMove);
 
                     this.mediaFiles.push({
                         name: firstMove.fileName,
@@ -5486,16 +5462,7 @@ class MediaViewer {
                 const undoMove = this.moveHistory.pop();
 
                 try {
-                    const moveResult = await window.electronAPI.moveFile({
-                        sourcePath: undoMove.newPath,
-                        targetFolder: this.baseFolderPath,
-                        fileName: undoMove.fileName,
-                    });
-
-                    if (!moveResult.success) {
-                        throw new Error(moveResult.error);
-                    }
-                    this._followRestoredFile(undoMove, moveResult); // land where it was actually put back
+                    await this._moveBackFromHistory(undoMove);
 
                     // Insert file back at current position to maintain order
                     this.mediaFiles.splice(this.currentIndex, 0, {
@@ -5567,8 +5534,8 @@ class MediaViewer {
     // ---------- Tournament Mode ----------
     async switchMode(mode) {
         // A file action (G1 guard) is moving files: a mode switch now would leave the screen and the cursor
-        // on different files when it finishes (G2 review).
-        if (this._refuseIfFileOpInFlight()) {
+        // on different files when it finishes (G2 review). A folder load's render would do the same (G3 member 1).
+        if (this._refuseIfFileOpInFlight() || this._refuseIfFolderLoadInFlight()) {
             return;
         }
         // A sort still running would apply its order inside Tournament mode: the AI pair drawn on screen
@@ -6483,6 +6450,7 @@ class MediaViewer {
 
     async handleTournamentUndo() {
         if (!this.isTournamentMode || this.isLoading || !this.tournament.engine) return;
+        if (this._refuseIfFolderLoadInFlight()) return;
         // engine.history is the single chronological undo stack: picks and tournament-mode
         // special-folder moves interleave in it, and system `prune` entries (the -1 auto-prune in
         // _renderTournamentPairOnce, the load-failure skip in _skipFailedTournamentFile and the
@@ -6521,7 +6489,7 @@ class MediaViewer {
             try {
                 const moveResult = await window.electronAPI.moveFile({
                     sourcePath: move.newPath,
-                    targetFolder: this.baseFolderPath,
+                    targetFolder: window.electronAPI.path.dirname(move.originalPath),
                     fileName: move.fileName,
                 });
                 if (!moveResult.success) {
@@ -6867,7 +6835,7 @@ class MediaViewer {
         // files — both moved, then each call's secondary failed with ENOENT before
         // removeFileFromList, leaving both as phantoms in mediaFiles with orphan history entries.
         // Checked here rather than in the handlers, whose tournament branch must stay unguarded.
-        if (this.isLoading || this._fileOpInFlight) return;
+        if (this.isLoading || this._fileOpInFlight || this._folderLoadInFlight) return;
         if (!this.areFoldersConfigured()) {
             this.showNotification('Configure like/dislike folders in Settings (F1)', 'error');
             return;
@@ -9965,7 +9933,8 @@ class MediaViewer {
             !this.isSortedByPrediction ||
             !this.isCompareMode ||
             this.mediaNavigationInProgress ||
-            this._fileOpInFlight
+            this._fileOpInFlight ||
+            this._folderLoadInFlight
         ) {
             return;
         }
