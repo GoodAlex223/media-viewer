@@ -211,6 +211,9 @@ Plan: spec § 5. Results: to fill during Phases 1–5.
 | Review round 1: full E2E | 251 passed, 7 skipped | Pre-push at `7e452f1` |
 | Review round 1: mutants, in a throwaway copy | 10 of 10 fail | The review's 6 survivors plus 4 for this round's fixes; baseline 664 passed |
 | Review round 1: E2Es with the fix reverted | 4 of 4 fail | Prompt gate, prompt closing, `dirname` rule, second file's capture |
+| Review round 2: unit suite | 2632 passed, 1 skipped | At `f108a64` |
+| Review round 2: mutants, in a throwaway copy | 14 of 14 fail | Baseline 765 passed, before and after |
+| Review round 2: E2E with the button guard removed | Fails | `a rating button reached by focus behind a prompt` |
 | Manual smoke | Not run | `docs/MANUAL_TESTING.md` § Rating Data Safety. The user approved the push without it on 2026-11-02; owed during review |
 
 ---
