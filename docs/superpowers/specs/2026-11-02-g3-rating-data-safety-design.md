@@ -90,7 +90,7 @@ A new pure module, `coalescing-saver.js`, follows the extraction pattern of `lik
 ```js
 export class CoalescingSaver {
     constructor(write) {}            // write(folder, payload) → Promise
-    request(folder, payload) {}      // → settles once this payload, or a newer one for that folder, is written
+    request(folder, payload) {}      // → settles once this payload, or a newer one for that folder, has been attempted
     whenIdle(folder = null) {}       // → settles once nothing is queued or running (for one folder, or at all)
 }
 ```
@@ -100,7 +100,7 @@ export class CoalescingSaver {
 - Everything is frozen at the request: folder, data, warning object and folder name. The freeze is what prevents a cross-folder ratings write, the class PR #81 found.
 - A write that throws cannot wedge the queue, and no promise rejects, so the existing un-awaited call in `removeFileFromList` stays safe.
 
-`saveBulkRatedFile` keeps its name and its "resolved means written" meaning for its five awaiting callers. `loadBulkRatedFile` awaits `whenIdle(folder)` before it reads, so reopening a folder cannot read a copy older than its own last save. Waiting on that folder only means an offline folder's write cannot block a load of a different one.
+`saveBulkRatedFile` keeps its name and its "resolved means attempted" meaning for its five awaiting callers; a failed write warns and logs. `loadBulkRatedFile` awaits `whenIdle(folder)` before it reads, so reopening a folder cannot read a copy older than its own last save. Waiting on that folder only means an offline folder's write cannot block a load of a different one.
 
 ### 3.3 Member 3: one capture, one restore
 
@@ -130,7 +130,7 @@ The window-close handshake already exists, and `handleAppCloseRequest` is its on
 
 - **Member 2 makes this required, not optional.** A coalesced save waits in the renderer, where a quit would lose it. Before, each save had already gone to main.
 - **The cap.** Training-folder saves in the local perf log ran ~0.3 ms an entry (4,456 ms at 15,864 entries; 3,191 ms at 13,207), so 24k is ~7 s, and a save already streaming plus the queued one is ~14 s. Past the cap the temp file is abandoned and the cache on disk is untouched, which is the loss the app has today.
-- **No trap.** After 300 ms a sticky note says "Saving before closing — close again to quit now", and a close request after that allows the close at once; before the note it is ignored, as a double click that would drop a queued save (PR #95 review 10). The leave prompt's write runs before this wait and outside the cap, so a close request after a choice there is let through too (review 9). A normal quit owes nothing, settles in microtasks and shows no note.
+- **No trap.** After 300 ms a sticky note says "Saving before closing — close again to quit now", and a close request after that allows the close at once; before the note it is ignored, as a double click that would drop a queued save (PR #95 review 10). The leave prompt's write runs before this wait, so a close request after a choice there starts it, and the cap then bounds that write too (review 9, round 2). A normal quit owes nothing, settles in microtasks and shows no note.
 - `main.js` does not change. One perf-log line records the wait and whether it hit the cap, so the cap can be re-judged on real numbers.
 
 ### 3.7 Member 7: log a throw, keep the box
@@ -152,7 +152,7 @@ No file-move handler changes, so PROJECT.md's Tier 1 approval does not apply.
 
 ### 3.8 The renderer ceiling
 
-**Result**: 11,527 lines after the build, with `_fileFromHistory` applied at seven sites; then 11,572 after PR #95's review round 1, an explicit raise of 43 over the start for its data-safety fixes, stated in the PR. The renderer sat exactly at its 11,529-line ceiling. The helpers in §§ 3.1 and 3.3 remove about 65 repeated lines and the rest add about 85, so the estimate was about +20. If it lands over, a small `_fileFromHistory(entry)` for the six repeated list-entry literals in the undo branches saves about 36 more. That is the same code being touched, and it is the plan's first resort before a raise. WEEKLY allows G3 an explicit raise (v2's net ≤ 0 binds v2 phases), so a raise stays legal, and the PR must then state it.
+**Result**: 11,527 lines after the build, with `_fileFromHistory` applied at seven sites; then 11,597 after PR #95's review rounds, an explicit raise of 68 over the start for their data-safety fixes, stated in the PR. The renderer sat exactly at its 11,529-line ceiling. The helpers in §§ 3.1 and 3.3 remove about 65 repeated lines and the rest add about 85, so the estimate was about +20. If it lands over, a small `_fileFromHistory(entry)` for the six repeated list-entry literals in the undo branches saves about 36 more. That is the same code being touched, and it is the plan's first resort before a raise. WEEKLY allows G3 an explicit raise (v2's net ≤ 0 binds v2 phases), so a raise stays legal, and the PR must then state it.
 
 The ceiling must **equal** the count when this merges, whichever way it moved, because the ratchet refuses the closeout's push to `main` if the count is under the ceiling too.
 
@@ -165,7 +165,7 @@ The ceiling must **equal** the count when this merges, whichever way it moved, b
 3. **Keep the `dirname` rule even though the guard makes it redundant**, because it removes the dependency on the open folder and it shrinks the code.
 4. **A new top-level module for the saver**, not more renderer code, in line with v2's direction.
 5. **Fix the compare-pair site in member 3**, which the entry did not name: same defect, same field, and it is where bulk ratings are made.
-6. **15 s cap; 300 ms before the note; a second close quits at once.**
+6. **15 s cap; 300 ms before the note; a second close quits at once.** As built, only once the note has shown (§ 3.6).
 7. **Flush the tournament's debounced write at quit too.** One line, and a save-at-quit that knowingly leaves a pick unsaved would be odd.
 8. **Close the tenth entry here.** Its `[possible-dup-of]` tag points at member 3, and with `bulkBucket` on the entry the fix is one line.
 9. **Log only for a throw**: no restart and no quit. Electron keeps the app running after its box today, and this does not change that.
@@ -205,7 +205,10 @@ The saver is a mutation target: key every folder to one queue and the other-fold
 
 - A render already in flight when a direct `loadFolder` swaps the list can paint a stale file, because `showMedia()` returns early on `isLoading`. The Apply reload reaches it, and so does a JXL decode still running at a folder switch, which then paints over the new folder's image, so a rating moves a file no longer shown (PR #95 review 8). BACKLOG says the user's folders hold no JXL today.
 - A pair undo whose second restore fails pushes both entries back, and the first can then never move again (its `newPath` is gone).
-- The tournament prompts still do not own focus: Tab and Enter reach the header behind them. Keys no longer dispatch and a load closes them (PR #95 review 3, 7), so the two known results are closed, not the cause.
+- The tournament prompts still do not own focus: Tab and Enter reach the buttons behind them, the rating buttons included. Keys no longer dispatch, every file action refuses while a prompt is open, and a load closes them (PR #95 review 3, 7, round 2), so the known results are closed, not the cause.
+- Escape on the tournament summary leaves it open with the mode already single, and its Undo then closes it without undoing (PR #95 round 2, measured by the reviewer; no data effect).
+- Ctrl+A behind a prompt selects page text, since the key gate returns before `preventDefault` (PR #95 round 2; cosmetic).
+- A `.bulk_rated.json` with a UTF-8 BOM fails on every open, so its ratings stay refused until someone edits the file. It warns and does not wipe (PR #95 round 2).
 - A hung renderer can still make the window unclosable, because main has no bound on the handshake. It cannot have a blind one while the leave prompt waits on the user.
 - Hash and sort caches are not flushed at quit: they are recomputable, and each has its own periodic save.
 - An OS shutdown (`session-end`) was not checked.

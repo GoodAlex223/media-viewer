@@ -60,6 +60,7 @@ describe('member 1: nothing acts on files while a folder opens', () => {
             _refuseIfNeedsRegrant: vi.fn(() => true),
             _refuseIfFileOpInFlight: () => false,
             _refuseIfFolderLoadInFlight: extract('_refuseIfFolderLoadInFlight'),
+            _tournamentPromptOpen: () => false,
             removeFailedFile: vi.fn(),
             likeOrSkip: { active: true, skippedIn: vi.fn(() => []) },
             get compareLeftFile() {
@@ -100,6 +101,17 @@ describe('member 1: nothing acts on files while a folder opens', () => {
         const control = makeCtx({ ...over, _folderLoadInFlight: false });
         await method.apply(control, args);
         expect(reached(control)).toBe(true);
+    });
+
+    // PR #95 round 2, issue 1: the key gate does not cover focus reaching a rating button behind a prompt, and entry
+    // has reset the cursor with no render. Refused at the action, like a press during a load.
+    it.each(QUIET)('%s also refuses behind a tournament prompt', async (name, args, reached, over = {}) => {
+        const method = extract(name);
+        const ctx = makeCtx({ ...over, _folderLoadInFlight: false, _tournamentPromptOpen: () => true });
+        await method.apply(ctx, args);
+        expect(reached(ctx)).toBe(false);
+        expect(ctx._fileOpInFlight).toBe(false);
+        expect(ctx.showNotification).not.toHaveBeenCalled();
     });
 
     it('nextMedia returns first thing: not even the empty-list branch runs', () => {
@@ -422,6 +434,34 @@ describe('the tournament prompts (PR #95 review 3, 7)', () => {
         expect(closing).toBeLessThan(load.indexOf('await '));
     });
 
+    // Round 2, issue 5: from a mode or folder switch the app stays open, and the picks since the last write are gone.
+    it('Save & leave says so on screen when its write failed', async () => {
+        const accept = { style: {}, textContent: '' };
+        const el = () => ({ style: {}, textContent: '', append: vi.fn(), replaceChildren: vi.fn() });
+        els.tournamentResumeAccept = accept;
+        for (const id of ['tournamentResumeTitle', 'tournamentResumeBody', 'tournamentResumeDiscard']) els[id] = el();
+        globalThis.document.createElement = el;
+        const after = vi.fn();
+        for (const failed of [true, false]) {
+            const ctx = {
+                showNotification: vi.fn(),
+                tournament: {
+                    lastWriteFailed: failed,
+                    flush: vi.fn(async () => {}),
+                    engine: { getProgress: () => ({ gamesPlayed: 0, gamesTotal: 1 }) },
+                },
+            };
+            extract('showTournamentLeavePrompt').call(ctx, after);
+            await accept.onclick();
+            expect(ctx.showNotification.mock.calls.length, String(failed)).toBe(failed ? 1 : 0);
+            if (failed) {
+                expect(ctx.showNotification.mock.calls[0][1]).toBe('warning');
+                expect(ctx.showNotification.mock.calls[0][2]).toEqual({ sticky: true });
+            }
+        }
+        expect(after).toHaveBeenCalledTimes(2); // it still leaves
+    });
+
     it('the leave prompt marks a choice as soon as it is made, and clears it with the prompt', () => {
         const body = extract('showTournamentLeavePrompt').toString();
         expect(body.split('this._leaveChoiceMade = true;').length - 1).toBe(2); // Save & leave, Discard
@@ -496,6 +536,22 @@ describe('member 6: _saveThenAllowClose', () => {
         expect(allowAppClose).not.toHaveBeenCalled();
         finishFeatures();
         await closing;
+        expect(allowAppClose).toHaveBeenCalledTimes(1);
+    });
+
+    // Round 2, issue 3: a close let through during the leave prompt's write, then that prompt's own continuation.
+    it('a second run while one is waiting does nothing: one wait, one close', async () => {
+        let finish;
+        const ctx = makeCtx({
+            featureCacheStore: { flush: vi.fn(() => new Promise((resolve) => (finish = resolve))) },
+        });
+        const first = saveThenAllowClose.call(ctx);
+        await vi.advanceTimersByTimeAsync(0);
+        await saveThenAllowClose.call(ctx);
+        expect(ctx.featureCacheStore.flush).toHaveBeenCalledTimes(1);
+        expect(allowAppClose).not.toHaveBeenCalled();
+        finish();
+        await first;
         expect(allowAppClose).toHaveBeenCalledTimes(1);
     });
 

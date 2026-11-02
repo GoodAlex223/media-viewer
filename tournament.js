@@ -25,6 +25,7 @@ export class TournamentManager {
         this._persistTimer = null;
         this._persistPending = false;
         this._persistFolder = null;
+        this.lastWriteFailed = false;
         this._writeInFlight = null;
     }
 
@@ -80,12 +81,13 @@ export class TournamentManager {
     async handleDiscard() {
         this.cancelPending(); // don't let a queued write recreate the file after delete
         this.engine = null;
+        const folder = this.host.baseFolderPath; // before the wait: a folder can open during it
         if (this._writeInFlight) await this._writeInFlight; // nor a running one, whose rename would land after it
-        const res = await window.electronAPI.deleteTournamentState(this.host.baseFolderPath);
+        const res = await window.electronAPI.deleteTournamentState(folder);
         if (res && res.success === false) {
             // Retry once — a transient IO/lock failure shouldn't orphan .tournament_state.json
             // and re-prompt resume next time. If it still fails, log (best-effort) and move on.
-            const retry = await window.electronAPI.deleteTournamentState(this.host.baseFolderPath);
+            const retry = await window.electronAPI.deleteTournamentState(folder);
             if (retry && retry.success === false) {
                 window.electronAPI?.logError?.(
                     'Tournament discard: state delete failed twice: ' + (retry.error ?? 'unknown')
@@ -119,14 +121,6 @@ export class TournamentManager {
             removed,
             added,
         };
-    }
-
-    async handleResume(state, currentFiles) {
-        const v = this.validateStateFile(state, currentFiles);
-        if (!v.valid) return false;
-        this.engine = TournamentEngine.deserialize(state, currentFiles);
-        this._persistFolder = this.host.baseFolderPath;
-        return true;
     }
 
     // Prune the live engine's file-set to only files still present in `currentFiles` (paths).
@@ -217,7 +211,9 @@ export class TournamentManager {
         this._writeInFlight = (async () => {
             try {
                 await this._persistState(folder);
+                this.lastWriteFailed = false;
             } catch (err) {
+                this.lastWriteFailed = true;
                 window.electronAPI?.logError?.(
                     'Tournament persist failed: ' + (err && err.message ? err.message : err)
                 );
@@ -232,7 +228,8 @@ export class TournamentManager {
     // Force the current engine state to disk now and await it. Used on must-be-durable
     // paths (start, Save & leave). Loops until fully quiescent — no write in flight and
     // nothing pending — so a pick that interleaved an in-flight write (which triggers a
-    // re-drain) is also awaited, guaranteeing the latest state is durable on return.
+    // re-drain) is also awaited: on return the latest state has been attempted. A failed write is
+    // logged and sets lastWriteFailed, for a caller that can tell the user.
     async flush() {
         if (this._persistTimer) {
             clearTimeout(this._persistTimer);

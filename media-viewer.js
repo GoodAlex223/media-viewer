@@ -1906,8 +1906,9 @@ class MediaViewer {
         // the same currentFile and failed at fs.rename with ENOENT — and, with a video on screen,
         // raced forceVideoCleanup against the next render. Refused rather than queued: the press
         // targets a file the user has not seen yet. So does a press while a folder opens (G3 member 1): the new list is
-        // in place before its first file is on screen.
-        if (this._fileOpInFlight || this._folderLoadInFlight) return;
+        // in place before its first file is on screen. And one behind a tournament prompt: entry has reset the cursor
+        // with no render, and focus can reach the rating buttons (PR #95 round 2).
+        if (this._fileOpInFlight || this._folderLoadInFlight || this._tournamentPromptOpen()) return;
         if (this.mediaFiles.length === 0 || this.isLoading) return;
         if (!this.areFoldersConfigured()) {
             this.showNotification('Configure like/dislike folders in Settings (F1)', 'error');
@@ -2035,7 +2036,7 @@ class MediaViewer {
         }
 
         // Shared by all three modes; see moveCurrentFile for why a second file action is refused.
-        if (this.isLoading || this._fileOpInFlight || this._folderLoadInFlight) return;
+        if (this.isLoading || this._fileOpInFlight || this._folderLoadInFlight || this._tournamentPromptOpen()) return;
         // Before the pane/video cleanup below (G1 re-pick, review C1).
         if (this._refuseIfNeedsRegrant(['special'], 'move')) return;
         this.signalUserActivity();
@@ -2694,7 +2695,7 @@ class MediaViewer {
 
         document.addEventListener('keydown', (e) => {
             // Behind a tournament prompt the cursor has been reset with no render: a rating key moved a file that is
-            // not on screen (PR #95 review 3).
+            // not on screen (PR #95 review 3). Focus can still reach a button, so the file actions refuse too.
             if (this._tournamentPromptOpen() && e.key !== 'Escape' && e.key !== 'F1') return;
             if (this.mediaFiles.length === 0) {
                 // Allow undo shortcut even when no media remains
@@ -3537,7 +3538,7 @@ class MediaViewer {
     }
 
     // The switch itself: change-folder's reset, then the load. Also the leave prompt's continuation, which runs
-    // after the user chose — the prompt blocks clicks but not keys, so a special move can have started behind it.
+    // after the user chose — a file action can have been running since before the prompt.
     // A load that then fails leaves tournament mode (loadFolder exits it on every branch, PR #81 review #2).
     // A refusal there leaves isTournamentMode true with tournament.engine null, so the tournament UI is inert: picks,
     // draws and undo no-op until Escape, a mode button, or a re-pick of that folder, which then switches with no
@@ -5014,7 +5015,7 @@ class MediaViewer {
     // Holds _fileOpInFlight across the dialog and every rename, and never calls moveCurrentFile — a
     // guarded method calling another is silently refused. One history entry; one Ctrl+A undoes it.
     async dislikeSkippedFiles() {
-        if (this._fileOpInFlight || this._folderLoadInFlight || this.isLoading) {
+        if (this._fileOpInFlight || this._folderLoadInFlight || this.isLoading || this._tournamentPromptOpen()) {
             return;
         }
         if (this.isCompareMode || this.isTournamentMode || !this.likeOrSkip.active) {
@@ -5756,6 +5757,15 @@ class MediaViewer {
             // State is persisted per-pick (debounced); flush any pending write so the latest
             // picks are durable, then drop the in-memory engine (disk is the single source of truth).
             await this.tournament.flush();
+            if (this.tournament.lastWriteFailed) {
+                this.showNotification(
+                    '⚠️ The tournament could not be saved: picks since its last save are lost',
+                    'warning',
+                    {
+                        sticky: true,
+                    }
+                );
+            }
             this.tournament.engine = null;
             cleanup();
             await onAfterLeave();
@@ -5799,7 +5809,8 @@ class MediaViewer {
             // isTournamentMode is still false, before entering) — clicking X during THAT must
             // fall through to the save-then-close below, not be swallowed here (else the window is
             // unclosable during the resume prompt). Once the user has chosen, the prompt's own write is
-            // running with no cap of its own, so a further close quits at once (PR #95 review 9).
+            // running with no cap of its own, so a further close starts the save-then-close, whose cap
+            // bounds it and which still saves the rest (PR #95 review 9, round 2).
             const leaveModal = document.getElementById('tournamentResumeModal');
             const leaveTitle = document.getElementById('tournamentResumeTitle');
             if (
@@ -5808,7 +5819,7 @@ class MediaViewer {
                 leaveTitle &&
                 leaveTitle.textContent === 'Leave tournament?'
             ) {
-                if (this._leaveChoiceMade) window.electronAPI.allowAppClose();
+                if (this._leaveChoiceMade) this._saveThenAllowClose();
                 return;
             }
             if (this.isTournamentMode && this.tournament.engine && !this.tournament.engine.isComplete()) {
@@ -5823,9 +5834,10 @@ class MediaViewer {
     }
 
     // A quit writes what the app still owes the disk (G3 member 6): a coalesced bulk-rated save waits in the renderer,
-    // where closing would lose it. It cannot trap the window: the cap, the second close above, and the finally.
-    // Past the cap a streaming save's temp file is abandoned and the file on disk stays as it was.
+    // where closing would lose it. This wait cannot trap the window: the cap, a close once the note has shown (above),
+    // and the finally. Past the cap a streaming save's temp file is abandoned and the file on disk stays as it was.
     async _saveThenAllowClose() {
+        if (this._closeSaveInFlight) return; // the leave prompt's continuation, after a close let this start early
         this._closeSaveInFlight = true;
         const start = Date.now();
         let outcome = 'settled'; // a failed write settles too, and logs itself
@@ -5934,7 +5946,7 @@ class MediaViewer {
                 this.showNotification('Wait for the sort to finish', 'info');
                 return;
             }
-            // Keys reach the app behind this prompt, so the list may have changed since it opened (G3 member 5).
+            // The list may have changed since this prompt opened: a button stays reachable behind it (G3 member 5).
             if (this._refuseIfFileOpInFlight() || this._refuseIfFolderLoadInFlight()) {
                 return;
             }
@@ -6834,7 +6846,7 @@ class MediaViewer {
         // files — both moved, then each call's secondary failed with ENOENT before
         // removeFileFromList, leaving both as phantoms in mediaFiles with orphan history entries.
         // Checked here rather than in the handlers, whose tournament branch must stay unguarded.
-        if (this.isLoading || this._fileOpInFlight || this._folderLoadInFlight) return;
+        if (this.isLoading || this._fileOpInFlight || this._folderLoadInFlight || this._tournamentPromptOpen()) return;
         if (!this.areFoldersConfigured()) {
             this.showNotification('Configure like/dislike folders in Settings (F1)', 'error');
             return;
@@ -9323,6 +9335,7 @@ class MediaViewer {
         this.bulkRated = new Map();
         this.bulkRatedPairs = new Set(); // session-only; starts empty on each folder load
         this._bulkRatedUnread = false;
+        this._bulkRatedUnreadNote?.remove();
         if (!this.baseFolderPath) return;
         try {
             // A save of this folder still on its way would make this read older than the folder's last rating. This
@@ -9349,9 +9362,10 @@ class MediaViewer {
             this._bulkRatedUnread = true;
             console.warn('Failed to load .bulk_rated.json:', err.message);
             window.electronAPI.logError?.(`Failed to read .bulk_rated.json of ${this.baseFolderPath}: ${err.message}`);
-            this.showNotification(
-                `⚠️ Could not read the bulk ratings for ${this.currentFolderPath}. New ones will not be saved; reopen the folder to retry`,
-                'warning'
+            this._bulkRatedUnreadNote = this.showNotification(
+                `⚠️ Could not read the bulk ratings for ${this.currentFolderPath}. New ones will not be saved. To retry, open another folder and come back`,
+                'warning',
+                { sticky: true }
             );
         }
     }
@@ -9359,7 +9373,17 @@ class MediaViewer {
     // Resolves once these ratings, or newer ones of this folder, have been attempted: a failed write warns and logs.
     // Never rejects.
     async saveBulkRatedFile() {
-        if (!this.baseFolderPath || this._bulkRatedUnread) return;
+        if (!this.baseFolderPath) return;
+        if (this._bulkRatedUnread) {
+            if (!this._bulkRatedSaveWarning.warned) {
+                this._bulkRatedSaveWarning.warned = true;
+                this.showNotification(
+                    `⚠️ This rating was not saved: ${this.currentFolderPath} could not be read`,
+                    'warning'
+                );
+            }
+            return;
+        }
         const data = { version: 1, good: [], bad: [] };
         for (const [name, bucket] of this.bulkRated) {
             if (bucket === 'good') data.good.push(name);
@@ -9946,7 +9970,8 @@ class MediaViewer {
             !this.isCompareMode ||
             this.mediaNavigationInProgress ||
             this._fileOpInFlight ||
-            this._folderLoadInFlight
+            this._folderLoadInFlight ||
+            this._tournamentPromptOpen()
         ) {
             return;
         }

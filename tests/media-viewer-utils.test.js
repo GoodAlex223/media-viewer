@@ -3041,6 +3041,7 @@ describe('handleCancel feature restore', () => {
         const showMedia = vi.fn();
         const nextMedia = vi.fn();
         const ctx = {
+            _tournamentPromptOpen: () => false,
             isSortedByPrediction: true,
             isCompareMode: true,
             compareLeftFile: { name: 'a.jpg', path: '/f/a.jpg' },
@@ -3071,6 +3072,7 @@ describe('handleCancel feature restore', () => {
         const bulkPairKey = extractMethod('bulkPairKey');
         const showMedia = vi.fn();
         const ctx = {
+            _tournamentPromptOpen: () => false,
             isSortedByPrediction: true,
             isCompareMode: true,
             compareLeftFile: { name: 'a.jpg', path: '/f/a.jpg' },
@@ -3118,6 +3120,7 @@ describe('handleCancel feature restore', () => {
         const saveBulkRatedFile = vi.fn(async () => {});
         const showMedia = vi.fn();
         const ctx = {
+            _tournamentPromptOpen: () => false,
             isSortedByPrediction: true,
             isCompareMode: true,
             mediaNavigationInProgress: true, // e.g. the previous rating's showMedia() render is still in flight
@@ -3457,9 +3460,15 @@ describe('bulk-rated persistence', () => {
             await saveBulkRatedFile.call(ctx);
             await saveBulkRatedFile.call(ctx);
             expect(write).not.toHaveBeenCalled();
-            expect(ctx.showNotification).toHaveBeenCalledTimes(1);
-            expect(ctx.showNotification.mock.calls[0][0]).toContain('folder');
-            expect(ctx.showNotification.mock.calls[0][1]).toBe('warning');
+            // Round 2, issue 4: these ratings vanish, so the read's warning stays up and says what actually retries...
+            expect(ctx.showNotification).toHaveBeenCalledTimes(2);
+            const [message, type, options] = ctx.showNotification.mock.calls[0];
+            expect(message).toContain('folder');
+            expect(message).toContain('open another folder and come back');
+            expect(type).toBe('warning');
+            expect(options).toEqual({ sticky: true });
+            // ...and the first refused save says so too, once.
+            expect(ctx.showNotification.mock.calls[1][0]).toContain('not saved');
             expect(logError).toHaveBeenCalledTimes(1);
             warn.mockRestore();
         });
@@ -3483,8 +3492,11 @@ describe('bulk-rated persistence', () => {
                 _bulkRatedSaveWarning: { warned: false },
                 showNotification: vi.fn(),
             });
+            const note = { remove: vi.fn() };
+            ctx.showNotification.mockReturnValueOnce(note);
             await loadBulkRatedFile.call(ctx);
             await loadBulkRatedFile.call(ctx);
+            expect(note.remove).toHaveBeenCalledOnce(); // its warning does not outlive the visit
             expect(ctx.bulkRated.get('x.png')).toBe('good');
             await saveBulkRatedFile.call(ctx);
             expect(write).toHaveBeenCalledTimes(1);
@@ -3551,6 +3563,7 @@ describe('applyBulkRating', () => {
 
     function makeCtx(overrides = {}) {
         return {
+            _tournamentPromptOpen: () => false,
             isSortedByPrediction: true,
             isCompareMode: true,
             compareLeftFile: { name: 'a.jpg', path: '/f/a.jpg' },
@@ -3872,6 +3885,7 @@ describe('bulkRatedPairs key capture + restore across undo (G1 T3)', () => {
             bulkPairKey,
             _bulkPairKeysReferencing: keysReferencing,
             _captureUndoFields: extractMethod('_captureUndoFields'),
+            _tournamentPromptOpen: () => false,
             saveBulkRatedFile: () => {},
             likeOrSkip: new LikeOrSkip.SkipTracker(),
         };
@@ -6262,7 +6276,9 @@ describe('handleAppCloseRequest', () => {
             showTournamentLeavePrompt: vi.fn(),
         });
         handleAppCloseRequest.call(ctx);
-        expect(allowAppClose).toHaveBeenCalledTimes(1);
+        // Round 2, issue 3: through the quit's saves, with their cap and note, not straight out.
+        expect(ctx._saveThenAllowClose).toHaveBeenCalledTimes(1);
+        expect(allowAppClose).not.toHaveBeenCalled();
         expect(ctx.showTournamentLeavePrompt).not.toHaveBeenCalled();
     });
 
@@ -8387,6 +8403,7 @@ describe('_fileOpInFlight — one file action at a time (G1)', () => {
             getCombinedFeatures: () => null,
             _bulkPairKeysReferencing: () => [],
             _captureUndoFields: extractMethod('_captureUndoFields'),
+            _tournamentPromptOpen: () => false,
             perceptualHashes: new Map(), // the move sites stash a hash from it (PR #85 review #4)
             predictionScores: new Map(), // and a score and a label (G3 member 3)
             bulkRated: new Map(),
@@ -8569,6 +8586,7 @@ describe('_fileOpInFlight — compare pair moves and bulk rating (G1)', () => {
             _refuseIfNeedsRegrant: () => false,
             _bulkPairKeysReferencing: () => [],
             _captureUndoFields: extractMethod('_captureUndoFields'),
+            _tournamentPromptOpen: () => false,
             perceptualHashes: new Map(), // the move sites stash a hash from it (PR #85 review #4)
             predictionScores: new Map(), // and a score and a label (G3 member 3)
             bulkRated: new Map(),
@@ -9050,6 +9068,7 @@ describe('a refused folder check is not "missing" (deep review #7)', () => {
             getCombinedFeatures: () => null,
             _bulkPairKeysReferencing: () => [],
             _captureUndoFields: extractMethod('_captureUndoFields'),
+            _tournamentPromptOpen: () => false,
             perceptualHashes: new Map(), // the move sites stash a hash from it (PR #85 review #4)
             predictionScores: new Map(), // and a score and a label (G3 member 3)
             bulkRated: new Map(),

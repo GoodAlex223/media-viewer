@@ -302,6 +302,16 @@ test.describe('G3 rating data safety', () => {
             expect(await mediaIn(source.dislikeDir)).toEqual([]);
         });
 
+        // Round 2, issue 1: focus reaches a rating button behind the prompt, and the cursor has been reset unseen.
+        test('a rating button reached by focus behind a prompt moves nothing', async () => {
+            await openConfigPrompt();
+            await page.evaluate(() => document.getElementById('likeBtn').focus());
+            await page.keyboard.press('Enter');
+            await page.waitForTimeout(300);
+            expect(await page.evaluate(() => document.activeElement.id)).toBe('likeBtn'); // the press had its target
+            expect(await mediaIn(source.likeDir)).toEqual([]);
+        });
+
         test('a folder change closes an open prompt', async () => {
             await openConfigPrompt();
             other = await createTempFixtureDir(['green-1x1.png']);

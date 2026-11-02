@@ -2,7 +2,7 @@
 
 **Task Reference**: [WEEKLY.md](../WEEKLY.md) G3 (Cleanup Week #5, 🏆)
 **Created**: 2026-11-02
-**Status**: Implementation: the user approved the spec and plan on 2026-11-02 ("Looks right, go"). PR #95 open; review round 1 answered. The manual smoke is owed during review, by the user's call on 2026-11-02
+**Status**: Implementation: the user approved the spec and plan on 2026-11-02 ("Looks right, go"). PR #95 open; review round 2 answered. The manual smoke is owed during review, by the user's call on 2026-11-02
 **Last Updated**: 2026-11-02
 **Design**: [spec](../../superpowers/specs/2026-11-02-g3-rating-data-safety-design.md), which holds the analysis, the Phase 0 table and my ten calls. This plan does not restate them.
 
@@ -152,10 +152,16 @@ Commit together: spec § 6.
 
 ### 2026-11-02 — Review round 1 (PR #95)
 
-- 21 entries and 30 held-back candidates, checked first-hand. Fixed: 1–7, 9–11, 16–21, each test first where a test can show it. Recorded in spec § 7: 8, 12, 13, 15, and 14's pairing effect.
+- 21 entries and 29 held-back candidates, checked first-hand. Fixed: 1–7, 9–11, 16–21, each test first where a test can show it. Recorded in spec § 7: 8, 12, 13, 15, and 14's pairing effect.
 - `_bulkRatedUnread` follows the feature cache's rule: "never read" is not "no ratings".
 - **Renderer ceiling raised**: 11,527 → 11,572 (+43 net over the 11,529 G3 started at), for the review's data-safety fixes. WEEKLY allows G3 an explicit raise; the PR body states it.
 - `CLAUDE.md` crossed its byte trigger (70,918 against 69,000). Recorded, not trimmed here: WEEKLY's "Measure `CLAUDE.md`'s growth under the authoring rule" re-sets it.
+
+### 2026-11-02 — Review round 2 (PR #95)
+
+- 7 issues and 8 held-back candidates, checked first-hand. All 7 fixed, test first. Three were side effects of round 1's own fixes: the `handleDiscard` wait redirected its delete, the leave prompt's let-through skipped the quit's saves, and the failed-read warning was a 5 s toast with advice that did not work.
+- **Renderer ceiling**: 11,572 → 11,597, +68 net over the 11,529 G3 started at.
+- `handleResume` is deleted with its test: it had no production caller, so round 1's line in it covered dead code.
 
 ---
 
@@ -167,7 +173,7 @@ To fill at completion.
 
 ## 6. Future Improvements
 
-Spec § 7 lists what I noticed and did not act on. Those fifteen items are this section until completion, and each goes to BACKLOG 🟤 at close-out unless the work closes it.
+Spec § 7 lists what I noticed and did not act on. Those eighteen items are this section until completion, and each goes to BACKLOG 🟤 at close-out unless the work closes it.
 
 ---
 
