@@ -240,6 +240,17 @@ export class TournamentManager {
         }
     }
 
+    // What a quit owes: a queued or running write, and nothing else. flush() forces a write of the engine as it stands,
+    // to _persistFolder, which a resumed tournament has not set until its first pick.
+    async flushPending() {
+        while (this._writeInFlight && !this._persistPending) {
+            await this._writeInFlight;
+        }
+        if (this._persistPending) {
+            await this.flush();
+        }
+    }
+
     // Drop a pending write without writing (used before delete/apply).
     cancelPending() {
         if (this._persistTimer) {

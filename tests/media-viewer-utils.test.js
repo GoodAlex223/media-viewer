@@ -5,6 +5,7 @@ import { MlTrainingManager } from '../ml-training.js';
 import * as LikeOrSkip from '../like-or-skip.js';
 import * as SimilaritySort from '../similarity-sort.js';
 import * as HashPool from '../hash-pool.js';
+import { CoalescingSaver } from '../coalescing-saver.js';
 import { stubFeatureCacheStore } from './feature-cache-harness.js';
 import { fakeHashPool } from './hash-pool-harness.js';
 // Extracted methods resolve media-viewer.js's namespace import through the global object (G2).
@@ -3167,8 +3168,15 @@ describe('handleCancel feature restore', () => {
 describe('bulk-rated persistence', () => {
     const loadBulkRatedFile = extractAsyncMethod('loadBulkRatedFile');
     const saveBulkRatedFile = extractAsyncMethod('saveBulkRatedFile');
+    const writeBulkRated = extractAsyncMethod('_writeBulkRated');
     let origWindow;
     let written;
+
+    /** The context's saver, as the constructor wires it. */
+    function withSaver(ctx) {
+        ctx._bulkRatedSaver = new CoalescingSaver((folder, payload) => writeBulkRated.call(ctx, folder, payload));
+        return ctx;
+    }
 
     beforeEach(() => {
         origWindow = globalThis.window;
@@ -3191,14 +3199,14 @@ describe('bulk-rated persistence', () => {
     });
 
     it('hydrates the bulkRated map and prunes filenames absent from mediaFiles', async () => {
-        const ctx = {
+        const ctx = withSaver({
             baseFolderPath: '/folder',
             mediaFiles: [
                 { name: 'a.jpg', path: '/folder/a.jpg' },
                 { name: 'b.jpg', path: '/folder/b.jpg' },
             ],
             bulkRated: new Map(),
-        };
+        });
         ctx.saveBulkRatedFile = saveBulkRatedFile.bind(ctx);
         await loadBulkRatedFile.call(ctx);
         expect(ctx.bulkRated.get('a.jpg')).toBe('good');
@@ -3209,13 +3217,13 @@ describe('bulk-rated persistence', () => {
     });
 
     it('serializes the bulkRated map back to {version, good, bad}', async () => {
-        const ctx = {
+        const ctx = withSaver({
             baseFolderPath: '/folder',
             bulkRated: new Map([
                 ['x.png', 'good'],
                 ['y.png', 'bad'],
             ]),
-        };
+        });
         await saveBulkRatedFile.call(ctx);
         expect(written).toEqual({ version: 1, good: ['x.png'], bad: ['y.png'] });
     });
@@ -3228,13 +3236,13 @@ describe('bulk-rated persistence', () => {
             .mockResolvedValueOnce({ success: false, error: 'EPERM' })
             .mockRejectedValueOnce(new Error('IPC gone'))
             .mockResolvedValueOnce({ success: false, error: 'EBUSY' });
-        const ctx = {
+        const ctx = withSaver({
             baseFolderPath: '/folder',
             currentFolderPath: 'folder',
             bulkRated: new Map([['x.png', 'good']]),
             _bulkRatedSaveWarning: { warned: false },
             showNotification: vi.fn(),
-        };
+        });
         await saveBulkRatedFile.call(ctx);
         await saveBulkRatedFile.call(ctx);
         expect(ctx.showNotification.mock.calls).toEqual([['⚠️ Failed to save the bulk ratings for folder', 'warning']]);
@@ -3255,13 +3263,13 @@ describe('bulk-rated persistence', () => {
             .fn()
             .mockImplementationOnce(() => new Promise((resolve) => (failA = resolve)))
             .mockResolvedValueOnce({ success: false, error: 'EPERM' });
-        const ctx = {
+        const ctx = withSaver({
             baseFolderPath: '/A',
             currentFolderPath: 'A',
             bulkRated: new Map([['x.png', 'good']]),
             _bulkRatedSaveWarning: { warned: false },
             showNotification: vi.fn(),
-        };
+        });
         const saveA = saveBulkRatedFile.call(ctx);
         // The switch to B (loadFolder's part of it), while A's write is still in flight.
         Object.assign(ctx, { baseFolderPath: '/B', currentFolderPath: 'B', _bulkRatedSaveWarning: { warned: false } });
@@ -3274,14 +3282,109 @@ describe('bulk-rated persistence', () => {
         warn.mockRestore();
     });
 
+    // G3 member 2: 29 of 300 overlapping pairs left the older data on disk, on the real main.
+    it('a save made while another writes reaches main after it, with the newest data', async () => {
+        const finish = [];
+        const calls = [];
+        globalThis.window.electronAPI.writeBulkRatedFile = vi.fn((_folder, data) => {
+            calls.push(data);
+            return new Promise((resolve) => finish.push(() => resolve({ success: true })));
+        });
+        const ctx = withSaver({
+            baseFolderPath: '/folder',
+            currentFolderPath: 'folder',
+            bulkRated: new Map([['one.png', 'good']]),
+            _bulkRatedSaveWarning: { warned: false },
+            showNotification: vi.fn(),
+        });
+        const first = saveBulkRatedFile.call(ctx);
+        ctx.bulkRated.set('two.png', 'bad');
+        const second = saveBulkRatedFile.call(ctx);
+        ctx.bulkRated.set('three.png', 'good');
+        const third = saveBulkRatedFile.call(ctx);
+        expect(calls).toHaveLength(1);
+        finish[0]();
+        await first;
+        await vi.waitFor(() => expect(calls).toHaveLength(2));
+        finish[1]();
+        await Promise.all([second, third]); // the promise still means "written"
+        expect(calls[1]).toEqual({ version: 1, good: ['one.png', 'three.png'], bad: ['two.png'] });
+        expect(calls).toHaveLength(2);
+    });
+
+    it("a queued save keeps its own folder's ratings when the folder changes before it runs", async () => {
+        const finish = [];
+        const calls = [];
+        globalThis.window.electronAPI.writeBulkRatedFile = vi.fn((folder, data) => {
+            calls.push([folder, data.good]);
+            return new Promise((resolve) => finish.push(() => resolve({ success: true })));
+        });
+        const ctx = withSaver({
+            baseFolderPath: '/A',
+            currentFolderPath: 'A',
+            bulkRated: new Map([['a1.png', 'good']]),
+            _bulkRatedSaveWarning: { warned: false },
+            showNotification: vi.fn(),
+        });
+        const running = saveBulkRatedFile.call(ctx);
+        ctx.bulkRated.set('a2.png', 'good');
+        const queued = saveBulkRatedFile.call(ctx);
+        Object.assign(ctx, { baseFolderPath: '/B', currentFolderPath: 'B', bulkRated: new Map() });
+        finish[0]();
+        await running;
+        await vi.waitFor(() => expect(calls).toHaveLength(2));
+        finish[1]();
+        await queued;
+        expect(calls[1]).toEqual(['/A', ['a1.png', 'a2.png']]);
+    });
+
+    it('a load reads only after its own folder has no save left, and does not wait on another folder', async () => {
+        const order = [];
+        let finishWrite;
+        globalThis.window.electronAPI.writeBulkRatedFile = vi.fn(() => {
+            order.push('write');
+            return new Promise((resolve) => {
+                finishWrite = () => {
+                    order.push('written');
+                    resolve({ success: true });
+                };
+            });
+        });
+        globalThis.window.electronAPI.readBulkRatedFile = vi.fn(async (folder) => {
+            order.push(`read ${folder}`);
+            return { success: true, data: { version: 1, good: [], bad: [] } };
+        });
+        const ctx = withSaver({
+            baseFolderPath: '/A',
+            currentFolderPath: 'A',
+            mediaFiles: [],
+            bulkRated: new Map([['x.png', 'good']]),
+            _bulkRatedSaveWarning: { warned: false },
+            showNotification: vi.fn(),
+        });
+        const saving = saveBulkRatedFile.call(ctx);
+
+        ctx.baseFolderPath = '/B';
+        await loadBulkRatedFile.call(ctx); // the write on /A is still running
+        expect(order).toEqual(['write', 'read /B']);
+
+        ctx.baseFolderPath = '/A';
+        const loadingA = loadBulkRatedFile.call(ctx);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(order).toEqual(['write', 'read /B']);
+        finishWrite();
+        await Promise.all([saving, loadingA]);
+        expect(order).toEqual(['write', 'read /B', 'written', 'read /A']);
+    });
+
     it('a successful save posts nothing', async () => {
-        const ctx = {
+        const ctx = withSaver({
             baseFolderPath: '/folder',
             currentFolderPath: 'folder',
             bulkRated: new Map([['x.png', 'good']]),
             _bulkRatedSaveWarning: { warned: false },
             showNotification: vi.fn(),
-        };
+        });
         await saveBulkRatedFile.call(ctx);
         expect(ctx.showNotification).not.toHaveBeenCalled();
         expect(ctx._bulkRatedSaveWarning.warned).toBe(false);
@@ -5872,6 +5975,9 @@ describe('handleAppCloseRequest', () => {
     const handleAppCloseRequest = extractMethod('handleAppCloseRequest');
     let allowAppClose, logError;
 
+    // The renderer's way to close, once it decides to (its own tests: rating-data-safety-glue.test.js).
+    const closing = (ctx) => Object.assign(ctx, { _saveThenAllowClose: vi.fn() });
+
     beforeEach(() => {
         allowAppClose = vi.fn();
         logError = vi.fn();
@@ -5885,36 +5991,37 @@ describe('handleAppCloseRequest', () => {
         delete globalThis.document;
     });
 
-    it('allows close immediately when not in tournament mode', () => {
-        const ctx = { isTournamentMode: false, tournament: {}, showTournamentLeavePrompt: vi.fn() };
+    it('goes straight to the save-then-close when not in tournament mode', () => {
+        const ctx = closing({ isTournamentMode: false, tournament: {}, showTournamentLeavePrompt: vi.fn() });
         handleAppCloseRequest.call(ctx);
-        expect(allowAppClose).toHaveBeenCalledTimes(1);
+        expect(ctx._saveThenAllowClose).toHaveBeenCalledTimes(1);
         expect(ctx.showTournamentLeavePrompt).not.toHaveBeenCalled();
     });
 
-    it('allows close immediately when the tournament is complete', () => {
-        const ctx = {
+    it('goes straight to the save-then-close when the tournament is complete', () => {
+        const ctx = closing({
             isTournamentMode: true,
             tournament: { engine: { isComplete: () => true } },
             showTournamentLeavePrompt: vi.fn(),
-        };
+        });
         handleAppCloseRequest.call(ctx);
-        expect(allowAppClose).toHaveBeenCalledTimes(1);
+        expect(ctx._saveThenAllowClose).toHaveBeenCalledTimes(1);
         expect(ctx.showTournamentLeavePrompt).not.toHaveBeenCalled();
     });
 
-    it('shows the leave prompt for an incomplete tournament; its continuation allows close', () => {
-        const ctx = {
+    it('shows the leave prompt for an incomplete tournament; its continuation saves, then closes', () => {
+        const ctx = closing({
             isTournamentMode: true,
             tournament: { engine: { isComplete: () => false } },
             showTournamentLeavePrompt: vi.fn(),
-        };
+        });
         handleAppCloseRequest.call(ctx);
         expect(ctx.showTournamentLeavePrompt).toHaveBeenCalledTimes(1);
+        expect(ctx._saveThenAllowClose).not.toHaveBeenCalled();
         expect(allowAppClose).not.toHaveBeenCalled();
         const continuation = ctx.showTournamentLeavePrompt.mock.calls[0][0];
         continuation();
-        expect(allowAppClose).toHaveBeenCalledTimes(1);
+        expect(ctx._saveThenAllowClose).toHaveBeenCalledTimes(1);
     });
 
     it('re-entrancy guard: no-ops when the LEAVE prompt is already open', () => {
@@ -5946,9 +6053,29 @@ describe('handleAppCloseRequest', () => {
                 return null;
             },
         };
-        const ctx = { isTournamentMode: false, tournament: {}, showTournamentLeavePrompt: vi.fn() };
+        const ctx = closing({ isTournamentMode: false, tournament: {}, showTournamentLeavePrompt: vi.fn() });
+        handleAppCloseRequest.call(ctx);
+        expect(ctx._saveThenAllowClose).toHaveBeenCalledTimes(1);
+    });
+
+    it('a second close during the save closes at once, ahead of everything else', () => {
+        // The leave prompt being "open" would swallow it: the way out must not depend on that check.
+        globalThis.document = {
+            getElementById: (id) => {
+                if (id === 'tournamentResumeModal') return { style: { display: 'flex' } };
+                if (id === 'tournamentResumeTitle') return { textContent: 'Leave tournament?' };
+                return null;
+            },
+        };
+        const ctx = closing({
+            _closeSaveInFlight: true,
+            isTournamentMode: false,
+            tournament: {},
+            showTournamentLeavePrompt: vi.fn(),
+        });
         handleAppCloseRequest.call(ctx);
         expect(allowAppClose).toHaveBeenCalledTimes(1);
+        expect(ctx._saveThenAllowClose).not.toHaveBeenCalled();
     });
 
     it('still allows close if the handler throws (fail-safe)', () => {

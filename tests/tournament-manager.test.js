@@ -245,6 +245,54 @@ describe('TournamentManager debounced persistence', () => {
         }
     });
 
+    // G3 member 6: flush() forces a write of the engine as it stands, to _persistFolder, which a resumed tournament
+    // has not set until its first pick. A quit must write what is owed, and nothing else.
+    it('flushPending() writes a queued pick and clears its timer', async () => {
+        vi.useFakeTimers();
+        try {
+            const tm = new TournamentManager(makeHost(['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg']));
+            await tm.handleStartClick('/test/folder', 3);
+            const writeSpy = globalThis.window.electronAPI.writeTournamentState;
+            writeSpy.mockClear();
+            tm._schedulePersist('/test/folder');
+            await tm.flushPending();
+            expect(writeSpy).toHaveBeenCalledTimes(1);
+            await vi.advanceTimersByTimeAsync(600);
+            expect(writeSpy).toHaveBeenCalledTimes(1);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('flushPending() waits for a write already running', async () => {
+        const tm = new TournamentManager(makeHost(['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg']));
+        await tm.handleStartClick('/test/folder', 3);
+        let finish;
+        globalThis.window.electronAPI.writeTournamentState = vi.fn(
+            () => new Promise((resolve) => (finish = () => resolve({ success: true })))
+        );
+        tm._schedulePersist('/test/folder');
+        const draining = tm._drain();
+        let flushed = false;
+        const flush = tm.flushPending().then(() => {
+            flushed = true;
+        });
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(flushed).toBe(false);
+        finish();
+        await Promise.all([draining, flush]);
+    });
+
+    it('flushPending() writes nothing with nothing owed, an engine in place or not', async () => {
+        const tm = new TournamentManager(makeHost(['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg']));
+        await tm.flushPending();
+        await tm.handleStartClick('/test/folder', 3);
+        const writeSpy = globalThis.window.electronAPI.writeTournamentState;
+        writeSpy.mockClear();
+        await tm.flushPending();
+        expect(writeSpy).not.toHaveBeenCalled();
+    });
+
     it('flush() writes immediately and clears the pending timer', async () => {
         vi.useFakeTimers();
         try {

@@ -3,6 +3,7 @@ import { ZoomManager } from './zoom.js';
 import { TournamentManager } from './tournament.js';
 import { MlTrainingManager } from './ml-training.js';
 import { FeatureCacheStore } from './feature-cache-store.js';
+import { CoalescingSaver } from './coalescing-saver.js';
 import * as LikeOrSkip from './like-or-skip.js';
 import * as RecentFolders from './recent-folders.js';
 import * as SimilaritySort from './similarity-sort.js';
@@ -301,6 +302,8 @@ class MediaViewer {
         // saveBulkRatedFile's once-per-visit warning: loadFolder makes a new one per visit, and a save keeps the one of
         // the visit it started in, so a late failure warns for its own folder (PR #87 review #8)
         this._bulkRatedSaveWarning = { warned: false };
+        this._bulkRatedSaver = new CoalescingSaver((folder, payload) => this._writeBulkRated(folder, payload));
+        this._closeSaveInFlight = false; // a close is saving what it owes; a second close quits at once
 
         // CLIP model state (main process IPC)
         this.clipWorkerReady = false;
@@ -5819,11 +5822,15 @@ class MediaViewer {
 
     // Main process intercepted a window-close (X / Alt+F4 / quit) and is asking whether it
     // may proceed. For an incomplete tournament, show the same Save/Discard/Cancel leave
-    // prompt the user sees on Escape — Save/Discard then allow the close, Cancel keeps the
-    // app open. Otherwise allow immediately. Fail-safe: any error still allows the close, so
-    // a renderer bug can never make the app unclosable.
+    // prompt the user sees on Escape — Save/Discard then close, Cancel keeps the app open.
+    // Every close saves what it owes first (_saveThenAllowClose). Fail-safe: any error still
+    // allows the close, so a renderer bug can never make the app unclosable.
     handleAppCloseRequest() {
         try {
+            if (this._closeSaveInFlight) {
+                window.electronAPI.allowAppClose(); // the user chose not to wait for the save
+                return;
+            }
             // Re-entrancy guard: suppress a 2nd close request ONLY while the *leave* prompt is
             // open (title 'Leave tournament?'), so it can't re-bind the continuation. The same
             // modal element is reused for the 'Resume tournament?' prompt (shown while
@@ -5841,14 +5848,62 @@ class MediaViewer {
                 return;
             }
             if (this.isTournamentMode && this.tournament.engine && !this.tournament.engine.isComplete()) {
-                this.showTournamentLeavePrompt(() => window.electronAPI.allowAppClose());
+                this.showTournamentLeavePrompt(() => this._saveThenAllowClose());
             } else {
-                window.electronAPI.allowAppClose();
+                this._saveThenAllowClose();
             }
         } catch (err) {
             window.electronAPI.logError?.('app-close handler failed: ' + err.message);
             window.electronAPI.allowAppClose();
         }
+    }
+
+    // A quit writes what the app still owes the disk (G3 member 6): a coalesced bulk-rated save waits in the renderer,
+    // where closing would lose it. It cannot trap the window: the cap, the second close above, and the finally.
+    // Past the cap a streaming save's temp file is abandoned and the file on disk stays as it was.
+    async _saveThenAllowClose() {
+        this._closeSaveInFlight = true;
+        const start = Date.now();
+        let outcome = 'saved';
+        let capTimer;
+        const noteTimer = setTimeout(() => {
+            this.showNotification('Saving before closing — close again to quit now', 'info', { sticky: true });
+        }, 300);
+        try {
+            const cap = new Promise((resolve) => {
+                capTimer = setTimeout(() => {
+                    outcome = 'capped';
+                    resolve();
+                }, 15000);
+            });
+            await Promise.race([this._settleSavesForClose(), cap]);
+            window.electronAPI.logPerf?.(`Quit save: ${Date.now() - start}ms, ${outcome}`);
+        } catch (err) {
+            window.electronAPI.logError?.('save before close failed: ' + err.message);
+        } finally {
+            clearTimeout(noteTimer);
+            clearTimeout(capTimer);
+            window.electronAPI.allowAppClose();
+        }
+    }
+
+    async _settleSavesForClose() {
+        // A file action's own saves (an undo's label) are requested only as it ends. Not _waitForRenderIdle: a render
+        // owes the disk nothing.
+        const start = Date.now();
+        while (this._fileOpInFlight && Date.now() - start < 2000) {
+            await new Promise((resolve) => setTimeout(resolve, 25));
+        }
+        try {
+            this.cancelBackgroundExtraction(); // no new entries behind the flush
+        } catch (err) {
+            window.electronAPI.logError?.('stopping extraction before close failed: ' + err.message);
+        }
+        await Promise.allSettled([
+            this._bulkRatedSaver.whenIdle(),
+            this.featureCacheStore.flush(),
+            this.tournament.flushPending(),
+        ]);
     }
 
     // Prompt shown when entering tournament mode with a saved tournament on disk:
@@ -9307,6 +9362,9 @@ class MediaViewer {
         this.bulkRatedPairs = new Set(); // session-only; starts empty on each folder load
         if (!this.baseFolderPath) return;
         try {
+            // A save of this folder still on its way would make this read older than the folder's last rating. This
+            // folder only: an offline folder's write must not hold up the load of another one.
+            await this._bulkRatedSaver.whenIdle(this.baseFolderPath);
             const result = await window.electronAPI.readBulkRatedFile(this.baseFolderPath);
             if (!result.success || !result.data) return;
             const validNames = new Set(this.mediaFiles.map((f) => f.name));
@@ -9327,6 +9385,7 @@ class MediaViewer {
         }
     }
 
+    // Resolves once these ratings, or newer ones of this folder, are written. Never rejects.
     async saveBulkRatedFile() {
         if (!this.baseFolderPath) return;
         const data = { version: 1, good: [], bad: [] };
@@ -9334,13 +9393,20 @@ class MediaViewer {
             if (bucket === 'good') data.good.push(name);
             else if (bucket === 'bad') data.bad.push(name);
         }
-        // Taken before the write's await (PR #87 review #8): a save still in flight when the user switches folder
+        // Frozen at the request (PR #87 review #8): a save still in flight or queued when the user switches folder
         // fails, if it does, for the folder it was writing, and must not use up the next folder's warning.
-        const warning = this._bulkRatedSaveWarning;
-        const folderName = this.currentFolderPath;
+        return this._bulkRatedSaver.request(this.baseFolderPath, {
+            data,
+            warning: this._bulkRatedSaveWarning,
+            folderName: this.currentFolderPath,
+        });
+    }
+
+    // The saver's write: one at a time per folder, so two saves cannot reach main in the wrong order.
+    async _writeBulkRated(folder, { data, warning, folderName }) {
         let result;
         try {
-            result = await window.electronAPI.writeBulkRatedFile(this.baseFolderPath, data);
+            result = await window.electronAPI.writeBulkRatedFile(folder, data);
         } catch (err) {
             result = { success: false, error: err.message };
         }
