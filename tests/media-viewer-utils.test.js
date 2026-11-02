@@ -3598,6 +3598,16 @@ describe('applyBulkRating', () => {
         expect(ctx.saveBulkRatedFile).not.toHaveBeenCalled();
     });
 
+    // PR #95 review 4: what undoBulkRating needs to give an earlier label back.
+    it("records a file's earlier label, and only when it had one", async () => {
+        const ctx = makeCtx();
+        ctx.bulkRated.set(ctx.compareLeftFile.name, 'bad');
+        await applyBulkRating.call(ctx, 'good');
+        const [left, right] = ctx.moveHistory[0].bulkFiles;
+        expect(left).toEqual({ name: ctx.compareLeftFile.name, previous: 'bad' });
+        expect(right).toEqual({ name: ctx.compareRightFile.name });
+    });
+
     it('no-ops when a compare file is missing', async () => {
         const ctx = makeCtx({ compareRightFile: null });
         await applyBulkRating.call(ctx, 'good');
