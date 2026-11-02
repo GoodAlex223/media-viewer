@@ -309,6 +309,69 @@ describe('member 3: an undo gives a file back what its removal destroyed', () =>
     });
 });
 
+describe('member 5: Continue reads the list when it is pressed', () => {
+    const showContinue = extract('showTournamentContinuePrompt');
+    const state = { createdAt: 0, gamesPlayed: 0, files: ['/f/a', '/f/b'], options: { rounds: 3 } };
+    let els;
+
+    function makeCtx(over = {}) {
+        return {
+            mediaFiles: [{ path: '/f/a' }, { path: '/f/b' }],
+            isComputingHashes: false,
+            isPredictionSorting: false,
+            restoreOriginalOrderForTournament: vi.fn(),
+            _refuseIfFileOpInFlight: vi.fn(() => false),
+            _refuseIfFolderLoadInFlight: vi.fn(() => false),
+            _enterResumedTournamentUI: vi.fn(async () => {}),
+            showNotification: vi.fn(),
+            tournament: {
+                validateStateFile: () => ({ valid: true, removed: [], added: [] }),
+                handleResumeReconciled: vi.fn(async () => ({ ok: true, removedCount: 0 })),
+            },
+            ...over,
+        };
+    }
+
+    beforeEach(() => {
+        els = {};
+        const el = () => ({ style: {}, textContent: '', append: vi.fn(), replaceChildren: vi.fn() });
+        globalThis.document = { getElementById: (id) => (els[id] ??= el()), createElement: el };
+    });
+    afterEach(() => {
+        delete globalThis.document;
+    });
+
+    it('a file that came back behind the prompt is in the list it reconciles against', async () => {
+        const ctx = makeCtx();
+        showContinue.call(ctx, state, ['/f/a']); // the list when the prompt opened: /f/b was in the like folder
+        await els.tournamentResumeAccept.onclick();
+        expect(ctx.tournament.handleResumeReconciled).toHaveBeenCalledWith(state, ['/f/a', '/f/b']);
+    });
+
+    it('reads the list after the folder order is restored', async () => {
+        const ctx = makeCtx();
+        ctx.restoreOriginalOrderForTournament = vi.fn(() => {
+            ctx.mediaFiles = [{ path: '/f/b' }, { path: '/f/a' }];
+        });
+        showContinue.call(ctx, state, ['/f/a']);
+        await els.tournamentResumeAccept.onclick();
+        expect(ctx.tournament.handleResumeReconciled).toHaveBeenCalledWith(state, ['/f/b', '/f/a']);
+    });
+
+    it.each(['_refuseIfFileOpInFlight', '_refuseIfFolderLoadInFlight'])(
+        '%s refuses Continue: nothing resumes and the prompt stays',
+        async (guard) => {
+            const ctx = makeCtx({ [guard]: vi.fn(() => true) });
+            showContinue.call(ctx, state, ['/f/a']);
+            els.tournamentResumeModal.style.display = 'flex';
+            await els.tournamentResumeAccept.onclick();
+            expect(ctx.restoreOriginalOrderForTournament).not.toHaveBeenCalled();
+            expect(ctx.tournament.handleResumeReconciled).not.toHaveBeenCalled();
+            expect(els.tournamentResumeModal.style.display).toBe('flex');
+        }
+    );
+});
+
 describe('member 6: _saveThenAllowClose', () => {
     const saveThenAllowClose = extract('_saveThenAllowClose');
     const settleSavesForClose = extract('_settleSavesForClose');

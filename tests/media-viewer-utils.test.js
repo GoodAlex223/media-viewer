@@ -1380,6 +1380,22 @@ describe('computeJxlFrameSchedule', () => {
 describe('applyPredictionSortResult', () => {
     const applyPredictionSortResult = extractMethod('applyPredictionSortResult');
 
+    // G3 member 4: an order that lost a listed file took it out of the session's list.
+    it('keeps a listed file the result omits, after the ordered ones, without a score', () => {
+        const ctx = baseCtx();
+        applyPredictionSortResult.call(ctx, { sortedFilenames: ['c.png', 'a.png'], scores: { 'c.png': 0.9 } });
+        expect(ctx.mediaFiles.map((f) => f.name)).toEqual(['c.png', 'a.png', 'b.png']);
+        expect(ctx.predictionScores.has('/d/b.png')).toBe(false);
+    });
+
+    it('a name the list does not hold changes nothing, and a result of only those is "No files to sort"', () => {
+        const ctx = baseCtx();
+        ctx.showNotification = vi.fn();
+        expect(applyPredictionSortResult.call(ctx, { sortedFilenames: ['gone.png'] })).toBe(false);
+        expect(ctx.mediaFiles.map((f) => f.name)).toEqual(['a.png', 'b.png', 'c.png']);
+        expect(ctx.showNotification).toHaveBeenCalledWith('No files to sort', 'warning');
+    });
+
     function baseCtx() {
         return {
             mediaFiles: [

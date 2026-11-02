@@ -235,4 +235,28 @@ function normalizeRendererLogEntry(data) {
     };
 }
 
-module.exports = { init, log, warn, error, logPerf, cleanup, getLogPath, normalizeRendererLogEntry };
+// An uncaught throw in main reaches the session log (G3 member 7). The monitor event on purpose: Electron shows its
+// error box only while it is the sole 'uncaughtException' listener, so a plain listener would silently remove the box.
+// No 'unhandledRejection' listener either: Node's warning already reaches the log through main's console.error override,
+// and a listener would silence it.
+function installCrashLogging(proc = process) {
+    proc.on('uncaughtExceptionMonitor', (err, origin) => {
+        try {
+            error('process', `${origin}: ${err?.stack ?? err}`);
+        } catch (_e) {
+            // A logging failure must not turn into a second exception here.
+        }
+    });
+}
+
+module.exports = {
+    init,
+    log,
+    warn,
+    error,
+    logPerf,
+    cleanup,
+    getLogPath,
+    normalizeRendererLogEntry,
+    installCrashLogging,
+};

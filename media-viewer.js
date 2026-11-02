@@ -5934,8 +5934,13 @@ class MediaViewer {
                 this.showNotification('Wait for the sort to finish', 'info');
                 return;
             }
+            // Keys reach the app behind this prompt, so the list may have changed since it opened (G3 member 5).
+            if (this._refuseIfFileOpInFlight() || this._refuseIfFolderLoadInFlight()) {
+                return;
+            }
             this.restoreOriginalOrderForTournament();
-            const result = await this.tournament.handleResumeReconciled(state, currentFiles);
+            const livePaths = this.mediaFiles.map((f) => f.path);
+            const result = await this.tournament.handleResumeReconciled(state, livePaths);
             cleanup();
             if (result?.ok) {
                 if (result.removedCount > 0) {
@@ -8936,11 +8941,13 @@ class MediaViewer {
             return false;
         }
         const filenameToFile = new Map(this.mediaFiles.map((f) => [f.name, f]));
-        const sorted = result.sortedFilenames.map((name) => filenameToFile.get(name)).filter((f) => f);
-        if (sorted.length === 0) {
+        const orderedPaths = result.sortedFilenames.map((name) => filenameToFile.get(name)?.path).filter(Boolean);
+        if (orderedPaths.length === 0) {
             this.showNotification('No files to sort', 'warning');
             return false;
         }
+        // Every listed file stays (G3 member 4): one the result omits goes after the ordered ones, without a score.
+        const sorted = SimilaritySort.alignToLive(orderedPaths, this.mediaFiles);
         // Sync prediction scores so badges align with the re-ordered files.
         if (result.scores) {
             for (const [filename, score] of Object.entries(result.scores)) {
