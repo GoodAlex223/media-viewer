@@ -303,7 +303,10 @@ class MediaViewer {
         // the visit it started in, so a late failure warns for its own folder (PR #87 review #8)
         this._bulkRatedSaveWarning = { warned: false };
         this._bulkRatedSaver = new CoalescingSaver((folder, payload) => this._writeBulkRated(folder, payload));
-        this._closeSaveInFlight = false; // a close is saving what it owes; a second close quits at once
+        this._bulkRatedUnread = false; // this visit's read failed: saving would replace ratings it never saw
+        this._closeSaveInFlight = false; // a close is saving what it owes
+        this._closeSaveNoteShown = false; // and has said so: a second close now quits at once
+        this._leaveChoiceMade = false; // the leave prompt is writing the user's choice: a further close quits at once
 
         // CLIP model state (main process IPC)
         this.clipWorkerReady = false;
@@ -1494,8 +1497,8 @@ class MediaViewer {
         this.jxlFrameCache.delete(filePath);
         this.featureMetadata.delete(filePath);
         this.perceptualHashes.delete(filePath);
-        // A batch (dislikeSkippedFiles) passes deferBulkSave and saves once at the end: one un-awaited
-        // save per file would start overlapping writes of the same .bulk_rated.json.
+        // A batch (dislikeSkippedFiles) passes deferBulkSave and saves once at the end, rather than
+        // building the whole list once per file.
         if (this.bulkRated.delete(removedName) && !deferBulkSave) {
             this.saveBulkRatedFile();
         }
@@ -1925,8 +1928,8 @@ class MediaViewer {
             if (this.isMlEnabled && this.mlWorker) {
                 let rawFeatures = this.featureCache.get(currentFile.path);
                 if (!rawFeatures && this.currentMedia) {
-                    // The visit the move started in, taken before the await: moves don't refuse during a folder
-                    // load, so a load already listing can end the visit mid-extraction (PR #86 close-out cut 8).
+                    // The visit the move started in, taken before the await: a result lands only in its own visit,
+                    // whatever happens across the extraction (PR #86 close-out cut 8).
                     const visit = this.featureCacheStore.visit;
                     try {
                         rawFeatures = await this.extractFeaturesFromDisplayedMedia();
@@ -2690,6 +2693,9 @@ class MediaViewer {
         }
 
         document.addEventListener('keydown', (e) => {
+            // Behind a tournament prompt the cursor has been reset with no render: a rating key moved a file that is
+            // not on screen (PR #95 review 3).
+            if (this._tournamentPromptOpen() && e.key !== 'Escape' && e.key !== 'F1') return;
             if (this.mediaFiles.length === 0) {
                 // Allow undo shortcut even when no media remains
                 const mode = this.isTournamentMode ? 'tournament' : this.isCompareMode ? 'compare' : 'single';
@@ -3055,6 +3061,7 @@ class MediaViewer {
         // A load that starts is a change of folder: a recent-folder check still in flight drops its decision
         // (G4 final review F1). After the refusal (a refused load changes nothing), before any await.
         this._folderIntentGen += 1;
+        this._closeTournamentPrompts(); // their buttons would act on the folder that opens (PR #95 review 7)
         if (!window.electronAPI) {
             this.showError('Electron API not available');
             return;
@@ -3179,6 +3186,19 @@ class MediaViewer {
         } finally {
             this._folderLoadInFlight = false;
             this._updateRecentFoldersButton();
+        }
+    }
+
+    _tournamentPromptOpen() {
+        return ['tournamentConfigModal', 'tournamentResumeModal', 'tournamentSummaryModal'].some(
+            (id) => document.getElementById(id)?.style.display === 'flex'
+        );
+    }
+
+    _closeTournamentPrompts() {
+        for (const id of ['tournamentConfigModal', 'tournamentResumeModal', 'tournamentSummaryModal']) {
+            const modal = document.getElementById(id);
+            if (modal) modal.style.display = 'none';
         }
     }
 
@@ -3526,8 +3546,8 @@ class MediaViewer {
     async _switchToFolderNow(folderPath) {
         // Before the reset below, not only in loadFolder (G2 final review F1): a pick during a
         // file action would otherwise wipe the list and the history, then be refused, and the
-        // action would push onto the wiped history with an undo that targets ''. The same holds
-        // for a pick during another folder's load (PR #81 review #1).
+        // action would push onto the wiped history. The same holds for a pick during another
+        // folder's load (PR #81 review #1).
         if (this._refuseIfFileOpInFlight() || this._refuseIfFolderLoadInFlight()) {
             return;
         }
@@ -5153,7 +5173,8 @@ class MediaViewer {
 
     async undoBulkRating(lastMove) {
         for (const f of lastMove.bulkFiles) {
-            this.bulkRated.delete(f.name);
+            if (f.previous) this.bulkRated.set(f.name, f.previous);
+            else this.bulkRated.delete(f.name);
         }
         await this.saveBulkRatedFile();
         // Re-admit the exact combo so it can reappear at its natural extreme position on re-render.
@@ -5723,6 +5744,7 @@ class MediaViewer {
         if (cancelBtn) cancelBtn.style.display = '';
 
         const cleanup = () => {
+            this._leaveChoiceMade = false;
             modal.style.display = 'none';
             acceptBtn.onclick = null;
             discardBtn.onclick = null;
@@ -5730,6 +5752,7 @@ class MediaViewer {
         };
 
         acceptBtn.onclick = async () => {
+            this._leaveChoiceMade = true;
             // State is persisted per-pick (debounced); flush any pending write so the latest
             // picks are durable, then drop the in-memory engine (disk is the single source of truth).
             await this.tournament.flush();
@@ -5738,6 +5761,7 @@ class MediaViewer {
             await onAfterLeave();
         };
         discardBtn.onclick = async () => {
+            this._leaveChoiceMade = true;
             // Best-effort discard: even if deleting the saved state fails (disk/IPC error),
             // still tear down the modal and run the continuation. onAfterLeave may be the
             // app-close fail-safe (allowAppClose) which must never be blocked by an IO error
@@ -5765,15 +5789,17 @@ class MediaViewer {
     handleAppCloseRequest() {
         try {
             if (this._closeSaveInFlight) {
-                window.electronAPI.allowAppClose(); // the user chose not to wait for the save
+                // Only once the note has offered it: until then this is a double click, and it would drop a queued save.
+                if (this._closeSaveNoteShown) window.electronAPI.allowAppClose();
                 return;
             }
             // Re-entrancy guard: suppress a 2nd close request ONLY while the *leave* prompt is
             // open (title 'Leave tournament?'), so it can't re-bind the continuation. The same
             // modal element is reused for the 'Resume tournament?' prompt (shown while
             // isTournamentMode is still false, before entering) — clicking X during THAT must
-            // fall through to allowAppClose() below, not be swallowed here (else the window is
-            // unclosable during the resume prompt).
+            // fall through to the save-then-close below, not be swallowed here (else the window is
+            // unclosable during the resume prompt). Once the user has chosen, the prompt's own write is
+            // running with no cap of its own, so a further close quits at once (PR #95 review 9).
             const leaveModal = document.getElementById('tournamentResumeModal');
             const leaveTitle = document.getElementById('tournamentResumeTitle');
             if (
@@ -5782,6 +5808,7 @@ class MediaViewer {
                 leaveTitle &&
                 leaveTitle.textContent === 'Leave tournament?'
             ) {
+                if (this._leaveChoiceMade) window.electronAPI.allowAppClose();
                 return;
             }
             if (this.isTournamentMode && this.tournament.engine && !this.tournament.engine.isComplete()) {
@@ -5801,9 +5828,10 @@ class MediaViewer {
     async _saveThenAllowClose() {
         this._closeSaveInFlight = true;
         const start = Date.now();
-        let outcome = 'saved';
+        let outcome = 'settled'; // a failed write settles too, and logs itself
         let capTimer;
         const noteTimer = setTimeout(() => {
+            this._closeSaveNoteShown = true;
             this.showNotification('Saving before closing — close again to quit now', 'info', { sticky: true });
         }, 300);
         try {
@@ -5832,7 +5860,10 @@ class MediaViewer {
             await new Promise((resolve) => setTimeout(resolve, 25));
         }
         try {
-            this.cancelBackgroundExtraction(); // no new entries behind the flush
+            // Stops new work. A result already in flight can still land after the flush froze its copy; the next
+            // visit extracts it again.
+            this.cancelBackgroundExtraction();
+            this.sortAbortController?.abort();
         } catch (err) {
             window.electronAPI.logError?.('stopping extraction before close failed: ' + err.message);
         }
@@ -8909,7 +8940,7 @@ class MediaViewer {
             this.showNotification('No files to sort', 'warning');
             return false;
         }
-        // Every listed file stays (G3 member 4): one the result omits goes after the ordered ones, without a score.
+        // Every listed file stays (G3 member 4): one the result omits goes after the ordered ones, with no new score.
         const sorted = SimilaritySort.alignToLive(orderedPaths, this.mediaFiles);
         // Sync prediction scores so badges align with the re-ordered files.
         if (result.scores) {
@@ -9291,13 +9322,15 @@ class MediaViewer {
     async loadBulkRatedFile() {
         this.bulkRated = new Map();
         this.bulkRatedPairs = new Set(); // session-only; starts empty on each folder load
+        this._bulkRatedUnread = false;
         if (!this.baseFolderPath) return;
         try {
             // A save of this folder still on its way would make this read older than the folder's last rating. This
             // folder only: an offline folder's write must not hold up the load of another one.
             await this._bulkRatedSaver.whenIdle(this.baseFolderPath);
             const result = await window.electronAPI.readBulkRatedFile(this.baseFolderPath);
-            if (!result.success || !result.data) return;
+            if (!result.success) throw new Error(result.error);
+            if (!result.data) return;
             const validNames = new Set(this.mediaFiles.map((f) => f.name));
             let pruned = false;
             for (const name of result.data.good || []) {
@@ -9312,13 +9345,21 @@ class MediaViewer {
             // Written back now, so the file is whole again before the next crash can find it torn.
             if (pruned || result.recovered) await this.saveBulkRatedFile();
         } catch (err) {
+            // "Never read" is not "no ratings": the next save would replace ratings that exist nowhere else.
+            this._bulkRatedUnread = true;
             console.warn('Failed to load .bulk_rated.json:', err.message);
+            window.electronAPI.logError?.(`Failed to read .bulk_rated.json of ${this.baseFolderPath}: ${err.message}`);
+            this.showNotification(
+                `⚠️ Could not read the bulk ratings for ${this.currentFolderPath}. New ones will not be saved; reopen the folder to retry`,
+                'warning'
+            );
         }
     }
 
-    // Resolves once these ratings, or newer ones of this folder, are written. Never rejects.
+    // Resolves once these ratings, or newer ones of this folder, have been attempted: a failed write warns and logs.
+    // Never rejects.
     async saveBulkRatedFile() {
-        if (!this.baseFolderPath) return;
+        if (!this.baseFolderPath || this._bulkRatedUnread) return;
         const data = { version: 1, good: [], bad: [] };
         for (const [name, bucket] of this.bulkRated) {
             if (bucket === 'good') data.good.push(name);
@@ -9344,6 +9385,7 @@ class MediaViewer {
         // These ratings exist nowhere else, so a failed write is said, once per folder visit (R-F8).
         if (!result?.success) {
             console.warn('Failed to save .bulk_rated.json:', result?.error);
+            window.electronAPI.logError?.(`Failed to save .bulk_rated.json of ${folder}: ${result?.error}`);
             if (!warning.warned) {
                 warning.warned = true;
                 this.showNotification(`⚠️ Failed to save the bulk ratings for ${folderName}`, 'warning');
@@ -9916,7 +9958,8 @@ class MediaViewer {
         try {
             const bulkFiles = [];
             for (const f of [left, right]) {
-                bulkFiles.push({ name: f.name });
+                const previous = this.bulkRated.get(f.name);
+                bulkFiles.push(previous ? { name: f.name, previous } : { name: f.name });
                 this.bulkRated.set(f.name, bucket);
             }
 
@@ -10803,6 +10846,8 @@ class MediaViewer {
             );
             this.extractionStartTime = null;
         }
+
+        if (this._closeSaveInFlight) return; // the quit's flush covers this visit: a second full stream only delays it
 
         // Save this run's visit, if it is still the current one; otherwise its flush on leave saved what it could. A
         // visit that could not read its cache and cannot save its work says once that the work was not saved.

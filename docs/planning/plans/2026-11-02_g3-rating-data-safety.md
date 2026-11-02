@@ -2,7 +2,7 @@
 
 **Task Reference**: [WEEKLY.md](../WEEKLY.md) G3 (Cleanup Week #5, 🏆)
 **Created**: 2026-11-02
-**Status**: Implementation: the user approved the spec and plan on 2026-11-02 ("Looks right, go"). Phases 1–4 done. Phase 5 waits on the manual smoke and the user's approval of the push
+**Status**: Implementation: the user approved the spec and plan on 2026-11-02 ("Looks right, go"). PR #95 open; review round 1 answered. The manual smoke is owed during review, by the user's call on 2026-11-02
 **Last Updated**: 2026-11-02
 **Design**: [spec](../../superpowers/specs/2026-11-02-g3-rating-data-safety-design.md), which holds the analysis, the Phase 0 table and my ten calls. This plan does not restate them.
 
@@ -42,6 +42,10 @@ See spec §§ 2–4. Edge cases per member are in spec § 3; each is a named tes
 |------|--------|---------|
 | `coalescing-saver.js` | Create | Member 2's writer |
 | `media-viewer.js` | Modify | Members 1–6 |
+| `tournament.js` | Modify | `flushPending`, and review fixes |
+| `eslint.config.mjs`, `tests/media-url.test.js` | Modify | The new module joins the renderer lists |
+| `tests/recent-folders-glue.test.js`, `tests/feature-cache-harness.js`, `tests/tournament-manager.test.js` | Modify | Mock contexts and new cases |
+| `docs/planning/WEEKLY.md`, `docs/planning/GOALS.md` | Modify | Spillover line; line count |
 | `like-or-skip.js` | Modify | `trainingWeight`, call 8 |
 | `feature-cache-store.js` | Modify | `flush()` |
 | `logger.js`, `main.js` | Modify | Member 7. `main.js` gains one line at the top, outside the file-move handlers |
@@ -146,6 +150,13 @@ Commit together: spec § 6.
 - **Phase 4 done** (members 4, 5, 7). `main.js` gained one line at the top, outside the file-move handlers.
 - **Phase 5**: `_fileFromHistory` at seven sites brought the renderer to 11,527, under the 11,529 it started at, so no raise; the ceiling moves down to the count. Two source-level tests now check the helpers instead of the repeated literals, and each still fails if the property goes.
 
+### 2026-11-02 — Review round 1 (PR #95)
+
+- 21 entries and 30 held-back candidates, checked first-hand. Fixed: 1–7, 9–11, 16–21, each test first where a test can show it. Recorded in spec § 7: 8, 12, 13, 15, and 14's pairing effect.
+- `_bulkRatedUnread` follows the feature cache's rule: "never read" is not "no ratings".
+- **Renderer ceiling raised**: 11,527 → 11,572 (+43 net over the 11,529 G3 started at), for the review's data-safety fixes. WEEKLY allows G3 an explicit raise; the PR body states it.
+- `CLAUDE.md` crossed its byte trigger (70,918 against 69,000). Recorded, not trimmed here: WEEKLY's "Measure `CLAUDE.md`'s growth under the authoring rule" re-sets it.
+
 ---
 
 ## 5. Key Discoveries
@@ -156,7 +167,7 @@ To fill at completion.
 
 ## 6. Future Improvements
 
-Spec § 7 lists what I noticed and did not act on. Those ten items are this section until completion, and each goes to BACKLOG 🟤 at close-out unless the work closes it.
+Spec § 7 lists what I noticed and did not act on. Those fifteen items are this section until completion, and each goes to BACKLOG 🟤 at close-out unless the work closes it.
 
 ---
 
@@ -177,7 +188,7 @@ Plan: spec § 5. Results: to fill during Phases 1–5.
 | Phase 5: lint | 0 errors, 2 no-shadow warnings | In test code this branch did not write |
 | Phase 5: `format:check` | 10 files flagged | All in the ignored local `CLAUDE-SECURITY-*` scan output; none is tracked by this branch |
 | Phase 5: line ratchet, dry run | At the ceiling | 11,527 lines, ceiling 11,527 |
-| Manual smoke | Not run | `docs/MANUAL_TESTING.md` § Rating Data Safety; owed before the push |
+| Manual smoke | Not run | `docs/MANUAL_TESTING.md` § Rating Data Safety. The user approved the push without it on 2026-11-02; owed during review |
 
 ---
 

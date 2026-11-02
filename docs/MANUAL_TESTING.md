@@ -98,8 +98,10 @@ Before any release, verify the following scenarios work correctly.
 - [ ] The same with a special move and with a compare-pair move
 - [ ] Press a rating key repeatedly while a large folder opens: no file moves until the first file is on screen
 - [ ] Close the window during background extraction: it closes, and on reopening the folder the extracted features are not recomputed
-- [ ] With a very large cache, close the window: a "Saving before closing" note appears after a moment, and closing again quits at once
-- [ ] Save and leave a tournament, like a file, re-enter Tournament mode, press Ctrl+A behind the prompt, Continue: the restored file is in the tournament
+- [ ] With a very large cache and unsaved entries (close during extraction; a clean visit has nothing to save and shows no note), close the window: a "Saving before closing" note appears after a moment, and closing again quits at once
+- [ ] Lock `.bulk_rated.json` in another program, or give it a UTF-8 BOM, and open the folder: a warning says ratings cannot be read; bulk-rate a pair and check the file on disk is unchanged
+- [ ] Press Tournament mode so a prompt opens, then press a rating key: nothing moves
+- [ ] With a tournament prompt open, Tab to change-folder and pick another folder: the prompt closes, and that folder's saved tournament is untouched
 
 ---
 

@@ -156,6 +156,7 @@ describe('loadFolder records only a folder that showed media (spec § 5)', () =>
     function loadCtx(overrides = {}) {
         const ctx = {
             _folderIntentGen: 0,
+            _closeTournamentPrompts: vi.fn(),
             _fileOpInFlight: false,
             _refuseIfFileOpInFlight: extract('_refuseIfFileOpInFlight'),
             _folderLoadInFlight: false,
@@ -906,6 +907,7 @@ describe('openRecentFolder — validate on click (spec § 6)', () => {
             recentFolders: [entry(DIR)],
             _recentOpenInFlight: null,
             _folderIntentGen: 0,
+            _closeTournamentPrompts: vi.fn(),
             _fileOpInFlight: false,
             _refuseIfFileOpInFlight: extract('_refuseIfFileOpInFlight'),
             _folderLoadInFlight: false,

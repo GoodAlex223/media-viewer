@@ -144,7 +144,7 @@ npm run format        # Prettier (format:check to verify only)
 
 ## Known Limitations
 
-1. **Large renderer file**: `media-viewer.js` is 11,527 lines (2026-11-02) - v2 shrinks it phase by phase, and no phase may grow it ([GOALS.md](docs/planning/GOALS.md) Objective 2)
+1. **Large renderer file**: `media-viewer.js` is 11,572 lines (2026-11-02) - v2 shrinks it phase by phase, and no phase may grow it ([GOALS.md](docs/planning/GOALS.md) Objective 2)
 2. **No TypeScript**: Plain JavaScript with no type checking
 3. **No CI service**: all gates are local Husky hooks; a bypassed hook has no server-side backstop
 4. **Sandbox disabled**: Required for file operations but reduces security

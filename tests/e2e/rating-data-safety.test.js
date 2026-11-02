@@ -67,19 +67,24 @@ test.describe('G3 rating data safety', () => {
             await open();
             other = await createTempFixtureDir(['normal-320x240.png', 'red-1x1.png']);
             await grantFolder(electronApp, other.dir);
-            await page.evaluate(async (folder) => {
+            const seen = await page.evaluate(async (folder) => {
                 const mv = window.mediaViewer;
                 const original = mv.loadBulkRatedFile;
+                let pressedOn = null;
                 // The press lands inside the load's bulk-rated read: the new list is in place, and nothing of it
                 // has been on screen yet.
                 mv.loadBulkRatedFile = async function () {
                     mv.loadBulkRatedFile = original;
+                    pressedOn = mv.mediaFiles[mv.currentIndex]?.name ?? null;
                     await mv.handleLike();
                     return original.call(mv);
                 };
                 await mv.switchToFolder(folder);
+                return { pressedOn, base: mv.baseFolderPath };
             }, other.dir);
             await waitForIdle(page);
+            expect(seen.pressedOn).not.toBeNull(); // the press did land, on a file of the new folder
+            expect(seen.base).toBe(other.dir);
             expect(await mediaIn(source.likeDir)).toEqual([]);
             expect((await mediaIn(other.dir)).sort()).toEqual(['normal-320x240.png', 'red-1x1.png']);
         });
@@ -107,13 +112,42 @@ test.describe('G3 rating data safety', () => {
             await waitForIdle(page);
             expect(await mediaIn(other.dir)).toEqual(['green-1x1.png']);
         });
+
+        // The guard alone would pass the test above. This one reaches the undo: a history entry whose origin is not
+        // the open folder, which only the dirname rule sends home.
+        test('an undo returns a file to the folder it came from, whichever folder is open', async () => {
+            await open();
+            const name = await page.evaluate(async () => {
+                const mv = window.mediaViewer;
+                const file = mv.mediaFiles[mv.currentIndex];
+                await mv.moveCurrentFile('like');
+                window.__entry = mv.moveHistory[mv.moveHistory.length - 1];
+                return file.name;
+            });
+            await waitForIdle(page);
+            other = await createTempFixtureDir(['green-1x1.png']);
+            await loadFolder(page, other.dir);
+            await waitForMedia(page);
+            await waitForIdle(page);
+            await page.evaluate(async () => {
+                const mv = window.mediaViewer;
+                mv.moveHistory.push(window.__entry);
+                await mv.handleCancel();
+            });
+            await waitForIdle(page);
+            expect(await mediaIn(other.dir)).toEqual(['green-1x1.png']);
+            expect(await mediaIn(source.dir)).toContain(name);
+            expect(await mediaIn(source.likeDir)).not.toContain(name);
+        });
     });
 
     test.describe('member 3: an undo gives a file back its label and its score', () => {
-        async function expectRestored(name) {
+        async function expectRestored(name, { undo = true } = {}) {
             await waitForIdle(page);
-            await page.evaluate(() => window.mediaViewer.handleCancel());
-            await waitForIdle(page);
+            if (undo) {
+                await page.evaluate(() => window.mediaViewer.handleCancel());
+                await waitForIdle(page);
+            }
             const restored = await page.evaluate((n) => {
                 const mv = window.mediaViewer;
                 const file = mv.mediaFiles.find((f) => f.name === n);
@@ -160,16 +194,19 @@ test.describe('G3 rating data safety', () => {
             await open();
             await page.evaluate(() => window.mediaViewer.switchMode('compare'));
             await waitForIdle(page);
-            const name = await page.evaluate(async () => {
+            const names = await page.evaluate(async () => {
                 const mv = window.mediaViewer;
-                const file = mv.compareLeftFile;
-                mv.bulkRated.set(file.name, 'good');
-                mv.predictionScores.set(file.path, 0.9);
+                const files = [mv.compareLeftFile, mv.compareRightFile];
+                for (const file of files) {
+                    mv.bulkRated.set(file.name, 'good');
+                    mv.predictionScores.set(file.path, 0.9);
+                }
                 await mv.saveBulkRatedFile();
                 await mv.moveComparePair('left', 'like', 'dislike');
-                return file.name;
+                return files.map((f) => f.name);
             });
-            await expectRestored(name);
+            await expectRestored(names[0]);
+            await expectRestored(names[1], { undo: false });
         });
     });
 
@@ -231,9 +268,9 @@ test.describe('G3 rating data safety', () => {
             await expect(page.locator('#tournamentResumeModal')).toBeVisible();
             expect(await page.locator('#tournamentResumeTitle').textContent()).toBe('Resume tournament?');
 
-            // The prompt blocks clicks, not keys: the single-mode undo runs behind it.
-            await page.evaluate(() => document.activeElement && document.activeElement.blur());
-            await page.keyboard.press('Control+a');
+            // The list changes while the prompt is open. Keys no longer reach an undo here (the next test), so this
+            // calls it directly: Continue must still read the list as it is when pressed.
+            await page.evaluate(() => window.mediaViewer.handleCancel());
             await page.waitForFunction((p) => window.mediaViewer.mediaFiles.some((f) => f.path === p), liked);
             await waitForIdle(page);
 
@@ -243,6 +280,33 @@ test.describe('G3 rating data safety', () => {
             );
             const files = await page.evaluate(() => window.mediaViewer.tournament.engine.files);
             expect(files).toContain(liked);
+        });
+    });
+
+    // PR #95 review 3, 7. Not reproductions from main's run: added with the review's fixes, each seen failing first.
+    test.describe('the tournament prompts', () => {
+        async function openConfigPrompt() {
+            await open();
+            await page.evaluate(() => window.mediaViewer.switchMode('tournament'));
+            await expect(page.locator('#tournamentConfigModal')).toBeVisible();
+            await page.evaluate(() => document.activeElement && document.activeElement.blur());
+        }
+
+        test('a rating key behind a prompt moves nothing', async () => {
+            await openConfigPrompt();
+            await page.keyboard.press('q');
+            await page.keyboard.press('e');
+            await page.waitForTimeout(300);
+            expect(await mediaIn(source.likeDir)).toEqual([]);
+            expect(await mediaIn(source.dislikeDir)).toEqual([]);
+        });
+
+        test('a folder change closes an open prompt', async () => {
+            await openConfigPrompt();
+            other = await createTempFixtureDir(['green-1x1.png']);
+            await loadFolder(page, other.dir);
+            await waitForMedia(page);
+            await expect(page.locator('#tournamentConfigModal')).toBeHidden();
         });
     });
 

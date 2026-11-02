@@ -80,6 +80,7 @@ export class TournamentManager {
     async handleDiscard() {
         this.cancelPending(); // don't let a queued write recreate the file after delete
         this.engine = null;
+        if (this._writeInFlight) await this._writeInFlight; // nor a running one, whose rename would land after it
         const res = await window.electronAPI.deleteTournamentState(this.host.baseFolderPath);
         if (res && res.success === false) {
             // Retry once — a transient IO/lock failure shouldn't orphan .tournament_state.json
@@ -124,6 +125,7 @@ export class TournamentManager {
         const v = this.validateStateFile(state, currentFiles);
         if (!v.valid) return false;
         this.engine = TournamentEngine.deserialize(state, currentFiles);
+        this._persistFolder = this.host.baseFolderPath;
         return true;
     }
 
@@ -163,6 +165,8 @@ export class TournamentManager {
     // the folder since the tournament started are simply ignored. Returns { ok, removedCount }.
     async handleResumeReconciled(state, currentFiles) {
         this.engine = TournamentEngine.deserialize(state, state.files);
+        // A flush with no pick yet would otherwise write this folder's tournament over the last folder's save.
+        this._persistFolder = this.host.baseFolderPath;
         const removedCount = this.reconcileWithFiles(currentFiles);
         return { ok: true, removedCount };
     }
@@ -202,7 +206,12 @@ export class TournamentManager {
     // state at call time, so draining always persists the latest picks.
     async _drain() {
         if (this._writeInFlight) return; // a write is running; it re-drains on completion
-        if (!this._persistPending || !this.engine) return;
+        if (!this.engine) {
+            // Nothing to write, and a flag left set would spin flush() and hand this write to the next tournament.
+            this._persistPending = false;
+            return;
+        }
+        if (!this._persistPending) return;
         this._persistPending = false;
         const folder = this._persistFolder;
         this._writeInFlight = (async () => {
@@ -240,8 +249,7 @@ export class TournamentManager {
         }
     }
 
-    // What a quit owes: a queued or running write, and nothing else. flush() forces a write of the engine as it stands,
-    // to _persistFolder, which a resumed tournament has not set until its first pick.
+    // What a quit owes: a queued or running write, and nothing else. flush() forces a write of the engine as it stands.
     async flushPending() {
         while (this._writeInFlight && !this._persistPending) {
             await this._writeInFlight;
@@ -263,6 +271,7 @@ export class TournamentManager {
     async _persistState(folderPath) {
         if (!this.engine) return;
         const state = this.engine.serialize();
-        await window.electronAPI.writeTournamentState(folderPath, state);
+        const result = await window.electronAPI.writeTournamentState(folderPath, state);
+        if (result?.success === false) throw new Error(result.error); // _drain logs it
     }
 }

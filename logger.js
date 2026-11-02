@@ -235,7 +235,7 @@ function normalizeRendererLogEntry(data) {
     };
 }
 
-// An uncaught throw in main reaches the session log (G3 member 7). The monitor event on purpose: Electron shows its
+// An uncaught throw in main reaches the session log while it is open, from init to cleanup (G3 member 7). The monitor event on purpose: Electron shows its
 // error box only while it is the sole 'uncaughtException' listener, so a plain listener would silently remove the box.
 // No 'unhandledRejection' listener either: Node's warning already reaches the log through main's console.error override,
 // and a listener would silence it.

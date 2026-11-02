@@ -1382,7 +1382,7 @@ describe('applyPredictionSortResult', () => {
     const applyPredictionSortResult = extractMethod('applyPredictionSortResult');
 
     // G3 member 4: an order that lost a listed file took it out of the session's list.
-    it('keeps a listed file the result omits, after the ordered ones, without a score', () => {
+    it('keeps a listed file the result omits, after the ordered ones, with no new score', () => {
         const ctx = baseCtx();
         applyPredictionSortResult.call(ctx, { sortedFilenames: ['c.png', 'a.png'], scores: { 'c.png': 0.9 } });
         expect(ctx.mediaFiles.map((f) => f.name)).toEqual(['c.png', 'a.png', 'b.png']);
@@ -3090,9 +3090,26 @@ describe('handleCancel feature restore', () => {
         // The model is no longer updated per-rating, so there is no worker round trip to wait
         // for — applyBulkRating renders synchronously within the same call, every time.
         expect(showMedia).toHaveBeenCalledTimes(1);
-        // bulkFiles carries only the name now — nothing computes or stores features for it
+        // bulkFiles carries the name and any earlier label — nothing computes or stores features for it
         // (getCombinedFeatures is never called from applyBulkRating any more).
         expect(ctx.moveHistory[0].bulkFiles).toEqual([{ name: 'a.jpg' }, { name: 'z.jpg' }]);
+    });
+
+    // PR #95 review 4: an undo deleted a label the file already had before this rating.
+    it("applyBulkRating records each file's earlier label, and undoBulkRating gives it back", async () => {
+        const undoBulkRating = extractAsyncMethod('undoBulkRating');
+        const ctx = {
+            bulkRated: new Map([['a.jpg', 'good']]),
+            bulkRatedPairs: new Set(['a.jpg|z.jpg']),
+            bulkPairKey: () => 'a.jpg|z.jpg',
+            saveBulkRatedFile: vi.fn(async () => {}),
+            showNotification: vi.fn(),
+        };
+        ctx.bulkRated.set('z.jpg', 'bad');
+        ctx.bulkRated.set('a.jpg', 'bad');
+        await undoBulkRating.call(ctx, { bulkFiles: [{ name: 'a.jpg', previous: 'good' }, { name: 'z.jpg' }] });
+        expect([...ctx.bulkRated]).toEqual([['a.jpg', 'good']]);
+        expect(ctx.saveBulkRatedFile).toHaveBeenCalledOnce();
     });
 
     it('applyBulkRating drops a re-entrant press while navigation is already in flight', async () => {
@@ -3407,6 +3424,112 @@ describe('bulk-rated persistence', () => {
         finishWrite();
         await Promise.all([saving, loadingA]);
         expect(order).toEqual(['write', 'read /B', 'written', 'read /A']);
+    });
+
+    // PR #95 review 2: a failed read counted as no ratings, and the next rating replaced the whole file.
+    describe('a read that failed', () => {
+        const failingRead = {
+            'main says no': async () => ({ success: false, error: 'EBUSY' }),
+            'the call throws': async () => {
+                throw new Error('IPC gone');
+            },
+        };
+
+        it.each(Object.keys(failingRead))('%s: warns once, logs, and refuses every save of the visit', async (how) => {
+            const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+            const write = vi.fn(async () => ({ success: true }));
+            const logError = vi.fn();
+            Object.assign(globalThis.window.electronAPI, {
+                readBulkRatedFile: failingRead[how],
+                writeBulkRatedFile: write,
+                logError,
+            });
+            const ctx = withSaver({
+                baseFolderPath: '/folder',
+                currentFolderPath: 'folder',
+                mediaFiles: [{ name: 'x.png' }],
+                bulkRated: new Map(),
+                _bulkRatedSaveWarning: { warned: false },
+                showNotification: vi.fn(),
+            });
+            await loadBulkRatedFile.call(ctx);
+            ctx.bulkRated.set('x.png', 'good');
+            await saveBulkRatedFile.call(ctx);
+            await saveBulkRatedFile.call(ctx);
+            expect(write).not.toHaveBeenCalled();
+            expect(ctx.showNotification).toHaveBeenCalledTimes(1);
+            expect(ctx.showNotification.mock.calls[0][0]).toContain('folder');
+            expect(ctx.showNotification.mock.calls[0][1]).toBe('warning');
+            expect(logError).toHaveBeenCalledTimes(1);
+            warn.mockRestore();
+        });
+
+        it('the next load that reads re-arms the saves', async () => {
+            const write = vi.fn(async () => ({ success: true }));
+            const read = vi
+                .fn()
+                .mockResolvedValueOnce({ success: false, error: 'EBUSY' })
+                .mockResolvedValueOnce({ success: true, data: { version: 1, good: ['x.png'], bad: [] } });
+            Object.assign(globalThis.window.electronAPI, {
+                readBulkRatedFile: read,
+                writeBulkRatedFile: write,
+                logError: vi.fn(),
+            });
+            const ctx = withSaver({
+                baseFolderPath: '/folder',
+                currentFolderPath: 'folder',
+                mediaFiles: [{ name: 'x.png' }],
+                bulkRated: new Map(),
+                _bulkRatedSaveWarning: { warned: false },
+                showNotification: vi.fn(),
+            });
+            await loadBulkRatedFile.call(ctx);
+            await loadBulkRatedFile.call(ctx);
+            expect(ctx.bulkRated.get('x.png')).toBe('good');
+            await saveBulkRatedFile.call(ctx);
+            expect(write).toHaveBeenCalledTimes(1);
+        });
+
+        it('a missing file is not a failed read: saves go on', async () => {
+            const write = vi.fn(async () => ({ success: true }));
+            Object.assign(globalThis.window.electronAPI, {
+                readBulkRatedFile: async () => ({ success: true, data: null }),
+                writeBulkRatedFile: write,
+            });
+            const ctx = withSaver({
+                baseFolderPath: '/folder',
+                currentFolderPath: 'folder',
+                mediaFiles: [],
+                bulkRated: new Map(),
+                _bulkRatedSaveWarning: { warned: false },
+                showNotification: vi.fn(),
+            });
+            await loadBulkRatedFile.call(ctx);
+            await saveBulkRatedFile.call(ctx);
+            expect(write).toHaveBeenCalledTimes(1);
+            expect(ctx.showNotification).not.toHaveBeenCalled();
+        });
+    });
+
+    // PR #95 review 6: the toast dies with the window at a quit, so a failed write must reach the session log too.
+    it('a failed save is logged', async () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const logError = vi.fn();
+        Object.assign(globalThis.window.electronAPI, {
+            writeBulkRatedFile: async () => ({ success: false, error: 'EPERM' }),
+            logError,
+        });
+        const ctx = withSaver({
+            baseFolderPath: '/folder',
+            currentFolderPath: 'folder',
+            bulkRated: new Map([['x.png', 'good']]),
+            _bulkRatedSaveWarning: { warned: true }, // already warned this visit: the log still gets it
+            showNotification: vi.fn(),
+        });
+        await saveBulkRatedFile.call(ctx);
+        expect(logError).toHaveBeenCalledTimes(1);
+        expect(logError.mock.calls[0][0]).toContain('EPERM');
+        warn.mockRestore();
     });
 
     it('a successful save posts nothing', async () => {
@@ -3856,8 +3979,8 @@ describe('bulkRatedPairs key capture + restore across undo (G1 T3)', () => {
     });
 
     it('moveCurrentFile files a fallback extraction under the visit the move started in (close-out cut 8)', async () => {
-        // Moves don't refuse during a folder load: a loadFolder already listing when the move starts ends the visit
-        // during the extraction's await. Read after the await, the visit was always the current one.
+        // A results' visit is the one its work started in, whatever happens across the extraction's await. Read after
+        // the await, the visit was always the current one. Moves now refuse during a load; the store's rule stands.
         const moveCurrentFile = extractAsyncMethod('moveCurrentFile');
         const a = { name: 'a.jpg', path: '/f/a.jpg', size: 10, mtimeMs: 7, type: 'image/jpeg' };
         const started = Object.freeze({ id: 1, folder: '/f' });
@@ -5389,6 +5512,7 @@ describe('loadFolder empty-folder teardown (Fix B follow-up)', () => {
 
     function makeCtx() {
         const ctx = {
+            _closeTournamentPrompts: vi.fn(),
             isTournamentMode: false,
             tournament: { engine: 'stale-engine' },
             _onOrderChanged: vi.fn(),
@@ -6077,8 +6201,8 @@ describe('handleAppCloseRequest', () => {
 
     it('does NOT guard when the RESUME prompt is open — window stays closable (allows close)', () => {
         // The 'Resume tournament?' prompt reuses the SAME modal but shows while isTournamentMode
-        // is still false (before entering); clicking X during it must fall through to
-        // allowAppClose(), not be swallowed by the leave-prompt re-entrancy guard.
+        // is still false (before entering); clicking X during it must fall through to the
+        // save-then-close, not be swallowed by the leave-prompt re-entrancy guard.
         globalThis.document = {
             getElementById: (id) => {
                 if (id === 'tournamentResumeModal') return { style: { display: 'flex' } };
@@ -6091,7 +6215,7 @@ describe('handleAppCloseRequest', () => {
         expect(ctx._saveThenAllowClose).toHaveBeenCalledTimes(1);
     });
 
-    it('a second close during the save closes at once, ahead of everything else', () => {
+    it('a second close once the note has shown closes at once, ahead of everything else', () => {
         // The leave prompt being "open" would swallow it: the way out must not depend on that check.
         globalThis.document = {
             getElementById: (id) => {
@@ -6102,12 +6226,47 @@ describe('handleAppCloseRequest', () => {
         };
         const ctx = closing({
             _closeSaveInFlight: true,
+            _closeSaveNoteShown: true,
             isTournamentMode: false,
             tournament: {},
             showTournamentLeavePrompt: vi.fn(),
         });
         handleAppCloseRequest.call(ctx);
         expect(allowAppClose).toHaveBeenCalledTimes(1);
+        expect(ctx._saveThenAllowClose).not.toHaveBeenCalled();
+    });
+
+    // PR #95 review 9: the prompt's own write ran outside the cap, with every further close swallowed.
+    it('a close after a choice in the leave prompt is let through', () => {
+        globalThis.document = {
+            getElementById: (id) => {
+                if (id === 'tournamentResumeModal') return { style: { display: 'flex' } };
+                if (id === 'tournamentResumeTitle') return { textContent: 'Leave tournament?' };
+                return null;
+            },
+        };
+        const ctx = closing({
+            _leaveChoiceMade: true,
+            isTournamentMode: true,
+            tournament: { engine: { isComplete: () => false } },
+            showTournamentLeavePrompt: vi.fn(),
+        });
+        handleAppCloseRequest.call(ctx);
+        expect(allowAppClose).toHaveBeenCalledTimes(1);
+        expect(ctx.showTournamentLeavePrompt).not.toHaveBeenCalled();
+    });
+
+    // PR #95 review 10: nothing has invited a second close until the note shows, and it would drop a queued save.
+    it('a second close before the note has shown is ignored', () => {
+        const ctx = closing({
+            _closeSaveInFlight: true,
+            _closeSaveNoteShown: false,
+            isTournamentMode: false,
+            tournament: {},
+            showTournamentLeavePrompt: vi.fn(),
+        });
+        handleAppCloseRequest.call(ctx);
+        expect(allowAppClose).not.toHaveBeenCalled();
         expect(ctx._saveThenAllowClose).not.toHaveBeenCalled();
     });
 

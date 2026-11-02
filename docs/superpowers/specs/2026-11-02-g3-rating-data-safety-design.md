@@ -114,11 +114,11 @@ export class CoalescingSaver {
 
 `applyPredictionSortResult` lays the result over the live list with `SimilaritySort.alignToLive`: ordered files first, then every other live file in live order. "No files to sort" still fires when no name in the result is live. A chip re-sort passes the aligned list to `parkSkippedOrder` unchanged.
 
-Scoreless files at the end of the list do not distort compare mode: `computeValidComparePairs` already reads a missing score as 0.5.
+Compare mode reads a missing score as 0.5 (`computeValidComparePairs`). With mixed scores that is the middle; when every score sits on one side of 0.5 it puts the kept file in an extreme slot, so it can pair with the top file until the next sort (corrected after PR #95 review 14; § 7).
 
 ### 3.5 Member 5: Continue reads the list when it is pressed
 
-The Continue handler reads `this.mediaFiles` after `restoreOriginalOrderForTournament()`, not the list captured when the prompt opened. That list stays only for the prompt's preview text. Keys reach the app behind the prompt, which the reproduction proved with a real Ctrl+A, so Continue also refuses during a file action or a load, as the header actions do.
+The Continue handler reads `this.mediaFiles` after `restoreOriginalOrderForTournament()`, not the list captured when the prompt opened. That list stays only for the prompt's preview text. Keys reached the app behind the prompt, which the reproduction proved with a real Ctrl+A, so Continue also refuses during a file action or a load, as the header actions do. PR #95 review 3 and 7 then closed two consequences: no key dispatches behind a prompt but Escape and F1, and a folder load closes the prompts.
 
 ### 3.6 Member 6: a quit saves what is owed
 
@@ -130,7 +130,7 @@ The window-close handshake already exists, and `handleAppCloseRequest` is its on
 
 - **Member 2 makes this required, not optional.** A coalesced save waits in the renderer, where a quit would lose it. Before, each save had already gone to main.
 - **The cap.** Training-folder saves in the local perf log ran ~0.3 ms an entry (4,456 ms at 15,864 entries; 3,191 ms at 13,207), so 24k is ~7 s, and a save already streaming plus the queued one is ~14 s. Past the cap the temp file is abandoned and the cache on disk is untouched, which is the loss the app has today.
-- **No trap.** After 300 ms a sticky note says "Saving before closing — close again to quit now", and a second close request allows the close at once. A normal quit owes nothing, settles in microtasks and shows no note.
+- **No trap.** After 300 ms a sticky note says "Saving before closing — close again to quit now", and a close request after that allows the close at once; before the note it is ignored, as a double click that would drop a queued save (PR #95 review 10). The leave prompt's write runs before this wait and outside the cap, so a close request after a choice there is let through too (review 9). A normal quit owes nothing, settles in microtasks and shows no note.
 - `main.js` does not change. One perf-log line records the wait and whether it hit the cap, so the cap can be re-judged on real numbers.
 
 ### 3.7 Member 7: log a throw, keep the box
@@ -203,13 +203,18 @@ The saver is a mutation target: key every folder to one queue and the other-fold
 
 ## 7. Left alone, for the plan's Future Improvements
 
-- A render already in flight when a direct `loadFolder` swaps the list can paint a stale file, because `showMedia()` returns early on `isLoading`. Only the Apply reload reaches it today.
+- A render already in flight when a direct `loadFolder` swaps the list can paint a stale file, because `showMedia()` returns early on `isLoading`. The Apply reload reaches it, and so does a JXL decode still running at a folder switch, which then paints over the new folder's image, so a rating moves a file no longer shown (PR #95 review 8). BACKLOG says the user's folders hold no JXL today.
 - A pair undo whose second restore fails pushes both entries back, and the first can then never move again (its `newPath` is gone).
-- The tournament prompts do not own the keyboard, so single-mode actions run behind them. Member 5 handles the resume prompt's consequence, not the cause.
+- The tournament prompts still do not own focus: Tab and Enter reach the header behind them. Keys no longer dispatch and a load closes them (PR #95 review 3, 7), so the two known results are closed, not the cause.
 - A hung renderer can still make the window unclosable, because main has no bound on the handshake. It cannot have a blind one while the leave prompt waits on the user.
 - Hash and sort caches are not flushed at quit: they are recomputable, and each has its own periodic save.
 - An OS shutdown (`session-end`) was not checked.
 - A refused feature-cache save's re-read and re-save are not waited for at quit: they cost a re-extraction, not data.
 - File actions are not refused during the save at quit. A press in that window still moves its file, and its label change may not be saved; the next load prunes a stale name.
+- A reload skips the close handshake (PR #95 review 13, measured in a bare Electron window): `main.js` sets no menu, so the default menu's reload runs with 0 `close` events, losing a queued save, the 500 ms tournament write and unsaved feature entries. Removing those roles changes the menu and developer tools, so it is the user's call.
+- The quit's wait reads `_fileOpInFlight` (PR #95 review 12): `handleTournamentUndo` never holds it, a batch undo past 2 s loses its labels, and with the bulk-dislike or folder-creation dialog open X waits 2 s and shows the note though nothing is saving.
+- A kept scoreless file can be bulk-rated, and a label on a file with no features blocks the model cache, so each later AI sort of that folder retrains (PR #95 review 14; BACKLOG "Remember a stable decode failure, so an undecodable training file stops blocking the model cache").
+- A bulk label is erased on disk by removals that are not ratings, with no undo: a tournament skip, and the load prune when a stat fails during listing (PR #95 review 15; reach unproven).
+- A final tournament pick under 500 ms before a folder switch on a complete tournament never reaches disk: `loadFolder` nulls the engine without a flush (PR #95 review 5). Its wrong-folder half is closed.
 - A `.bulk_rated.json` write that never settles holds a later load of that same folder, since the load waits for it. Main's write has no timeout; a read of a drive that hung would hang as well, so this adds no new stall class, but the saver's wait is unbounded.
 - 🟤 "`mlFeatures` capture is gated on `isMlEnabled && mlWorker`" stays open: it costs a re-extraction, not data.

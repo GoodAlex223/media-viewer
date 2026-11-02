@@ -271,6 +271,13 @@ describe('member 3: an undo gives a file back what its removal destroyed', () =>
         }
     });
 
+    // PR #95 review 19: a one-word slip here gives the right-hand file the left one's label, and labels feed training.
+    it("a pair move captures each file's own fields", () => {
+        const body = extract('moveComparePair').toString();
+        expect(body).toMatch(/const primaryEntry = \{[^}]*\.\.\.this\._captureUndoFields\(primaryFile\),\s*\};/);
+        expect(body).toMatch(/const secondaryEntry = \{[^}]*\.\.\.this\._captureUndoFields\(secondaryFile\),\s*\};/);
+    });
+
     it('restores the label and the score, and saves the label', () => {
         const ctx = restoreCtx();
         restore.call(ctx, { fileName: 'a.jpg', originalPath: '/f/a.jpg', score: 0.9, bulkBucket: 'bad' });
@@ -372,6 +379,56 @@ describe('member 5: Continue reads the list when it is pressed', () => {
     );
 });
 
+describe('the tournament prompts (PR #95 review 3, 7)', () => {
+    const IDS = ['tournamentConfigModal', 'tournamentResumeModal', 'tournamentSummaryModal'];
+    let els;
+
+    beforeEach(() => {
+        els = Object.fromEntries(IDS.map((id) => [id, { style: { display: 'none' } }]));
+        globalThis.document = { getElementById: (id) => els[id] ?? null };
+    });
+    afterEach(() => {
+        delete globalThis.document;
+    });
+
+    it.each(IDS)('%s open: a key must not dispatch behind it', (id) => {
+        const open = extract('_tournamentPromptOpen');
+        expect(open.call({})).toBe(false);
+        els[id].style.display = 'flex';
+        expect(open.call({})).toBe(true);
+    });
+
+    it('the keydown handler checks first, with only Escape and F1 let past', () => {
+        const gate = source.indexOf(
+            "if (this._tournamentPromptOpen() && e.key !== 'Escape' && e.key !== 'F1') return;"
+        );
+        expect(gate).toBeGreaterThan(-1);
+        const handler = source.lastIndexOf("document.addEventListener('keydown', (e) => {", gate);
+        expect(gate - handler).toBeLessThan(300); // the handler's first statement, comment aside
+        expect(source.indexOf('if (this.mediaFiles.length === 0) {', handler)).toBeGreaterThan(gate);
+    });
+
+    it('a folder load closes every prompt, after its refusals', () => {
+        const close = extract('_closeTournamentPrompts');
+        for (const id of IDS) els[id].style.display = 'flex';
+        close.call({});
+        for (const id of IDS) expect(els[id].style.display).toBe('none');
+
+        const load = extract('loadFolder').toString();
+        const refusal = load.indexOf('this._refuseIfFolderLoadInFlight()');
+        const closing = load.indexOf('this._closeTournamentPrompts()');
+        expect(refusal).toBeGreaterThan(-1);
+        expect(closing).toBeGreaterThan(refusal);
+        expect(closing).toBeLessThan(load.indexOf('await '));
+    });
+
+    it('the leave prompt marks a choice as soon as it is made, and clears it with the prompt', () => {
+        const body = extract('showTournamentLeavePrompt').toString();
+        expect(body.split('this._leaveChoiceMade = true;').length - 1).toBe(2); // Save & leave, Discard
+        expect(body).toContain('this._leaveChoiceMade = false;');
+    });
+});
+
 describe('member 6: _saveThenAllowClose', () => {
     const saveThenAllowClose = extract('_saveThenAllowClose');
     const settleSavesForClose = extract('_settleSavesForClose');
@@ -409,6 +466,7 @@ describe('member 6: _saveThenAllowClose', () => {
         const ctx = makeCtx();
         await saveThenAllowClose.call(ctx);
         expect(allowAppClose).toHaveBeenCalledTimes(1);
+        expect(vi.getTimerCount()).toBe(0);
         await vi.advanceTimersByTimeAsync(60_000);
         expect(ctx.showNotification).not.toHaveBeenCalled();
         expect(allowAppClose).toHaveBeenCalledTimes(1);
@@ -454,6 +512,7 @@ describe('member 6: _saveThenAllowClose', () => {
         expect(ctx.showNotification).not.toHaveBeenCalled();
         await vi.advanceTimersByTimeAsync(1);
         expect(ctx.showNotification.mock.calls).toEqual([[NOTE, 'info', { sticky: true }]]);
+        expect(ctx._closeSaveNoteShown).toBe(true); // what lets a second close through
     });
 
     it('a save that never settles closes at the 15 s cap, and the perf log says so', async () => {
@@ -465,12 +524,46 @@ describe('member 6: _saveThenAllowClose', () => {
         await closing;
         expect(allowAppClose).toHaveBeenCalledTimes(1);
         expect(logPerf.mock.calls).toEqual([['Quit save: 15000ms, capped']]);
+        expect(vi.getTimerCount()).toBe(0);
     });
 
-    it('a finished save logs its wait as saved', async () => {
+    // "settled", not "saved": a failed write settles too, and it reaches the session log on its own (PR #95 review 6).
+    it('a finished wait logs as settled', async () => {
         await saveThenAllowClose.call(makeCtx());
         expect(logPerf).toHaveBeenCalledTimes(1);
-        expect(logPerf.mock.calls[0][0]).toMatch(/^Quit save: \d+ms, saved$/);
+        expect(logPerf.mock.calls[0][0]).toMatch(/^Quit save: \d+ms, settled$/);
+    });
+
+    it('a flush that rejects does not end the wait for the others', async () => {
+        let finishBulk;
+        const ctx = makeCtx({
+            _bulkRatedSaver: { whenIdle: vi.fn(() => new Promise((resolve) => (finishBulk = resolve))) },
+            featureCacheStore: {
+                flush: vi.fn(async () => {
+                    throw new Error('disk');
+                }),
+            },
+        });
+        const closing = saveThenAllowClose.call(ctx);
+        await vi.advanceTimersByTimeAsync(0);
+        expect(allowAppClose).not.toHaveBeenCalled();
+        finishBulk();
+        await closing;
+        expect(allowAppClose).toHaveBeenCalledTimes(1);
+    });
+
+    // PR #95 review 11: a running sort kept collecting vectors behind the flush.
+    it('stops a running sort as well as the extraction', async () => {
+        const abort = vi.fn();
+        await saveThenAllowClose.call(makeCtx({ sortAbortController: { abort } }));
+        expect(abort).toHaveBeenCalledOnce();
+    });
+
+    it("the extraction's tail does not start a second full save behind the quit's", () => {
+        const body = extract('startBackgroundFeatureExtraction').toString();
+        const gate = body.indexOf('if (this._closeSaveInFlight)');
+        expect(gate).toBeGreaterThan(-1);
+        expect(gate).toBeLessThan(body.indexOf('this.featureCacheStore.finishExtractionRun('));
     });
 
     it('a rejecting flush does not stop the other saves or the close', async () => {

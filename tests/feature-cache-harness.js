@@ -351,6 +351,7 @@ export function makeHost(main, { enableClipFeatures = false } = {}) {
         _fileOpInFlight: false,
         _folderLoadInFlight: false,
         _folderIntentGen: 0,
+        _closeTournamentPrompts() {},
         _grantRefreshGen: 0,
         _similarityRunGen: 0,
         _similarityGenAbort: new AbortController(),

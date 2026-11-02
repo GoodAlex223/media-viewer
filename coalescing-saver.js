@@ -12,7 +12,8 @@ export class CoalescingSaver {
 
     /**
      * Writes `payload` for `folder`, now or after the running write, unless a newer request replaces it first.
-     * Settles once this payload or a newer one of that folder has been written. Never rejects.
+     * Settles once this payload or a newer one of that folder has been attempted: a write that fails reports through
+     * its own callback. Never rejects.
      */
     request(folder, payload) {
         return new Promise((resolve) => {

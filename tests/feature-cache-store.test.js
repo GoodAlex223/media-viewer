@@ -883,6 +883,25 @@ describe('flush (G3 member 6: what a quit waits for)', () => {
         expect(main.entriesOf('/A').has('a4.jpg')).toBe(true);
     });
 
+    it('keeps waiting while the chain grows behind the save it is waiting on', async () => {
+        const { store } = makeStore(main);
+        let finishFirst, finishSecond;
+        const first = new Promise((resolve) => (finishFirst = resolve));
+        const second = new Promise((resolve) => (finishSecond = resolve));
+        store._saveChain = first;
+        let flushed = false;
+        const flush = store.flush().then(() => {
+            flushed = true;
+        });
+        await settle();
+        store._saveChain = first.then(() => second); // requested after flush took its look at the chain
+        finishFirst();
+        await settle();
+        expect(flushed).toBe(false);
+        finishSecond();
+        await flush;
+    });
+
     it('owes nothing and writes nothing for a clean visit, or with no visit', async () => {
         const files = makeFiles('/A', 'a', 3);
         const { store } = await readVisit(files);
