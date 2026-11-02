@@ -16,8 +16,8 @@ ROADMAP principle 2 is "No data loss". What this app exists to keep is where the
 - every member's reproduction (§ 2) failed on `main` first, and passes on the branch;
 - no file action runs while a folder is opening, and no undo depends on which folder happens to be open;
 - two saves of `.bulk_rated.json` can no longer reach the disk in the wrong order;
-- a quit writes what the app still owes the disk, and cannot trap the window;
-- an uncaught throw in main reaches the session log, and the user still sees the error box they see today;
+- a quit writes what the app still owes the disk, and its wait cannot trap the window;
+- an uncaught throw in main, while the session log is open (from `logger.init` to `cleanup`), reaches it, and the user still sees the error box they see today;
 - the unit and E2E suites pass;
 - `media-viewer.js` ends no longer than it started, or the PR states the raise (§ 3.8).
 
@@ -152,7 +152,7 @@ No file-move handler changes, so PROJECT.md's Tier 1 approval does not apply.
 
 ### 3.8 The renderer ceiling
 
-**Result**: 11,527 lines, with `_fileFromHistory` applied at seven sites, so no raise; the ceiling moved down to the count. The renderer sat exactly at its 11,529-line ceiling. The helpers in §§ 3.1 and 3.3 remove about 65 repeated lines and the rest add about 85, so the estimate was about +20. If it lands over, a small `_fileFromHistory(entry)` for the six repeated list-entry literals in the undo branches saves about 36 more. That is the same code being touched, and it is the plan's first resort before a raise. WEEKLY allows G3 an explicit raise (v2's net ≤ 0 binds v2 phases), so a raise stays legal, and the PR must then state it.
+**Result**: 11,527 lines after the build, with `_fileFromHistory` applied at seven sites; then 11,572 after PR #95's review round 1, an explicit raise of 43 over the start for its data-safety fixes, stated in the PR. The renderer sat exactly at its 11,529-line ceiling. The helpers in §§ 3.1 and 3.3 remove about 65 repeated lines and the rest add about 85, so the estimate was about +20. If it lands over, a small `_fileFromHistory(entry)` for the six repeated list-entry literals in the undo branches saves about 36 more. That is the same code being touched, and it is the plan's first resort before a raise. WEEKLY allows G3 an explicit raise (v2's net ≤ 0 binds v2 phases), so a raise stays legal, and the PR must then state it.
 
 The ceiling must **equal** the count when this merges, whichever way it moved, because the ratchet refuses the closeout's push to `main` if the count is under the ceiling too.
 

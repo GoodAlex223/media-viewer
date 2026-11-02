@@ -171,6 +171,19 @@ Spec § 7 lists what I noticed and did not act on. Those fifteen items are this 
 
 ---
 
+From PR #95 review round 1, each going to BACKLOG 🟤 at close-out (ruled "recorded, not fixed" in the review response):
+
+- Merge the two pair-undo branches of `handleCancel`, and the file-to-entry and batch list-entry literals (cleanup that would also lower the ceiling).
+- Apply and tournament undo hold neither the file-op nor the load flag.
+- The write inversion's root is main's guard order: other callers of main's atomic writer keep it, only `.bulk_rated.json` is closed.
+- `withUndoHelpers`, `extract` and `waitForIdle` are copied between test files.
+- The second quit E2E does not clear `localStorage`; `flushPending() waits…` leaves a real 500 ms timer armed.
+- `closeApp`'s 5 s limit is under the 15 s quit cap, and its callers are not traced for disk assertions after close.
+- A bulk-rated warning's folder name is empty for a drive root.
+- A label stays on `a (1).jpg` after a suffixed restore and a bulk undo.
+- A refused toast Remove still closes the toast; a refused config-modal Cancel leaves the mode button stale.
+- The Resume prompt's Cancel can start a render during a file action.
+
 ## 7. Testing
 
 Plan: spec § 5. Results: to fill during Phases 1–5.
@@ -188,6 +201,10 @@ Plan: spec § 5. Results: to fill during Phases 1–5.
 | Phase 5: lint | 0 errors, 2 no-shadow warnings | In test code this branch did not write |
 | Phase 5: `format:check` | 10 files flagged | All in the ignored local `CLAUDE-SECURITY-*` scan output; none is tracked by this branch |
 | Phase 5: line ratchet, dry run | At the ceiling | 11,527 lines, ceiling 11,527 |
+| Review round 1: unit suite | 2625 passed, 1 skipped | At `7e452f1` |
+| Review round 1: full E2E | 251 passed, 7 skipped | Pre-push at `7e452f1` |
+| Review round 1: mutants, in a throwaway copy | 10 of 10 fail | The review's 6 survivors plus 4 for this round's fixes; baseline 664 passed |
+| Review round 1: E2Es with the fix reverted | 4 of 4 fail | Prompt gate, prompt closing, `dirname` rule, second file's capture |
 | Manual smoke | Not run | `docs/MANUAL_TESTING.md` § Rating Data Safety. The user approved the push without it on 2026-11-02; owed during review |
 
 ---
