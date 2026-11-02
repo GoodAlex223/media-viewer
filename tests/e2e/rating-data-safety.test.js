@@ -142,7 +142,7 @@ test.describe('G3 rating data safety', () => {
     });
 
     test.describe('member 3: an undo gives a file back its label and its score', () => {
-        async function expectRestored(name, { undo = true } = {}) {
+        async function expectRestored(name, { undo = true, label = 'good', score = 0.9 } = {}) {
             await waitForIdle(page);
             if (undo) {
                 await page.evaluate(() => window.mediaViewer.handleCancel());
@@ -156,9 +156,9 @@ test.describe('G3 rating data safety', () => {
                     score: file ? (mv.predictionScores.get(file.path) ?? null) : null,
                 };
             }, name);
-            expect(restored).toEqual({ label: 'good', score: 0.9 });
+            expect(restored).toEqual({ label, score });
             await expect
-                .poll(async () => JSON.parse(await readFile(join(source.dir, '.bulk_rated.json'), 'utf8')).good)
+                .poll(async () => JSON.parse(await readFile(join(source.dir, '.bulk_rated.json'), 'utf8'))[label])
                 .toContain(name);
         }
 
@@ -197,16 +197,17 @@ test.describe('G3 rating data safety', () => {
             const names = await page.evaluate(async () => {
                 const mv = window.mediaViewer;
                 const files = [mv.compareLeftFile, mv.compareRightFile];
-                for (const file of files) {
-                    mv.bulkRated.set(file.name, 'good');
-                    mv.predictionScores.set(file.path, 0.9);
-                }
+                // Different on purpose: each file must get its own back, not the other's.
+                mv.bulkRated.set(files[0].name, 'good');
+                mv.predictionScores.set(files[0].path, 0.9);
+                mv.bulkRated.set(files[1].name, 'bad');
+                mv.predictionScores.set(files[1].path, 0.2);
                 await mv.saveBulkRatedFile();
                 await mv.moveComparePair('left', 'like', 'dislike');
                 return files.map((f) => f.name);
             });
             await expectRestored(names[0]);
-            await expectRestored(names[1], { undo: false });
+            await expectRestored(names[1], { undo: false, label: 'bad', score: 0.2 });
         });
     });
 
@@ -283,7 +284,7 @@ test.describe('G3 rating data safety', () => {
         });
     });
 
-    // PR #95 review 3, 7. Not reproductions from main's run: added with the review's fixes, each seen failing first.
+    // PR #95 review 3, 7. Not from main's run: added with the review's fixes, and each fails with its fix reverted.
     test.describe('the tournament prompts', () => {
         async function openConfigPrompt() {
             await open();
