@@ -196,7 +196,7 @@ The saver is a mutation target: key every folder to one queue and the other-fold
 ## 6. Dependencies between members
 
 - Member 6 needs member 2's `whenIdle`, and member 2 is unsafe without member 6, so they land together.
-- Member 3's restore calls the saver from inside `restoreFeatureCachesFromHistory`, which is why a batch undo's repeated saves are now cheap.
+- Member 3's restore calls the saver from inside `restoreFeatureCachesFromHistory`. A batch undo passes `{ deferBulkSave: true }` and saves once itself, as a batch's removal does (changed while building: the existing one-save test stays as it was).
 - Member 1's helper and member 3's capture are what keep the renderer near its ceiling.
 
 ---

@@ -121,7 +121,10 @@ export function trainingWeight(entry) {
     if (entry.actionType === 'like' || entry.actionType === 'dislike') {
         return 1;
     }
-    return 0; // special moves and anything else that does not feed training
+    if (entry.actionType === 'special' && entry.bulkBucket) {
+        return 1; // a bulk-rated file was in the training set, and this move took it out
+    }
+    return 0; // other special moves and anything else that does not feed training
 }
 
 /**

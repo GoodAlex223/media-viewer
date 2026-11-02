@@ -29,6 +29,103 @@ function extract(name) {
     throw new Error(`Unbalanced braces in: ${name}`);
 }
 
+describe('member 3: an undo gives a file back what its removal destroyed', () => {
+    const captureUndoFields = extract('_captureUndoFields');
+    const restore = extract('restoreFeatureCachesFromHistory');
+    const file = { name: 'a.jpg', path: '/f/a.jpg' };
+
+    function captureCtx(over = {}) {
+        return {
+            _bulkPairKeysReferencing: () => [],
+            perceptualHashes: new Map(),
+            predictionScores: new Map(),
+            bulkRated: new Map(),
+            ...over,
+        };
+    }
+
+    function restoreCtx() {
+        return {
+            bulkRatedPairs: new Set(),
+            perceptualHashes: new Map(),
+            predictionScores: new Map(),
+            bulkRated: new Map(),
+            saveBulkRatedFile: vi.fn(async () => {}),
+        };
+    }
+
+    it('captures all four fields', () => {
+        const ctx = captureCtx({
+            _bulkPairKeysReferencing: () => ['a.jpg|b.jpg'],
+            perceptualHashes: new Map([[file.path, '0101']]),
+            predictionScores: new Map([[file.path, 0.9]]),
+            bulkRated: new Map([[file.name, 'good']]),
+        });
+        expect(captureUndoFields.call(ctx, file)).toEqual({
+            prunedPairKeys: ['a.jpg|b.jpg'],
+            perceptualHash: '0101',
+            score: 0.9,
+            bulkBucket: 'good',
+        });
+    });
+
+    it('omits what the file does not have, and keeps a score of 0', () => {
+        expect(Object.keys(captureUndoFields.call(captureCtx(), file))).toEqual([]);
+        const ctx = captureCtx({ predictionScores: new Map([[file.path, 0]]) });
+        expect(captureUndoFields.call(ctx, file)).toEqual({ score: 0 });
+    });
+
+    it('every move site captures through the one helper, before the removal', () => {
+        const count = (text, needle) => text.split(needle).length - 1;
+        expect(count(source, '...this._captureUndoFields(')).toBe(5);
+        for (const [method, sites] of [
+            ['moveCurrentFile', 1],
+            ['moveToSpecialFolder', 1],
+            ['moveComparePair', 2],
+            ['dislikeSkippedFiles', 1],
+        ]) {
+            expect(count(extract(method).toString(), '...this._captureUndoFields('), method).toBe(sites);
+        }
+    });
+
+    it('restores the label and the score, and saves the label', () => {
+        const ctx = restoreCtx();
+        restore.call(ctx, { fileName: 'a.jpg', originalPath: '/f/a.jpg', score: 0.9, bulkBucket: 'bad' });
+        expect(ctx.bulkRated.get('a.jpg')).toBe('bad');
+        expect(ctx.predictionScores.get('/f/a.jpg')).toBe(0.9);
+        expect(ctx.saveBulkRatedFile).toHaveBeenCalledOnce();
+    });
+
+    it('a batch undo defers the save, and makes its own once', () => {
+        const ctx = restoreCtx();
+        restore.call(ctx, { fileName: 'a.jpg', originalPath: '/f/a.jpg', bulkBucket: 'bad' }, { deferBulkSave: true });
+        expect(ctx.bulkRated.get('a.jpg')).toBe('bad');
+        expect(ctx.saveBulkRatedFile).not.toHaveBeenCalled();
+    });
+
+    it('restores a score of 0, and saves nothing for a file with no label', () => {
+        const ctx = restoreCtx();
+        restore.call(ctx, { fileName: 'a.jpg', originalPath: '/f/a.jpg', score: 0 });
+        expect(ctx.predictionScores.get('/f/a.jpg')).toBe(0);
+        expect(ctx.bulkRated.size).toBe(0);
+        expect(ctx.saveBulkRatedFile).not.toHaveBeenCalled();
+    });
+
+    it('a file with no features still gets both back, under the name it came back to', () => {
+        const ctx = restoreCtx();
+        // What _followRestoredFile leaves when the name was taken: the entry already points at the suffixed file.
+        restore.call(ctx, {
+            fileName: 'a (1).jpg',
+            originalPath: '/f/a (1).jpg',
+            mlFeatures: null,
+            score: 0.4,
+            bulkBucket: 'good',
+        });
+        expect([...ctx.bulkRated]).toEqual([['a (1).jpg', 'good']]);
+        expect([...ctx.predictionScores]).toEqual([['/f/a (1).jpg', 0.4]]);
+    });
+});
+
 describe('member 6: _saveThenAllowClose', () => {
     const saveThenAllowClose = extract('_saveThenAllowClose');
     const settleSavesForClose = extract('_settleSavesForClose');

@@ -3706,6 +3706,7 @@ describe('bulkRatedPairs key capture + restore across undo (G1 T3)', () => {
             bulkRatedPairs: new Set(pairs),
             bulkPairKey,
             _bulkPairKeysReferencing: keysReferencing,
+            _captureUndoFields: extractMethod('_captureUndoFields'),
             saveBulkRatedFile: () => {},
             likeOrSkip: new LikeOrSkip.SkipTracker(),
         };
@@ -3904,10 +3905,10 @@ describe('bulkRatedPairs key capture + restore across undo (G1 T3)', () => {
             const body = methodSource(name);
             const prune = body.indexOf('this.removeFileFromList(');
             expect(prune, name).toBeGreaterThan(-1);
-            const hits = [...body.matchAll(/this\.perceptualHashes\.get\(/g)].map((m) => m.index);
+            const hits = [...body.matchAll(/\.\.\.this\._captureUndoFields\(/g)].map((m) => m.index);
             expect(hits, name).toHaveLength(stashes);
             for (const idx of hits) expect(idx, name).toBeLessThan(prune);
-            expect(body, name).toContain('perceptualHash');
+            expect(methodSource('_captureUndoFields'), name).toContain('this.perceptualHashes.get(file.path)');
         }
     });
 
@@ -3926,7 +3927,7 @@ describe('bulkRatedPairs key capture + restore across undo (G1 T3)', () => {
 
     it('moveToSpecialFolder and moveComparePair capture before they prune (source order)', () => {
         // These two are DOM/dialog-heavy; assert the ordering invariant on the source instead:
-        // every _bulkPairKeysReferencing( capture precedes the first removeFileFromList( call,
+        // every _captureUndoFields( capture precedes the first removeFileFromList( call,
         // and the captured keys land on the history entry as prunedPairKeys.
         for (const [name, captures] of [
             ['moveToSpecialFolder', 1],
@@ -3935,10 +3936,10 @@ describe('bulkRatedPairs key capture + restore across undo (G1 T3)', () => {
             const body = methodSource(name);
             const prune = body.indexOf('this.removeFileFromList(');
             expect(prune, name).toBeGreaterThan(-1);
-            const hits = [...body.matchAll(/this\._bulkPairKeysReferencing\(/g)].map((m) => m.index);
+            const hits = [...body.matchAll(/\.\.\.this\._captureUndoFields\(/g)].map((m) => m.index);
             expect(hits, name).toHaveLength(captures);
             for (const idx of hits) expect(idx, name).toBeLessThan(prune);
-            expect(body, name).toContain('prunedPairKeys');
+            expect(methodSource('_captureUndoFields'), name).toContain('prunedPairKeys');
         }
     });
 });
@@ -8184,7 +8185,10 @@ describe('_fileOpInFlight — one file action at a time (G1)', () => {
             _followRestoredFile: extractMethod('_followRestoredFile'), // PR #78 review #2
             getCombinedFeatures: () => null,
             _bulkPairKeysReferencing: () => [],
+            _captureUndoFields: extractMethod('_captureUndoFields'),
             perceptualHashes: new Map(), // the move sites stash a hash from it (PR #85 review #4)
+            predictionScores: new Map(), // and a score and a label (G3 member 3)
+            bulkRated: new Map(),
             removeFileFromList: vi.fn(function (p) {
                 this.mediaFiles = this.mediaFiles.filter((f) => f.path !== p);
             }),
@@ -8363,7 +8367,10 @@ describe('_fileOpInFlight — compare pair moves and bulk rating (G1)', () => {
             areFoldersConfigured: () => true,
             _refuseIfNeedsRegrant: () => false,
             _bulkPairKeysReferencing: () => [],
+            _captureUndoFields: extractMethod('_captureUndoFields'),
             perceptualHashes: new Map(), // the move sites stash a hash from it (PR #85 review #4)
+            predictionScores: new Map(), // and a score and a label (G3 member 3)
+            bulkRated: new Map(),
             removeFileFromList: vi.fn(function (p) {
                 this.mediaFiles = this.mediaFiles.filter((f) => f.path !== p);
             }),
@@ -8841,7 +8848,10 @@ describe('a refused folder check is not "missing" (deep review #7)', () => {
             _refuseUngrantedFolder: vi.fn(() => true),
             getCombinedFeatures: () => null,
             _bulkPairKeysReferencing: () => [],
+            _captureUndoFields: extractMethod('_captureUndoFields'),
             perceptualHashes: new Map(), // the move sites stash a hash from it (PR #85 review #4)
+            predictionScores: new Map(), // and a score and a label (G3 member 3)
+            bulkRated: new Map(),
             removeFileFromList: vi.fn(function (p) {
                 this.mediaFiles = this.mediaFiles.filter((f) => f.path !== p);
             }),

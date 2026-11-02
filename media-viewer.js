@@ -1579,7 +1579,22 @@ class MediaViewer {
         move.fileName = window.electronAPI.path.basename(restoredPath);
     }
 
-    restoreFeatureCachesFromHistory(entry) {
+    // What removeFileFromList is about to destroy for this file, for a history entry: every move site spreads this in
+    // before the removal, and restoreFeatureCachesFromHistory gives it back. A field the file lacks is omitted.
+    _captureUndoFields(file) {
+        const prunedPairKeys = this._bulkPairKeysReferencing(file.name);
+        const perceptualHash = this.perceptualHashes.get(file.path);
+        const score = this.predictionScores.get(file.path);
+        const bulkBucket = this.bulkRated.get(file.name);
+        return {
+            ...(prunedPairKeys.length > 0 ? { prunedPairKeys } : {}),
+            ...(perceptualHash !== undefined ? { perceptualHash } : {}), // PR #85 review #4
+            ...(score !== undefined ? { score } : {}),
+            ...(bulkBucket ? { bulkBucket } : {}),
+        };
+    }
+
+    restoreFeatureCachesFromHistory(entry, { deferBulkSave = false } = {}) {
         if (!entry) return;
         // Re-admit the rated-pair keys removeFileFromList pruned for this file (captured by the move
         // sites as prunedPairKeys). Before the features guard: a file with no features still owns them.
@@ -1591,6 +1606,14 @@ class MediaViewer {
         // Before the features guard, for the same reason as the keys.
         if (entry.perceptualHash !== undefined) {
             this.perceptualHashes.set(entry.originalPath, entry.perceptualHash);
+        }
+        // Its score and its bulk label (G3 member 3), the same way. The label exists nowhere else, so it is saved.
+        if (typeof entry.score === 'number') {
+            this.predictionScores.set(entry.originalPath, entry.score);
+        }
+        if (entry.bulkBucket) {
+            this.bulkRated.set(entry.fileName, entry.bulkBucket);
+            if (!deferBulkSave) this.saveBulkRatedFile();
         }
         if (!entry.mlFeatures) return;
         const features = entry.mlFeatures;
@@ -1937,14 +1960,8 @@ class MediaViewer {
                     fileType: currentFile.type,
                     actionType: actionType,
                     mlFeatures: mlFeatures ? Array.from(mlFeatures) : null,
+                    ...this._captureUndoFields(currentFile),
                 };
-                // Capture the rated-pair keys removeFileFromList is about to prune, so undo can reinstate them.
-                const prunedPairKeys = this._bulkPairKeysReferencing(currentFile.name);
-                if (prunedPairKeys.length > 0) historyEntry.prunedPairKeys = prunedPairKeys;
-                // And the perceptual hash it drops: otherwise a similarity sort running across this move and its
-                // undo sorts the file last (PR #85 review #4).
-                const perceptualHash = this.perceptualHashes.get(currentFile.path);
-                if (perceptualHash !== undefined) historyEntry.perceptualHash = perceptualHash;
                 this.moveHistory.push(historyEntry);
 
                 // Show success notification (if enabled)
@@ -2099,13 +2116,8 @@ class MediaViewer {
                     fileType: fileToMove.type,
                     actionType: 'special',
                     mlFeatures: mlFeatures ? Array.from(mlFeatures) : null,
+                    ...this._captureUndoFields(fileToMove),
                 };
-                // Capture the rated-pair keys removeFileFromList is about to prune, so undo can reinstate them.
-                const prunedPairKeys = this._bulkPairKeysReferencing(fileToMove.name);
-                if (prunedPairKeys.length > 0) historyEntry.prunedPairKeys = prunedPairKeys;
-                // And the perceptual hash it drops (PR #85 review #4).
-                const perceptualHash = this.perceptualHashes.get(fileToMove.path);
-                if (perceptualHash !== undefined) historyEntry.perceptualHash = perceptualHash;
 
                 // In compare mode, store remaining file info for proper undo
                 if (side === 'left' || side === 'right') {
@@ -5021,8 +5033,6 @@ class MediaViewer {
             const captured = batch.map((file) => {
                 const combined = this.getCombinedFeatures(file.path);
                 const raw = this.featureCache.get(file.path);
-                const prunedPairKeys = this._bulkPairKeysReferencing(file.name);
-                const perceptualHash = this.perceptualHashes.get(file.path); // PR #85 review #4
                 return {
                     file: { ...file },
                     originalIndex: filesBefore.indexOf(file),
@@ -5031,10 +5041,7 @@ class MediaViewer {
                     fileSize: file.size,
                     fileMtimeMs: file.mtimeMs,
                     mlFeatures: combined ? Array.from(combined) : raw ? Array.from(raw) : null,
-                    score: this.predictionScores.get(file.path),
-                    bulkBucket: this.bulkRated.get(file.name),
-                    ...(prunedPairKeys.length > 0 ? { prunedPairKeys } : {}),
-                    ...(perceptualHash !== undefined ? { perceptualHash } : {}),
+                    ...this._captureUndoFields(file),
                 };
             });
 
@@ -5167,13 +5174,7 @@ class MediaViewer {
                 missing: failed.map((sub) => sub.originalIndex),
             });
             for (const sub of restored) {
-                this.restoreFeatureCachesFromHistory(sub); // feature caches + rated-pair keys
-                if (typeof sub.score === 'number') {
-                    this.predictionScores.set(sub.originalPath, sub.score);
-                }
-                if (sub.bulkBucket) {
-                    this.bulkRated.set(sub.fileName, sub.bulkBucket);
-                }
+                this.restoreFeatureCachesFromHistory(sub, { deferBulkSave: true });
                 this.likeOrSkip.restore(sub.originalPath);
             }
             if (restored.some((sub) => sub.bulkBucket)) {
@@ -7010,13 +7011,8 @@ class MediaViewer {
                     actionType: primaryAction,
                     mlFeatures: primaryFeatures ? Array.from(primaryFeatures) : null,
                     compareMode: true,
+                    ...this._captureUndoFields(primaryFile),
                 };
-                // Capture the rated-pair keys removeFileFromList (below) is about to prune, so undo can reinstate them.
-                const primaryPrunedKeys = this._bulkPairKeysReferencing(primaryFile.name);
-                if (primaryPrunedKeys.length > 0) primaryEntry.prunedPairKeys = primaryPrunedKeys;
-                // And the perceptual hash it drops (PR #85 review #4).
-                const primaryHash = this.perceptualHashes.get(primaryFile.path);
-                if (primaryHash !== undefined) primaryEntry.perceptualHash = primaryHash;
                 this.moveHistory.push(primaryEntry);
 
                 // Move secondary file (the other one); its folder was checked above
@@ -7043,11 +7039,8 @@ class MediaViewer {
                     actionType: secondaryAction,
                     mlFeatures: secondaryFeatures ? Array.from(secondaryFeatures) : null,
                     compareMode: true,
+                    ...this._captureUndoFields(secondaryFile),
                 };
-                const secondaryPrunedKeys = this._bulkPairKeysReferencing(secondaryFile.name);
-                if (secondaryPrunedKeys.length > 0) secondaryEntry.prunedPairKeys = secondaryPrunedKeys;
-                const secondaryHash = this.perceptualHashes.get(secondaryFile.path);
-                if (secondaryHash !== undefined) secondaryEntry.perceptualHash = secondaryHash;
                 this.moveHistory.push(secondaryEntry);
 
                 // Show notifications (if enabled)
