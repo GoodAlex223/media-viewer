@@ -2,7 +2,7 @@
 
 **Task Reference**: [WEEKLY.md](../WEEKLY.md) G3 (Cleanup Week #5, 🏆)
 **Created**: 2026-11-02
-**Status**: Implementation: the user approved the spec and plan on 2026-11-02 ("Looks right, go"). Phases 1–4 done, Phase 5 in progress
+**Status**: Implementation: the user approved the spec and plan on 2026-11-02 ("Looks right, go"). Phases 1–4 done. Phase 5 waits on the manual smoke and the user's approval of the push
 **Last Updated**: 2026-11-02
 **Design**: [spec](../../superpowers/specs/2026-11-02-g3-rating-data-safety-design.md), which holds the analysis, the Phase 0 table and my ten calls. This plan does not restate them.
 
@@ -105,8 +105,8 @@ Commit together: spec § 6.
 
 #### Phase 5: verify and document
 - [x] Measure the renderer; apply `_fileFromHistory` if over; set the ceiling to the exact count
-- [ ] Full unit suite, lint, `format:check`; full E2E (it runs at pre-push anyway)
-- [ ] Mutation checks from spec § 5; re-run each member's E2E with its fix reverted if any looks suspect
+- [x] Full unit suite, lint, `format:check`; full E2E (it runs at pre-push anyway)
+- [x] Mutation checks from spec § 5; re-run each member's E2E with its fix reverted if any looks suspect
 - [x] Live-surface edits from the preflight; `docs/MANUAL_TESTING.md` scenarios; comment sweep
 - [ ] Manual smoke on the running app: rate, undo, Both good then undo, quit during extraction, reopen. Ask the user to confirm before the push
 
@@ -171,6 +171,13 @@ Plan: spec § 5. Results: to fill during Phases 1–5.
 | `tests/e2e/rating-data-safety.test.js` on `main` at `65d8b71` | 10 failed, 1 passed (the rejection contract) | Expected, spec § 2: member 1 ×2, member 3 ×3, member 4 ×2, members 5, 6 and 7's throw ×1 each |
 | Phase 1: unit suite | 2567 passed, 1 skipped | After the saver, flush, flushPending and close tests |
 | Phase 1: member 6's two E2Es | 2 passed | With `whenIdle` removed from the quit, the coalesced test failed on its poll, so it can fail |
+| Phase 5: unit suite | 2599 passed, 1 skipped | At `233a672` |
+| Phase 5: full E2E | 248 passed, 7 skipped | 10.6 min at `233a672`. This file's 12 all pass, and none of its tests is skipped |
+| Phase 5: saver mutations | Each fails | One queue for all folders: 2 tests fail. Overlapping writes: 4 tests fail |
+| Phase 5: lint | 0 errors, 2 no-shadow warnings | In test code this branch did not write |
+| Phase 5: `format:check` | 10 files flagged | All in the ignored local `CLAUDE-SECURITY-*` scan output; none is tracked by this branch |
+| Phase 5: line ratchet, dry run | At the ceiling | 11,527 lines, ceiling 11,527 |
+| Manual smoke | Not run | `docs/MANUAL_TESTING.md` § Rating Data Safety; owed before the push |
 
 ---
 
