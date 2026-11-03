@@ -154,7 +154,7 @@ export class TournamentManager {
         return removed.length;
     }
 
-    // Resume despite a file-set delta (strict validation failed): rebuild from the tournament's
+    // Resume, whether or not the file set changed: rebuild from the tournament's
     // ORIGINAL file set, then reconcile away files that no longer exist on disk. Files added to
     // the folder since the tournament started are simply ignored. Returns { ok, removedCount }.
     async handleResumeReconciled(state, currentFiles) {

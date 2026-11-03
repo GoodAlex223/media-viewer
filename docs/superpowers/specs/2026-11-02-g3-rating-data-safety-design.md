@@ -205,7 +205,7 @@ The saver is a mutation target: key every folder to one queue and the other-fold
 
 - A render already in flight when a direct `loadFolder` swaps the list can paint a stale file, because `showMedia()` returns early on `isLoading`. The Apply reload reaches it, and so does a JXL decode still running at a folder switch, which then paints over the new folder's image, so a rating moves a file no longer shown (PR #95 review 8). BACKLOG says the user's folders hold no JXL today.
 - A pair undo whose second restore fails pushes both entries back, and the first can then never move again (its `newPath` is gone).
-- The tournament prompts still do not own focus: Tab and Enter reach the buttons behind them, the rating buttons included. Keys no longer dispatch, every file action refuses while a prompt is open, and a load closes them (PR #95 review 3, 7, round 2), so the known results are closed, not the cause.
+- The tournament prompts still do not own focus: Tab and Enter reach the buttons behind them, the rating buttons included. Keys no longer dispatch, every file action but undo refuses while a prompt is open (an undo acts on a recorded file and renders it), and a load closes them (PR #95 review 3, 7, round 2), so the known results are closed, not the cause.
 - Escape on the tournament summary leaves it open with the mode already single, and its Undo then closes it without undoing (PR #95 round 2, measured by the reviewer; no data effect).
 - Ctrl+A behind a prompt selects page text, since the key gate returns before `preventDefault` (PR #95 round 2; cosmetic).
 - A `.bulk_rated.json` with a UTF-8 BOM fails on every open, so its ratings stay refused until someone edits the file. It warns and does not wipe (PR #95 round 2).

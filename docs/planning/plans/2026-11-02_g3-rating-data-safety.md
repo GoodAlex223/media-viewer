@@ -2,7 +2,7 @@
 
 **Task Reference**: [WEEKLY.md](../WEEKLY.md) G3 (Cleanup Week #5, 🏆)
 **Created**: 2026-11-02
-**Status**: Implementation: the user approved the spec and plan on 2026-11-02 ("Looks right, go"). PR #95 open; review round 2 answered. The manual smoke is owed during review, by the user's call on 2026-11-02
+**Status**: Implementation: the user approved the spec and plan on 2026-11-02 ("Looks right, go"). PR #95 open; review round 3 answered. The manual smoke is owed during review, by the user's call on 2026-11-02
 **Last Updated**: 2026-11-02
 **Design**: [spec](../../superpowers/specs/2026-11-02-g3-rating-data-safety-design.md), which holds the analysis, the Phase 0 table and my ten calls. This plan does not restate them.
 
@@ -163,6 +163,10 @@ Commit together: spec § 6.
 - **Renderer ceiling**: 11,572 → 11,597, +68 net over the 11,529 G3 started at.
 - `handleResume` is deleted with its test: it had no production caller, so round 1's line in it covered dead code.
 
+### 2026-11-03 — Review round 3 (PR #95)
+
+- One wording issue, no behaviour defect. All three statements checked and corrected. Six held-back candidates: one notice reworded, five carried in § 6.
+
 ---
 
 ## 5. Key Discoveries
@@ -189,6 +193,11 @@ From PR #95 review round 1, each going to BACKLOG 🟤 at close-out (ruled "reco
 - A label stays on `a (1).jpg` after a suffixed restore and a bulk undo.
 - A refused toast Remove still closes the toast; a refused config-modal Cancel leaves the mode button stale.
 - The Resume prompt's Cancel can start a render during a file action.
+- A close during Discard's wait for a stalled write can beat the delete, so the discarded tournament is offered again (PR #95 round 3).
+- Start over re-opens the config modal after its wait, even if a load closed the prompts meanwhile, so it opens for the new folder without offering that folder's save (PR #95 round 3).
+- After a refused save, "not saved" and "Both files marked good" show together (PR #95 round 3).
+- A double press of Save & leave during a slow write runs the continuation twice (PR #95 round 3; pre-existing).
+- Wheel navigation behind a tournament prompt renders another file; it moves none (PR #95 round 3; pre-existing).
 
 ## 7. Testing
 

@@ -3538,7 +3538,7 @@ class MediaViewer {
     }
 
     // The switch itself: change-folder's reset, then the load. Also the leave prompt's continuation, which runs
-    // after the user chose — a file action can have been running since before the prompt.
+    // after the user chose — an undo started behind the prompt can be running by then.
     // A load that then fails leaves tournament mode (loadFolder exits it on every branch, PR #81 review #2).
     // A refusal there leaves isTournamentMode true with tournament.engine null, so the tournament UI is inert: picks,
     // draws and undo no-op until Escape, a mode button, or a re-pick of that folder, which then switches with no
@@ -9378,7 +9378,7 @@ class MediaViewer {
             if (!this._bulkRatedSaveWarning.warned) {
                 this._bulkRatedSaveWarning.warned = true;
                 this.showNotification(
-                    `⚠️ This rating was not saved: ${this.currentFolderPath} could not be read`,
+                    `⚠️ This change was not saved: the ratings of ${this.currentFolderPath} could not be read`,
                     'warning'
                 );
             }
