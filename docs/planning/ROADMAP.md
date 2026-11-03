@@ -31,7 +31,7 @@ Work flows each planning session from [BACKLOG.md](BACKLOG.md) → [WEEKLY.md](W
   - the AI research harness on the user's own like/dislike folders, with only overall numbers committed;
   - then **A1**, the like-model learner fix (spec § 12.3);
   - the LICENSE file (✅ done 2026-10-30, Cleanup Week #5 G1, PR #93);
-  - the blocking renderer line ratchet (user ruling 2026-10-27, spec D23), in place before P1a's PR merges so P1a is its first measured phase (✅ built 2026-10-30, Cleanup Week #5 G2, PR #94: `scripts/check-line-ratchet.js`, ceiling 11,529).
+  - the blocking renderer line ratchet (user ruling 2026-10-27, spec D23), in place before P1a's PR merges so P1a is its first measured phase (✅ built 2026-10-30, Cleanup Week #5 G2, PR #94: `scripts/check-line-ratchet.js`, ceiling 11,529, then 11,597 by G3's explicit raise on 2026-11-03, PR #95).
 
 ### Next
 
@@ -93,7 +93,7 @@ Shipped far beyond the v1.1 scope (Feb–Aug 2026): Tournament mode (Swiss engin
 | P7 | Finish: responsive pass, UI zoom, CompareManager, install from a file | ⬜ Planned |
 | P8 | Packaging (optional) | ⬜ Optional |
 
-**Every phase** shows net `wc -l media-viewer.js` ≤ 0 in its PR (spec § 11.1), enforced by the blocking line ratchet (in place since 2026-10-30, PR #94: a pre-push check on the merge into `origin/main`). `media-viewer.js` was 11,529 lines at `e0b2a16` (2026-10-27).
+**Every phase** shows net `wc -l media-viewer.js` ≤ 0 in its PR (spec § 11.1), enforced by the blocking line ratchet (in place since 2026-10-30, PR #94: a pre-push check on the merge into `origin/main`). `media-viewer.js` was 11,529 lines at `e0b2a16` (2026-10-27) and is 11,597 after G3 (2026-11-03).
 
 **Target**: about May 2027 (soft) — about 131–136 SP nominal, with estimates historically ~1.9× low (spec § 14, whose end-of-Q1 date assumed the whole 🔵 share)
 

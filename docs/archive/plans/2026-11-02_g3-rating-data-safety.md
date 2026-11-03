@@ -1,9 +1,9 @@
 # G3 Rating data that can't go wrong - Implementation Plan
 
-**Task Reference**: [WEEKLY.md](../WEEKLY.md) G3 (Cleanup Week #5, 🏆)
+**Task Reference**: [WEEKLY.md](../../planning/WEEKLY.md) G3 (Cleanup Week #5, 🏆)
 **Created**: 2026-11-02
-**Status**: Implementation: the user approved the spec and plan on 2026-11-02 ("Looks right, go"). PR #95 open; review round 3 answered. The manual smoke is owed during review, by the user's call on 2026-11-02
-**Last Updated**: 2026-11-02
+**Status**: Complete — merged 2026-11-03 via PR #95 (merge `b9c76c0`). The manual scenarios stay with the user: TODO 🟠 "G3 post-merge checks"
+**Last Updated**: 2026-11-03
 **Design**: [spec](../../superpowers/specs/2026-11-02-g3-rating-data-safety-design.md), which holds the analysis, the Phase 0 table and my ten calls. This plan does not restate them.
 
 ---
@@ -112,11 +112,11 @@ Commit together: spec § 6.
 - [x] Full unit suite, lint, `format:check`; full E2E (it runs at pre-push anyway)
 - [x] Mutation checks from spec § 5; re-run each member's E2E with its fix reverted if any looks suspect
 - [x] Live-surface edits from the preflight; `docs/MANUAL_TESTING.md` scenarios; comment sweep
-- [ ] Manual smoke on the running app: rate, undo, Both good then undo, quit during extraction, reopen. Ask the user to confirm before the push
+- [ ] Manual smoke on the running app: rate, undo, Both good then undo, quit during extraction, reopen. **Not run**: the user approved the push and the merge without it, and it is TODO 🟠 "G3 post-merge checks"
 
 #### Phase 6: PR and close-out (after approval)
-- [ ] Push, verify the PR's commit list (a shared checkout can add commits), open the PR
-- [ ] Review in a separate chat; after merge, the closeout on `main`
+- [x] Push, verify the PR's commit list (a shared checkout can add commits), open the PR
+- [x] Review in a separate chat; after merge, the closeout on `main`
 
 ---
 
@@ -171,13 +171,20 @@ Commit together: spec § 6.
 
 ## 5. Key Discoveries
 
-To fill at completion.
+- A BACKLOG entry's scene can be narrower than its harm: member 1's entry described an undo; the reachable worst case was a rating moving a file never on screen.
+- Electron shows its error box only while it is the sole `uncaughtException` listener, so the obvious handler would have removed it. `uncaughtExceptionMonitor` logs and changes nothing.
+- "Never read" must not become "no ratings": the class `FeatureCacheStore` was redesigned against was still open for `.bulk_rated.json`.
+- Three round 2 issues were side effects of round 1's fixes. A fix that adds an `await` moves every read after it across a new gap, which is how `handleDiscard` came to delete another folder's save.
+- A guard at the input does not cover focus: the key gate left the rating buttons reachable by Tab, so the refusal moved to the action.
+- Mutation checks belong in a copy. Restoring a shared checkout from a string left two mutants behind, and only a failing baseline run showed it. Nothing landed.
 
 ---
 
 ## 6. Future Improvements
 
 Spec § 7 lists what I noticed and did not act on. Those eighteen items are this section until completion, and each goes to BACKLOG 🟤 at close-out unless the work closes it.
+
+**Extracted 2026-11-03** to BACKLOG 🟤 `[2026-11-03] From: G3 closeout`, except spec § 7's last bullet, the `mlFeatures` entry, which was already open there.
 
 ---
 
@@ -229,25 +236,27 @@ Plan: spec § 5. Results: to fill during Phases 1–5.
 
 ## 8. Review
 
-- [ ] Self-review complete
-- [ ] Separate-chat review
-- [ ] Review comments addressed
+- [x] Self-review complete
+- [x] Separate-chat review
+- [x] Review comments addressed
+
+Three rounds at `max` in a separate session; responses are on PR #95.
 
 ---
 
 ## 9. Closeout Artifacts
 
-Derived from `~/.claude/rules/planning-closeout.md`. To mark at close-out.
+Derived from `~/.claude/rules/planning-closeout.md`. Marked at close-out, 2026-11-03.
 
 | Artifact | Done / N/A + reason |
 |----------|---------------------|
-| `BACKLOG.md` — improvements extracted, routed by source | |
-| `TODO.md` — actionable items, plus § Spawned Tasks rows | |
-| `docs/archive/plans/` — plan moved here, original deleted | |
-| `DONE.md` — entry with plan link, summary, key changes | |
-| `WEEKLY.md` — Summary-Table Status `✅ PR #N`; Daily-Schedule rows | |
-| `BACKLOG.md` / `TODO.md` — the ten entries closed checked off | |
+| `BACKLOG.md` — improvements extracted, routed by source | Done: 32 🟤 entries under `[2026-11-03] From: G3 closeout` |
+| `TODO.md` — actionable items, plus § Spawned Tasks rows | Done: 🟠 "G3 post-merge checks"; no spawned tasks |
+| `docs/archive/plans/` — plan moved here, original deleted | Done |
+| `DONE.md` — entry with plan link, summary, key changes | Done |
+| `WEEKLY.md` — Summary-Table Status `✅ PR #N`; Daily-Schedule rows | Done: `✅ PR #95`, all three schedule rows |
+| `BACKLOG.md` / `TODO.md` — the ten entries closed checked off | Done: ten in BACKLOG, none in TODO |
 | Deploy record | N/A: auto-deploy no, no Deploy Window |
-| Live docs — every late finding corrected | |
-| `docs/README.md` — plan and spec indexed | |
-| Memory — durable decisions and patterns captured | |
+| Live docs — every late finding corrected | Done: `CLAUDE.md`, `PROJECT.md`, `GOALS.md`, `ROADMAP.md`, `MANUAL_TESTING.md` |
+| `docs/README.md` — plan and spec indexed | Done |
+| Memory — durable decisions and patterns captured | Done |

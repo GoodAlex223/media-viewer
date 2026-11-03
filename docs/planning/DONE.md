@@ -2,7 +2,8 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-10-30 <!-- Group G2: Pre-push gate (🟤, Cleanup Week #5, Oct 26–30, run Oct 30). MERGED 2026-10-30 via PR #94 (merge a80cc37) after three review rounds (15 + 10 held back → 3 + 1 → 0, then a close-out with two small re-raised answers): the blocking renderer line ratchet, the single read of git's ref lines, and the flaky tournament test. -->
+**Last Updated**: 2026-11-03 <!-- Group G3: Rating data that can't go wrong (🟤 🏆, Cleanup Week #5, run Nov 2–3). MERGED 2026-11-03 via PR #95 (merge b9c76c0) after three review rounds (21 + 29 held back → 7 + 8 → 1 + 6); the manual scenarios stay with the user. -->
+<!-- Previous: Group G2: Pre-push gate (🟤, Cleanup Week #5, Oct 26–30, run Oct 30). MERGED 2026-10-30 via PR #94 (merge a80cc37) after three review rounds (15 + 10 held back → 3 + 1 → 0, then a close-out with two small re-raised answers): the blocking renderer line ratchet, the single read of git's ref lines, and the flaky tournament test. -->
 <!-- Previous: Group G1: Repo chores (🔵, Cleanup Week #5, Oct 26–30, run Oct 28–30). MERGED 2026-10-30 via PR #93 (merge 4894a13) after three review rounds (15 + 7 held back → 2 + 5 → 0) and a close-out: the pre-push SKIP list, --no-renames, the hook fail-safe, Context7 retired, MIT LICENSE. -->
 <!-- Previous: Group G6: Weekly Reviews (2026-10-27 run, ⚪ Overhead, Oct 19–23, run 2026-10-27). MERGED 2026-10-27 via PR #92 (merge c5ac35f) after two review rounds: 6 findings and 2 nits (one finding fixed differently), then 1 optional nit; a round-3 close-out found no issue. -->
 <!-- Previous: Group G5: Strategic-doc refresh (🟡, Oct 19–23, run 2026-10-27). MERGED 2026-10-27 via PR #91 (merge 7fb9978) after three review rounds (7 → 1 → 0 findings) and a close-out that accepted every response. -->
@@ -35,6 +36,35 @@ Completed tasks with implementation details and learnings.
 <!-- Organize by month, newest first. -->
 
 ## 2026-10 (October)
+
+### 2026-11-03 — Group G3: Rating data that can't go wrong 🟤 🏆 (Cleanup Week #5, Oct 26–30, run Nov 2–3) — **7/7, MERGED `b9c76c0`** (PR #95)
+
+**Plan**: [2026-11-02_g3-rating-data-safety.md](../archive/plans/2026-11-02_g3-rating-data-safety.md). **Spec**: [G3 Rating Data Safety](../superpowers/specs/2026-11-02-g3-rating-data-safety-design.md) (approved 2026-11-02; the user skipped the brainstorm's questions, so its ten design calls are mine, listed in § 4).
+**Branch**: `g3-rating-data-safety`, cut from `main` at `65d8b71`. It was deleted on the remote and locally after the merge.
+
+✅ **Status: 7/7 members, ten BACKLOG entries closed. MERGED 2026-11-03 via PR #95** (merge `b9c76c0`, with `--merge`). Three review rounds ran in a separate session at `max`:
+- **Round 1** (head `73ec60a`): 21 entries holding 26 findings, and 29 held back, each checked first-hand, none refuted. Fixed: a resumed tournament overwriting another folder's save, a failed read of `.bulk_rated.json` counting as no ratings, a rating key behind a tournament prompt moving an unseen file, a bulk undo deleting earlier labels, and a `flush()` that could spin past the quit's cap. Recorded: items 8, 12, 13, 15 and parts of 5, 14 and 21.
+- **Round 2** (head `47948b2`): 7 issues and 8 held back. Three were side effects of round 1's fixes: `handleDiscard`'s wait redirected its delete to another folder, the leave prompt's let-through skipped the quit's saves, and the failed-read warning was a 5 s toast with advice that did not work. Focus could also still reach a rating button behind a prompt, so the file actions now refuse there too.
+- **Round 3** (head `a2bfa26`): one wording issue with three false statements, no behaviour defect, and 6 held back.
+
+**Summary**:
+- **Nothing acts on files while a folder opens** (member 1). Ratings, navigation, undo and mode switches refuse during a load; a press there moved a file of the new folder that had never been on screen. `_moveBackFromHistory` sends a file back to its own folder, and a source test fails on `targetFolder: this.baseFolderPath`.
+- **One bulk-rated writer per folder** (member 2). `coalescing-saver.js`, after 29 of 300 overlapping pairs left the older data on disk on the real main. A failed read now refuses saves until a load reads the file.
+- **An undo gives back the label and score** (member 3), at all five move sites through `_captureUndoFields`, and a bulk undo restores an earlier label.
+- **An AI order keeps every listed file** (member 4), through `SimilaritySort.alignToLive`.
+- **Tournament prompts** (member 5 and the review). Continue reads the live list; no key but Escape and F1 dispatches behind a prompt; every file action but undo refuses there; a folder load closes them.
+- **A quit saves what it owes** (member 6). `_saveThenAllowClose`: 15 s cap, a note after 300 ms, a second close once the note has shown. `FeatureCacheStore.flush`, `TournamentManager.flushPending`.
+- **Main logs its uncaught throws** (member 7) through `uncaughtExceptionMonitor`, measured to keep Electron's error box; a plain listener would have removed it.
+
+**Key changes**: `coalescing-saver.js` (new), `media-viewer.js`, `tournament.js`, `feature-cache-store.js`, `like-or-skip.js`, `logger.js`, one line in `main.js` outside the file-move handlers. `preload.js` untouched. New tests: `tests/coalescing-saver.test.js`, `tests/rating-data-safety-glue.test.js`, `tests/e2e/rating-data-safety.test.js`.
+
+**Renderer ceiling**: 11,529 → **11,597**, an explicit raise of 68 for the review's data-safety fixes (the build itself ended at 11,527). WEEKLY allowed G3 a raise; v2's net ≤ 0 binds v2 phases.
+
+**Tests**: unit 2,632 passed, 1 skipped. E2E 252 passed, 7 skipped (pre-push at `b9a2f94`). 10 of 11 reproductions failed on `main` first; the eleventh, the rejection log, already passed and stays as a labelled contract. Mutants, in a throwaway copy, all fail.
+
+**Not run**: the manual scenarios and the 15 s cap on a real large cache. The user merged with these open; they are a 🟠 TODO item, with the reload decision.
+
+**Sizing**: planned 8 SP, re-estimated ~9 at the plan; three review rounds beyond that, so it ran over again, as the week's velocity notes expect. No actual SP was measured.
 
 ### 2026-10-30 — Group G2: Pre-push gate 🟤 (Cleanup Week #5, Oct 26–30, run Oct 30) — **2/2, MERGED `a80cc37`** (PR #94)
 

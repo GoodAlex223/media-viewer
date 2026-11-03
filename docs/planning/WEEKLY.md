@@ -3,7 +3,7 @@
 **Week**: Monday October 26 – Friday October 30, 2026
 **Created**: 2026-10-28
 **Sources**: MILESTONES.md, ROADMAP.md, GOALS.md (all `Last Updated` 2026-10-27 by G5's refresh, one day old; this pass adds a status edit for the v2-share ruling, see Notes → v2's weekly share), BACKLOG.md (📌 Process Rules; the open 🔵 pool; the 🟤 sections filed since Cleanup Week #4, [2026-10-11] → [2026-10-27]; 🟡 [2026-10-17]; the last plan's unverified reap list, re-checked first-hand), TODO.md (🔴 I1 real-profile check, both 🟠 items, § Spawned Tasks), git log (last 2 weeks: the Oct 19–27 merges `4548269`, `f668611`, `654fb3e`, `f5ddfa3`, `e1c4e03`, `7f75013`, `082e3b2`, `7fb9978`, `c5ac35f` and their closeouts through `fab2bf6`; intake `d639e1c`), previous WEEKLY.md (Oct 19–23, spilled to 2026-10-27, archived below), REVIEW-QUEUE.md (§§1–5; last run 2026-10-27; § 5 queue at 0). Live-config drift check: N/A — this repo keeps no live-config sync. OWNER-QUEUE.md: absent.
-**Spillover**: past the close-out gate's grace (Sunday Nov 1). G3–G6 were still open on 2026-11-02, when G3's plan recorded this. G1 and G2 merged on 2026-10-30.
+**Spillover**: past the close-out gate's grace (Sunday Nov 1). G3–G6 were still open on 2026-11-02, when G3's plan recorded this. G1 and G2 merged on 2026-10-30, and G3 on 2026-11-03; G4–G6 remain.
 **Cleanup Week?**: **Yes — 🧹 CLEANUP WEEK #5, OVERDUE.** The quota **inverts**: 🟤 Auto-Generated is the majority, the ≤1-group and ≤25% 🟤 caps are suspended, 🟡 stays ≤25%, and 🔵 is limited to one sanctioned exception (G1, 3 SP, my call, delegated by the user). #5 fell due this very week, Oct 26–30, while the Oct 19–23 plan's spillover ran through Tuesday the 27th: overdue, not skipped, so it runs now. The 🟤-size trigger fires too: 174 open 🟤 entries sit in sections dated 2026-10-11 → 2026-10-27, and 390 are open in all (measured 2026-10-28, before this pass's reaps).
 **Context**: Roadmap phase _v2 — modules and redesign_; next milestone _v2 pilot (P1a + P1b)_, whose P1a can start the week of Nov 2–6. This week's agreed theme is **"clear the runway for v2, then make the rating data safe"**: cheaper pushes and two repo chores first (G1, the 🔵 exception); the blocking line ratchet P1a must merge under, with the flaky test that blocks pushes (G2); then the open defects that can leave a file or a rating in the wrong state (🏆 G3); the AI research's PR and the real-data check A1 waits on (G4); the `CLAUDE.md` byte-trigger re-set this week owes (G5); and Weekly Reviews with the overdue plugin context-cost read-out (G6). **Planned as of Sunday 2026-10-25 by the user's ruling and written Wednesday 2026-10-28; each header day runs two days later (Monday's work on Wed Oct 28, through Friday's on Sun Nov 1).**
 
@@ -52,13 +52,13 @@
 > **Model:** start Opus · `high` (the 8+ SP row: edge cases likely across the renderer's moves, undo, the quit path and main); `xhigh` to write the spec and plan (deeper reasoning) → execute Opus · `medium`, Sonnet · `medium` for steps the plan spells out; review deep (`max`) — first guess; the plan confirms or revises it (WORKFLOW.md § 1.0)
 > ↳ **2026-10-30 (G2 closeout, PR #94 merged `a80cc37`): merge `main` into any branch cut before it, before G3's next push, so the line ratchet runs.** Git runs the pre-push hook from the files of the branch that is checked out, so an older branch skips the ratchet until it has `main`'s hook; the push to `main` is the backstop, and it refuses a renderer over the ceiling.
 
-- [ ] **Undo can return a file to the wrong folder** — per 🟤 [2026-10-22] (feature-cache wipe fix closeout; file safety, flagged there as possibly above 🟤): file actions and undo refuse while `_folderLoadInFlight` (quietly for ratings), and undo restores to the directory of the entry's `originalPath`; check `moveToSpecialFolder`, `moveComparePair`, the batch and the drop-zone path the same way, since only the single-mode Like was probed. `media-viewer.js` (`moveCurrentFile`, `handleCancel`, `moveToSpecialFolder`, `moveComparePair`, `dislikeSkippedFiles`) (2)
-- [ ] **Bulk-rated saves can still land out of order** — per 🟤 [2026-10-25] (G2 PR 2 closeout; the ratings exist nowhere else): a coalescing single-flight `saveBulkRatedFile` in the renderer. It also closes 🟤 [2026-10-12] "`.bulk_rated.json` writes are not atomic, and saves overlap", whose atomic half PR #87 delivered. `media-viewer.js` (`saveBulkRatedFile`, `removeFileFromList`) (1.5)
-- [ ] **Single-move and special undo drop the file's bulk-rated membership and prediction score** — per 🟤 [2026-10-12] (G2 closeout): record `bulkBucket` and `score` on those history entries and restore them on undo, as the like-or-skip batch does. `media-viewer.js` (`moveCurrentFile`, `moveToSpecialFolder`, `handleCancel`) (1)
-- [ ] **The AI sort's apply drops files from the list** — one fix for two entries: 🟤 [2026-10-12] "`applyPredictionSortResult` silently drops listed files the sort result omits" (files with no features) and 🟤 [2026-10-21] "`applyPredictionSortResult` drops live files missing from the AI result" (files added during the sort). Apply through `SimilaritySort.alignToLive`, as the similarity sort does, so that both kinds stay listed. `media-viewer.js` (`applyPredictionSortResult`) (1)
-- [ ] **Tournament resume reconciles against a stale file list** — per 🟤 [2026-10-21] (G2 PR 1 closeout): Continue reconciles against the file list when it is pressed, not when the prompt opened. `media-viewer.js` (the resume prompt, `handleResumeReconciled`) (0.5)
-- [ ] **No save at app quit** — per 🟤 [2026-10-22] (feature-cache wipe fix closeout; spec § 10's residual): a visit's last ≤ 30 s of extraction is lost on quit. `media-viewer.js`, `main.js` (1.5)
-- [ ] **Main installs no `uncaughtException` handler** — per 🟤 [2026-10-22] (feature-cache wipe fix closeout): a process-level handler that logs through `logger.js`. `main.js`, `logger.js` (0.5)
+- [x] **Undo can return a file to the wrong folder** — per 🟤 [2026-10-22] (feature-cache wipe fix closeout; file safety, flagged there as possibly above 🟤): file actions and undo refuse while `_folderLoadInFlight` (quietly for ratings), and undo restores to the directory of the entry's `originalPath`; check `moveToSpecialFolder`, `moveComparePair`, the batch and the drop-zone path the same way, since only the single-mode Like was probed. `media-viewer.js` (`moveCurrentFile`, `handleCancel`, `moveToSpecialFolder`, `moveComparePair`, `dislikeSkippedFiles`) (2)
+- [x] **Bulk-rated saves can still land out of order** — per 🟤 [2026-10-25] (G2 PR 2 closeout; the ratings exist nowhere else): a coalescing single-flight `saveBulkRatedFile` in the renderer. It also closes 🟤 [2026-10-12] "`.bulk_rated.json` writes are not atomic, and saves overlap", whose atomic half PR #87 delivered. `media-viewer.js` (`saveBulkRatedFile`, `removeFileFromList`) (1.5)
+- [x] **Single-move and special undo drop the file's bulk-rated membership and prediction score** — per 🟤 [2026-10-12] (G2 closeout): record `bulkBucket` and `score` on those history entries and restore them on undo, as the like-or-skip batch does. `media-viewer.js` (`moveCurrentFile`, `moveToSpecialFolder`, `handleCancel`) (1)
+- [x] **The AI sort's apply drops files from the list** — one fix for two entries: 🟤 [2026-10-12] "`applyPredictionSortResult` silently drops listed files the sort result omits" (files with no features) and 🟤 [2026-10-21] "`applyPredictionSortResult` drops live files missing from the AI result" (files added during the sort). Apply through `SimilaritySort.alignToLive`, as the similarity sort does, so that both kinds stay listed. `media-viewer.js` (`applyPredictionSortResult`) (1)
+- [x] **Tournament resume reconciles against a stale file list** — per 🟤 [2026-10-21] (G2 PR 1 closeout): Continue reconciles against the file list when it is pressed, not when the prompt opened. `media-viewer.js` (the resume prompt, `handleResumeReconciled`) (0.5)
+- [x] **No save at app quit** — per 🟤 [2026-10-22] (feature-cache wipe fix closeout; spec § 10's residual): a visit's last ≤ 30 s of extraction is lost on quit. `media-viewer.js`, `main.js` (1.5)
+- [x] **Main installs no `uncaughtException` handler** — per 🟤 [2026-10-22] (feature-cache wipe fix closeout): a process-level handler that logs through `logger.js`. `main.js`, `logger.js` (0.5)
 
 ### G4. AI research loose ends `[batch]` 🟤 — AI sorting research — 3 SP
 
@@ -103,19 +103,19 @@
 ### Tuesday, October 27 (run Thursday, October 29) — The gate P1a waits on
 
 - **[G2](#g2-pre-push-gate-batch---hooks-and-tests--4-sp)** 🟤 — build the ratchet; the flaky test; review; merge (part 2 of 2). ✅ PR #94 (merge `a80cc37`, 2026-10-30, after three review rounds).
-- **[G3](#g3-rating-data-that-cant-go-wrong-batch----file-and-rating-safety--8-sp)** 🟤 🏆 — Phase 0 reproductions; spec and plan (part 1 of 3).
+- **[G3](#g3-rating-data-that-cant-go-wrong-batch----file-and-rating-safety--8-sp)** 🟤 🏆 — Phase 0 reproductions; spec and plan (part 1 of 3). ✅ done 2026-11-02.
 
 **Daily total**: ~5 SP
 
 ### Wednesday, October 28 (run Friday, October 30) — Rating data, build
 
-- **[G3](#g3-rating-data-that-cant-go-wrong-batch----file-and-rating-safety--8-sp)** 🟤 🏆 — implement, each fix after its RED test (part 2 of 3).
+- **[G3](#g3-rating-data-that-cant-go-wrong-batch----file-and-rating-safety--8-sp)** 🟤 🏆 — implement, each fix after its RED test (part 2 of 3). ✅ done 2026-11-02.
 
 **Daily total**: ~4 SP
 
 ### Thursday, October 29 (run Saturday, October 31) — Rating data lands; the research
 
-- **[G3](#g3-rating-data-that-cant-go-wrong-batch----file-and-rating-safety--8-sp)** 🟤 🏆 — review; merge (part 3 of 3).
+- **[G3](#g3-rating-data-that-cant-go-wrong-batch----file-and-rating-safety--8-sp)** 🟤 🏆 — review; merge (part 3 of 3). ✅ PR #95 (merge `b9c76c0`, 2026-11-03).
 - **[G4](#g4-ai-research-loose-ends-batch---ai-sorting-research--3-sp)** 🟤 — the research PR; your real-data run; the parked branch.
 
 **Daily total**: ~5 SP
@@ -136,7 +136,7 @@
 | --- | --------------------------------------------- | ----------------------- | ----------- | ------ | -------- | ------- | ---------- |
 | G1  | Repo chores `[batch]`                         | Repo tooling            | 🔵 User     | 3      | 3        | Mon     | ✅ PR #93  |
 | G2  | Pre-push gate `[batch]`                       | Hooks and tests         | 🟤 Auto     | 2      | 4        | Mon–Tue | ✅ PR #94  |
-| G3  | Rating data that can't go wrong `[batch]` 🏆 | File and rating safety  | 🟤 Auto     | 7      | 8        | Tue–Thu | ☐ Planned  |
+| G3  | Rating data that can't go wrong `[batch]` 🏆 | File and rating safety  | 🟤 Auto     | 7      | 8        | Tue–Thu | ✅ PR #95  |
 | G4  | AI research loose ends `[batch]`              | AI sorting research     | 🟤 Auto     | 3      | 3        | Thu     | ☐ Planned  |
 | G5  | `CLAUDE.md` byte-trigger re-set `[solo]`      | Pre-commit size warning | 🟡 Ops      | 1      | 1        | Fri     | ☐ Planned  |
 | G6  | Weekly Reviews `[batch]`                      | Research / process      | ⚪ Overhead | 4      | 5        | Fri     | ☐ Planned  |

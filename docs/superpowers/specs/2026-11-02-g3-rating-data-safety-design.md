@@ -1,6 +1,6 @@
 # G3: rating data that can't go wrong
 
-**Status**: Approved by the user 2026-11-02 ("Looks right, go"); built. The user skipped the brainstorm's questions ("lets skip the questions"), so every decision below is my call unless it quotes a ruling, and each is listed in § 4 for checking.
+**Status**: Approved by the user 2026-11-02 ("Looks right, go"); merged 2026-11-03 via PR #95 (`b9c76c0`). The user skipped the brainstorm's questions ("lets skip the questions"), so every decision below is my call unless it quotes a ruling, and each is listed in § 4 for checking.
 **Branch**: `g3-rating-data-safety`, cut from `main` at `65d8b71`.
 **Scheduled**: [WEEKLY.md](../../planning/WEEKLY.md) G3 (Oct 26–30, Cleanup Week #5, the week's 🏆).
 **Origin**: seven members, nine BACKLOG 🟤 entries, listed by title in § 2. A tenth, "A special move of a bulk-rated file weighs 0 in the out-of-date count", joins by my call (§ 4, call 8).
