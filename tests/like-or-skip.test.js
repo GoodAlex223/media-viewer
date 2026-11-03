@@ -165,6 +165,9 @@ describe('trainingWeight', () => {
         expect(trainingWeight({ bothBad: true, bulkFiles: [{}, {}] })).toBe(2);
         expect(trainingWeight({ skipBatch: true, files: [{}, {}, {}] })).toBe(3);
         expect(trainingWeight({ actionType: 'special' })).toBe(0);
+        // A bulk-rated file was in the training set, so moving it to special takes it out (G3 call 8).
+        expect(trainingWeight({ actionType: 'special', bulkBucket: 'good' })).toBe(1);
+        expect(trainingWeight({ actionType: 'special', bulkBucket: 'bad' })).toBe(1);
         expect(trainingWeight(undefined)).toBe(0);
     });
 });

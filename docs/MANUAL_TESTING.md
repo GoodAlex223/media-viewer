@@ -91,6 +91,20 @@ Before any release, verify the following scenarios work correctly.
 
 ---
 
+### Rating Data Safety (2026-11-02, G3)
+
+- [ ] Bulk-rate a pair (Both good), reopen the folder: the label is still there
+- [ ] Move a bulk-rated file with Like, undo it: the file comes back with its label and badge, in its original folder
+- [ ] The same with a special move and with a compare-pair move
+- [ ] Press a rating key repeatedly while a large folder opens: no file moves until the first file is on screen
+- [ ] Close the window during background extraction: it closes, and on reopening the folder the extracted features are not recomputed
+- [ ] With a very large cache and unsaved entries (close during extraction; a clean visit has nothing to save and shows no note), close the window: a "Saving before closing" note appears after a moment, and closing again quits at once
+- [ ] Lock `.bulk_rated.json` in another program, or give it a UTF-8 BOM, and open the folder: a warning says ratings cannot be read; bulk-rate a pair and check the file on disk is unchanged
+- [ ] Press Tournament mode so a prompt opens, then press a rating key: nothing moves. Then Tab or Shift+Tab to the Like button behind the prompt and press Enter: nothing moves
+- [ ] With a tournament prompt open, Tab to change-folder and pick another folder: the prompt closes, and that folder's saved tournament is untouched
+
+---
+
 ## Platform-Specific Testing
 
 ### Windows
@@ -143,4 +157,4 @@ After any code change, verify:
 
 ---
 
-*Last Updated: 2026-01-26*
+*Last Updated: 2026-11-02*

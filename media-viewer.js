@@ -3,6 +3,7 @@ import { ZoomManager } from './zoom.js';
 import { TournamentManager } from './tournament.js';
 import { MlTrainingManager } from './ml-training.js';
 import { FeatureCacheStore } from './feature-cache-store.js';
+import { CoalescingSaver } from './coalescing-saver.js';
 import * as LikeOrSkip from './like-or-skip.js';
 import * as RecentFolders from './recent-folders.js';
 import * as SimilaritySort from './similarity-sort.js';
@@ -301,6 +302,11 @@ class MediaViewer {
         // saveBulkRatedFile's once-per-visit warning: loadFolder makes a new one per visit, and a save keeps the one of
         // the visit it started in, so a late failure warns for its own folder (PR #87 review #8)
         this._bulkRatedSaveWarning = { warned: false };
+        this._bulkRatedSaver = new CoalescingSaver((folder, payload) => this._writeBulkRated(folder, payload));
+        this._bulkRatedUnread = false; // this visit's read failed: saving would replace ratings it never saw
+        this._closeSaveInFlight = false; // a close is saving what it owes
+        this._closeSaveNoteShown = false; // and has said so: a second close now quits at once
+        this._leaveChoiceMade = false; // the leave prompt is writing the user's choice: a further close quits at once
 
         // CLIP model state (main process IPC)
         this.clipWorkerReady = false;
@@ -1491,8 +1497,8 @@ class MediaViewer {
         this.jxlFrameCache.delete(filePath);
         this.featureMetadata.delete(filePath);
         this.perceptualHashes.delete(filePath);
-        // A batch (dislikeSkippedFiles) passes deferBulkSave and saves once at the end: one un-awaited
-        // save per file would start overlapping writes of the same .bulk_rated.json.
+        // A batch (dislikeSkippedFiles) passes deferBulkSave and saves once at the end, rather than
+        // building the whole list once per file.
         if (this.bulkRated.delete(removedName) && !deferBulkSave) {
             this.saveBulkRatedFile();
         }
@@ -1576,7 +1582,46 @@ class MediaViewer {
         move.fileName = window.electronAPI.path.basename(restoredPath);
     }
 
-    restoreFeatureCachesFromHistory(entry) {
+    // An undo puts a file back where it came from, whichever folder is open (G3 member 1). Throws when the move fails,
+    // leaving the entry as it was.
+    async _moveBackFromHistory(entry) {
+        const result = await window.electronAPI.moveFile({
+            sourcePath: entry.newPath,
+            targetFolder: window.electronAPI.path.dirname(entry.originalPath),
+            fileName: entry.fileName,
+        });
+        if (!result.success) {
+            throw new Error(result.error);
+        }
+        this._followRestoredFile(entry, result); // land where it was actually put back
+    }
+
+    _fileFromHistory(entry) {
+        return {
+            name: entry.fileName,
+            path: entry.originalPath,
+            size: entry.fileSize,
+            mtimeMs: entry.fileMtimeMs,
+            type: entry.fileType,
+        };
+    }
+
+    // What removeFileFromList is about to destroy for this file, for a history entry: every move site spreads this in
+    // before the removal, and restoreFeatureCachesFromHistory gives it back. A field the file lacks is omitted.
+    _captureUndoFields(file) {
+        const prunedPairKeys = this._bulkPairKeysReferencing(file.name);
+        const perceptualHash = this.perceptualHashes.get(file.path);
+        const score = this.predictionScores.get(file.path);
+        const bulkBucket = this.bulkRated.get(file.name);
+        return {
+            ...(prunedPairKeys.length > 0 ? { prunedPairKeys } : {}),
+            ...(perceptualHash !== undefined ? { perceptualHash } : {}), // PR #85 review #4
+            ...(score !== undefined ? { score } : {}),
+            ...(bulkBucket ? { bulkBucket } : {}),
+        };
+    }
+
+    restoreFeatureCachesFromHistory(entry, { deferBulkSave = false } = {}) {
         if (!entry) return;
         // Re-admit the rated-pair keys removeFileFromList pruned for this file (captured by the move
         // sites as prunedPairKeys). Before the features guard: a file with no features still owns them.
@@ -1588,6 +1633,14 @@ class MediaViewer {
         // Before the features guard, for the same reason as the keys.
         if (entry.perceptualHash !== undefined) {
             this.perceptualHashes.set(entry.originalPath, entry.perceptualHash);
+        }
+        // Its score and its bulk label (G3 member 3), the same way. The label exists nowhere else, so it is saved.
+        if (typeof entry.score === 'number') {
+            this.predictionScores.set(entry.originalPath, entry.score);
+        }
+        if (entry.bulkBucket) {
+            this.bulkRated.set(entry.fileName, entry.bulkBucket);
+            if (!deferBulkSave) this.saveBulkRatedFile();
         }
         if (!entry.mlFeatures) return;
         const features = entry.mlFeatures;
@@ -1626,7 +1679,7 @@ class MediaViewer {
     // the failing file by path now, and do nothing if it is no longer listed. Refused while a file action
     // is in flight — the removal is a list change plus a render.
     _removeFailedFileByPath(filePath, side = null) {
-        if (this._refuseIfFileOpInFlight()) {
+        if (this._refuseIfFileOpInFlight() || this._refuseIfFolderLoadInFlight()) {
             return;
         }
         const index = this.mediaFiles.findIndex((f) => f.path === filePath);
@@ -1771,6 +1824,9 @@ class MediaViewer {
     }
 
     nextMedia() {
+        // First thing: a render racing the load's own render leaves the screen and the cursor on different files, and
+        // the list may simply not be in place yet (G3 member 1).
+        if (this._folderLoadInFlight) return;
         if (this.mediaFiles.length === 0) {
             this.showDropZone();
             return;
@@ -1808,6 +1864,7 @@ class MediaViewer {
     }
 
     previousMedia() {
+        if (this._folderLoadInFlight) return;
         if (this.mediaFiles.length === 0 || this.isLoading || this.mediaNavigationInProgress || this._fileOpInFlight) {
             return;
         }
@@ -1848,8 +1905,10 @@ class MediaViewer {
         // One file action at a time (G1). A second Like arriving during this method's awaits read
         // the same currentFile and failed at fs.rename with ENOENT — and, with a video on screen,
         // raced forceVideoCleanup against the next render. Refused rather than queued: the press
-        // targets a file the user has not seen yet.
-        if (this._fileOpInFlight) return;
+        // targets a file the user has not seen yet. So does a press while a folder opens (G3 member 1): the new list is
+        // in place before its first file is on screen. And one behind a tournament prompt: entry has reset the cursor
+        // with no render, and focus can reach the rating buttons (PR #95 round 2).
+        if (this._fileOpInFlight || this._folderLoadInFlight || this._tournamentPromptOpen()) return;
         if (this.mediaFiles.length === 0 || this.isLoading) return;
         if (!this.areFoldersConfigured()) {
             this.showNotification('Configure like/dislike folders in Settings (F1)', 'error');
@@ -1870,8 +1929,8 @@ class MediaViewer {
             if (this.isMlEnabled && this.mlWorker) {
                 let rawFeatures = this.featureCache.get(currentFile.path);
                 if (!rawFeatures && this.currentMedia) {
-                    // The visit the move started in, taken before the await: moves don't refuse during a folder
-                    // load, so a load already listing can end the visit mid-extraction (PR #86 close-out cut 8).
+                    // The visit the move started in, taken before the await: a result lands only in its own visit,
+                    // whatever happens across the extraction (PR #86 close-out cut 8).
                     const visit = this.featureCacheStore.visit;
                     try {
                         rawFeatures = await this.extractFeaturesFromDisplayedMedia();
@@ -1934,14 +1993,8 @@ class MediaViewer {
                     fileType: currentFile.type,
                     actionType: actionType,
                     mlFeatures: mlFeatures ? Array.from(mlFeatures) : null,
+                    ...this._captureUndoFields(currentFile),
                 };
-                // Capture the rated-pair keys removeFileFromList is about to prune, so undo can reinstate them.
-                const prunedPairKeys = this._bulkPairKeysReferencing(currentFile.name);
-                if (prunedPairKeys.length > 0) historyEntry.prunedPairKeys = prunedPairKeys;
-                // And the perceptual hash it drops: otherwise a similarity sort running across this move and its
-                // undo sorts the file last (PR #85 review #4).
-                const perceptualHash = this.perceptualHashes.get(currentFile.path);
-                if (perceptualHash !== undefined) historyEntry.perceptualHash = perceptualHash;
                 this.moveHistory.push(historyEntry);
 
                 // Show success notification (if enabled)
@@ -1983,7 +2036,7 @@ class MediaViewer {
         }
 
         // Shared by all three modes; see moveCurrentFile for why a second file action is refused.
-        if (this.isLoading || this._fileOpInFlight) return;
+        if (this.isLoading || this._fileOpInFlight || this._folderLoadInFlight || this._tournamentPromptOpen()) return;
         // Before the pane/video cleanup below (G1 re-pick, review C1).
         if (this._refuseIfNeedsRegrant(['special'], 'move')) return;
         this.signalUserActivity();
@@ -2096,13 +2149,8 @@ class MediaViewer {
                     fileType: fileToMove.type,
                     actionType: 'special',
                     mlFeatures: mlFeatures ? Array.from(mlFeatures) : null,
+                    ...this._captureUndoFields(fileToMove),
                 };
-                // Capture the rated-pair keys removeFileFromList is about to prune, so undo can reinstate them.
-                const prunedPairKeys = this._bulkPairKeysReferencing(fileToMove.name);
-                if (prunedPairKeys.length > 0) historyEntry.prunedPairKeys = prunedPairKeys;
-                // And the perceptual hash it drops (PR #85 review #4).
-                const perceptualHash = this.perceptualHashes.get(fileToMove.path);
-                if (perceptualHash !== undefined) historyEntry.perceptualHash = perceptualHash;
 
                 // In compare mode, store remaining file info for proper undo
                 if (side === 'left' || side === 'right') {
@@ -2646,6 +2694,9 @@ class MediaViewer {
         }
 
         document.addEventListener('keydown', (e) => {
+            // Behind a tournament prompt the cursor has been reset with no render: a rating key moved a file that is
+            // not on screen (PR #95 review 3). Focus can still reach a button, so the file actions refuse too.
+            if (this._tournamentPromptOpen() && e.key !== 'Escape' && e.key !== 'F1') return;
             if (this.mediaFiles.length === 0) {
                 // Allow undo shortcut even when no media remains
                 const mode = this.isTournamentMode ? 'tournament' : this.isCompareMode ? 'compare' : 'single';
@@ -3011,6 +3062,7 @@ class MediaViewer {
         // A load that starts is a change of folder: a recent-folder check still in flight drops its decision
         // (G4 final review F1). After the refusal (a refused load changes nothing), before any await.
         this._folderIntentGen += 1;
+        this._closeTournamentPrompts(); // their buttons would act on the folder that opens (PR #95 review 7)
         if (!window.electronAPI) {
             this.showError('Electron API not available');
             return;
@@ -3135,6 +3187,19 @@ class MediaViewer {
         } finally {
             this._folderLoadInFlight = false;
             this._updateRecentFoldersButton();
+        }
+    }
+
+    _tournamentPromptOpen() {
+        return ['tournamentConfigModal', 'tournamentResumeModal', 'tournamentSummaryModal'].some(
+            (id) => document.getElementById(id)?.style.display === 'flex'
+        );
+    }
+
+    _closeTournamentPrompts() {
+        for (const id of ['tournamentConfigModal', 'tournamentResumeModal', 'tournamentSummaryModal']) {
+            const modal = document.getElementById(id);
+            if (modal) modal.style.display = 'none';
         }
     }
 
@@ -3473,7 +3538,7 @@ class MediaViewer {
     }
 
     // The switch itself: change-folder's reset, then the load. Also the leave prompt's continuation, which runs
-    // after the user chose — the prompt blocks clicks but not keys, so a special move can have started behind it.
+    // after the user chose — an undo started behind the prompt can be running by then.
     // A load that then fails leaves tournament mode (loadFolder exits it on every branch, PR #81 review #2).
     // A refusal there leaves isTournamentMode true with tournament.engine null, so the tournament UI is inert: picks,
     // draws and undo no-op until Escape, a mode button, or a re-pick of that folder, which then switches with no
@@ -3482,8 +3547,8 @@ class MediaViewer {
     async _switchToFolderNow(folderPath) {
         // Before the reset below, not only in loadFolder (G2 final review F1): a pick during a
         // file action would otherwise wipe the list and the history, then be refused, and the
-        // action would push onto the wiped history with an undo that targets ''. The same holds
-        // for a pick during another folder's load (PR #81 review #1).
+        // action would push onto the wiped history. The same holds for a pick during another
+        // folder's load (PR #81 review #1).
         if (this._refuseIfFileOpInFlight() || this._refuseIfFolderLoadInFlight()) {
             return;
         }
@@ -4950,7 +5015,7 @@ class MediaViewer {
     // Holds _fileOpInFlight across the dialog and every rename, and never calls moveCurrentFile — a
     // guarded method calling another is silently refused. One history entry; one Ctrl+A undoes it.
     async dislikeSkippedFiles() {
-        if (this._fileOpInFlight || this.isLoading) {
+        if (this._fileOpInFlight || this._folderLoadInFlight || this.isLoading || this._tournamentPromptOpen()) {
             return;
         }
         if (this.isCompareMode || this.isTournamentMode || !this.likeOrSkip.active) {
@@ -5018,8 +5083,6 @@ class MediaViewer {
             const captured = batch.map((file) => {
                 const combined = this.getCombinedFeatures(file.path);
                 const raw = this.featureCache.get(file.path);
-                const prunedPairKeys = this._bulkPairKeysReferencing(file.name);
-                const perceptualHash = this.perceptualHashes.get(file.path); // PR #85 review #4
                 return {
                     file: { ...file },
                     originalIndex: filesBefore.indexOf(file),
@@ -5028,10 +5091,7 @@ class MediaViewer {
                     fileSize: file.size,
                     fileMtimeMs: file.mtimeMs,
                     mlFeatures: combined ? Array.from(combined) : raw ? Array.from(raw) : null,
-                    score: this.predictionScores.get(file.path),
-                    bulkBucket: this.bulkRated.get(file.name),
-                    ...(prunedPairKeys.length > 0 ? { prunedPairKeys } : {}),
-                    ...(perceptualHash !== undefined ? { perceptualHash } : {}),
+                    ...this._captureUndoFields(file),
                 };
             });
 
@@ -5114,7 +5174,8 @@ class MediaViewer {
 
     async undoBulkRating(lastMove) {
         for (const f of lastMove.bulkFiles) {
-            this.bulkRated.delete(f.name);
+            if (f.previous) this.bulkRated.set(f.name, f.previous);
+            else this.bulkRated.delete(f.name);
         }
         await this.saveBulkRatedFile();
         // Re-admit the exact combo so it can reappear at its natural extreme position on re-render.
@@ -5134,16 +5195,8 @@ class MediaViewer {
         let firstError = null;
         for (const sub of entry.files) {
             try {
-                const result = await window.electronAPI.moveFile({
-                    sourcePath: sub.newPath,
-                    targetFolder: this.baseFolderPath,
-                    fileName: sub.fileName,
-                });
-                if (!result.success) {
-                    throw new Error(result.error);
-                }
                 const wasOnScreen = sub.originalPath === targetPath;
-                this._followRestoredFile(sub, result); // lands at "name (n).ext" if the name was taken
+                await this._moveBackFromHistory(sub); // lands at "name (n).ext" if the name was taken
                 if (wasOnScreen) {
                     targetPath = sub.originalPath;
                 }
@@ -5164,13 +5217,7 @@ class MediaViewer {
                 missing: failed.map((sub) => sub.originalIndex),
             });
             for (const sub of restored) {
-                this.restoreFeatureCachesFromHistory(sub); // feature caches + rated-pair keys
-                if (typeof sub.score === 'number') {
-                    this.predictionScores.set(sub.originalPath, sub.score);
-                }
-                if (sub.bulkBucket) {
-                    this.bulkRated.set(sub.fileName, sub.bulkBucket);
-                }
+                this.restoreFeatureCachesFromHistory(sub, { deferBulkSave: true });
                 this.likeOrSkip.restore(sub.originalPath);
             }
             if (restored.some((sub) => sub.bulkBucket)) {
@@ -5218,6 +5265,9 @@ class MediaViewer {
         // Ctrl+A in the tournament guard trial (BACKLOG 🟤 [2026-08-31]).
         if (this._fileOpInFlight) {
             this.showNotification('A move is still in progress — press Undo again in a moment', 'info');
+            return;
+        }
+        if (this._refuseIfFolderLoadInFlight()) {
             return;
         }
 
@@ -5281,16 +5331,7 @@ class MediaViewer {
 
                 try {
                     // Restore the moved file from special folder
-                    const moveResult = await window.electronAPI.moveFile({
-                        sourcePath: lastMove.newPath,
-                        targetFolder: this.baseFolderPath,
-                        fileName: lastMove.fileName,
-                    });
-
-                    if (!moveResult.success) {
-                        throw new Error(moveResult.error);
-                    }
-                    this._followRestoredFile(lastMove, moveResult); // land where it was actually put back
+                    await this._moveBackFromHistory(lastMove);
 
                     // Find the remaining file (should be at the end of the list)
                     const remainingFileIndex = this.mediaFiles.findIndex((f) => f.path === lastMove.remainingFile.path);
@@ -5302,13 +5343,7 @@ class MediaViewer {
                     }
 
                     // Calculate where to insert the restored file
-                    const restoredFile = {
-                        name: lastMove.fileName,
-                        path: lastMove.originalPath,
-                        size: lastMove.fileSize,
-                        mtimeMs: lastMove.fileMtimeMs,
-                        type: lastMove.fileType,
-                    };
+                    const restoredFile = this._fileFromHistory(lastMove);
 
                     // Insert remaining file back to its original position
                     if (remainingFile) {
@@ -5352,45 +5387,15 @@ class MediaViewer {
 
                 try {
                     // Restore first file
-                    const firstMoveResult = await window.electronAPI.moveFile({
-                        sourcePath: firstMove.newPath,
-                        targetFolder: this.baseFolderPath,
-                        fileName: firstMove.fileName,
-                    });
-
-                    if (!firstMoveResult.success) {
-                        throw new Error(firstMoveResult.error);
-                    }
-                    this._followRestoredFile(firstMove, firstMoveResult); // land where it was actually put back
+                    await this._moveBackFromHistory(firstMove);
 
                     // Restore second file
-                    const secondMoveResult = await window.electronAPI.moveFile({
-                        sourcePath: secondMove.newPath,
-                        targetFolder: this.baseFolderPath,
-                        fileName: secondMove.fileName,
-                    });
-
-                    if (!secondMoveResult.success) {
-                        throw new Error(secondMoveResult.error);
-                    }
-                    this._followRestoredFile(secondMove, secondMoveResult); // land where it was actually put back
+                    await this._moveBackFromHistory(secondMove);
 
                     // Add both files back to mediaFiles
-                    this.mediaFiles.push({
-                        name: firstMove.fileName,
-                        path: firstMove.originalPath,
-                        size: firstMove.fileSize,
-                        mtimeMs: firstMove.fileMtimeMs,
-                        type: firstMove.fileType,
-                    });
+                    this.mediaFiles.push(this._fileFromHistory(firstMove));
 
-                    this.mediaFiles.push({
-                        name: secondMove.fileName,
-                        path: secondMove.originalPath,
-                        size: secondMove.fileSize,
-                        mtimeMs: secondMove.fileMtimeMs,
-                        type: secondMove.fileType,
-                    });
+                    this.mediaFiles.push(this._fileFromHistory(secondMove));
 
                     this.restoreFeatureCachesFromHistory(firstMove);
                     this.restoreFeatureCachesFromHistory(secondMove);
@@ -5428,40 +5433,12 @@ class MediaViewer {
                 const firstMove = this.moveHistory.pop();
 
                 try {
-                    const firstMoveResult = await window.electronAPI.moveFile({
-                        sourcePath: firstMove.newPath,
-                        targetFolder: this.baseFolderPath,
-                        fileName: firstMove.fileName,
-                    });
-                    if (!firstMoveResult.success) {
-                        throw new Error(firstMoveResult.error);
-                    }
-                    this._followRestoredFile(firstMove, firstMoveResult); // land where it was actually put back
+                    await this._moveBackFromHistory(firstMove);
 
-                    const secondMoveResult = await window.electronAPI.moveFile({
-                        sourcePath: secondMove.newPath,
-                        targetFolder: this.baseFolderPath,
-                        fileName: secondMove.fileName,
-                    });
-                    if (!secondMoveResult.success) {
-                        throw new Error(secondMoveResult.error);
-                    }
-                    this._followRestoredFile(secondMove, secondMoveResult); // land where it was actually put back
+                    await this._moveBackFromHistory(secondMove);
 
-                    this.mediaFiles.push({
-                        name: firstMove.fileName,
-                        path: firstMove.originalPath,
-                        size: firstMove.fileSize,
-                        mtimeMs: firstMove.fileMtimeMs,
-                        type: firstMove.fileType,
-                    });
-                    this.mediaFiles.push({
-                        name: secondMove.fileName,
-                        path: secondMove.originalPath,
-                        size: secondMove.fileSize,
-                        mtimeMs: secondMove.fileMtimeMs,
-                        type: secondMove.fileType,
-                    });
+                    this.mediaFiles.push(this._fileFromHistory(firstMove));
+                    this.mediaFiles.push(this._fileFromHistory(secondMove));
 
                     this.restoreFeatureCachesFromHistory(firstMove);
                     this.restoreFeatureCachesFromHistory(secondMove);
@@ -5482,25 +5459,10 @@ class MediaViewer {
                 const undoMove = this.moveHistory.pop();
 
                 try {
-                    const moveResult = await window.electronAPI.moveFile({
-                        sourcePath: undoMove.newPath,
-                        targetFolder: this.baseFolderPath,
-                        fileName: undoMove.fileName,
-                    });
-
-                    if (!moveResult.success) {
-                        throw new Error(moveResult.error);
-                    }
-                    this._followRestoredFile(undoMove, moveResult); // land where it was actually put back
+                    await this._moveBackFromHistory(undoMove);
 
                     // Insert file back at current position to maintain order
-                    this.mediaFiles.splice(this.currentIndex, 0, {
-                        name: undoMove.fileName,
-                        path: undoMove.originalPath,
-                        size: undoMove.fileSize,
-                        mtimeMs: undoMove.fileMtimeMs,
-                        type: undoMove.fileType,
-                    });
+                    this.mediaFiles.splice(this.currentIndex, 0, this._fileFromHistory(undoMove));
 
                     this.restoreFeatureCachesFromHistory(undoMove);
                     this.showNotification(`✅ Restored ${undoMove.fileName}`, 'success');
@@ -5563,8 +5525,8 @@ class MediaViewer {
     // ---------- Tournament Mode ----------
     async switchMode(mode) {
         // A file action (G1 guard) is moving files: a mode switch now would leave the screen and the cursor
-        // on different files when it finishes (G2 review).
-        if (this._refuseIfFileOpInFlight()) {
+        // on different files when it finishes (G2 review). A folder load's render would do the same (G3 member 1).
+        if (this._refuseIfFileOpInFlight() || this._refuseIfFolderLoadInFlight()) {
             return;
         }
         // A sort still running would apply its order inside Tournament mode: the AI pair drawn on screen
@@ -5783,6 +5745,7 @@ class MediaViewer {
         if (cancelBtn) cancelBtn.style.display = '';
 
         const cleanup = () => {
+            this._leaveChoiceMade = false;
             modal.style.display = 'none';
             acceptBtn.onclick = null;
             discardBtn.onclick = null;
@@ -5790,14 +5753,25 @@ class MediaViewer {
         };
 
         acceptBtn.onclick = async () => {
+            this._leaveChoiceMade = true;
             // State is persisted per-pick (debounced); flush any pending write so the latest
             // picks are durable, then drop the in-memory engine (disk is the single source of truth).
             await this.tournament.flush();
+            if (this.tournament.lastWriteFailed) {
+                this.showNotification(
+                    '⚠️ The tournament could not be saved: picks since its last save are lost',
+                    'warning',
+                    {
+                        sticky: true,
+                    }
+                );
+            }
             this.tournament.engine = null;
             cleanup();
             await onAfterLeave();
         };
         discardBtn.onclick = async () => {
+            this._leaveChoiceMade = true;
             // Best-effort discard: even if deleting the saved state fails (disk/IPC error),
             // still tear down the modal and run the continuation. onAfterLeave may be the
             // app-close fail-safe (allowAppClose) which must never be blocked by an IO error
@@ -5819,17 +5793,24 @@ class MediaViewer {
 
     // Main process intercepted a window-close (X / Alt+F4 / quit) and is asking whether it
     // may proceed. For an incomplete tournament, show the same Save/Discard/Cancel leave
-    // prompt the user sees on Escape — Save/Discard then allow the close, Cancel keeps the
-    // app open. Otherwise allow immediately. Fail-safe: any error still allows the close, so
-    // a renderer bug can never make the app unclosable.
+    // prompt the user sees on Escape — Save/Discard then close, Cancel keeps the app open.
+    // Every close saves what it owes first (_saveThenAllowClose). Fail-safe: any error still
+    // allows the close, so a renderer bug can never make the app unclosable.
     handleAppCloseRequest() {
         try {
+            if (this._closeSaveInFlight) {
+                // Only once the note has offered it: until then this is a double click, and it would drop a queued save.
+                if (this._closeSaveNoteShown) window.electronAPI.allowAppClose();
+                return;
+            }
             // Re-entrancy guard: suppress a 2nd close request ONLY while the *leave* prompt is
             // open (title 'Leave tournament?'), so it can't re-bind the continuation. The same
             // modal element is reused for the 'Resume tournament?' prompt (shown while
             // isTournamentMode is still false, before entering) — clicking X during THAT must
-            // fall through to allowAppClose() below, not be swallowed here (else the window is
-            // unclosable during the resume prompt).
+            // fall through to the save-then-close below, not be swallowed here (else the window is
+            // unclosable during the resume prompt). Once the user has chosen, the prompt's own write is
+            // running with no cap of its own, so a further close starts the save-then-close, whose cap
+            // bounds it and which still saves the rest (PR #95 review 9, round 2).
             const leaveModal = document.getElementById('tournamentResumeModal');
             const leaveTitle = document.getElementById('tournamentResumeTitle');
             if (
@@ -5838,17 +5819,71 @@ class MediaViewer {
                 leaveTitle &&
                 leaveTitle.textContent === 'Leave tournament?'
             ) {
+                if (this._leaveChoiceMade) this._saveThenAllowClose();
                 return;
             }
             if (this.isTournamentMode && this.tournament.engine && !this.tournament.engine.isComplete()) {
-                this.showTournamentLeavePrompt(() => window.electronAPI.allowAppClose());
+                this.showTournamentLeavePrompt(() => this._saveThenAllowClose());
             } else {
-                window.electronAPI.allowAppClose();
+                this._saveThenAllowClose();
             }
         } catch (err) {
             window.electronAPI.logError?.('app-close handler failed: ' + err.message);
             window.electronAPI.allowAppClose();
         }
+    }
+
+    // A quit writes what the app still owes the disk (G3 member 6): a coalesced bulk-rated save waits in the renderer,
+    // where closing would lose it. This wait cannot trap the window: the cap, a close once the note has shown (above),
+    // and the finally. Past the cap a streaming save's temp file is abandoned and the file on disk stays as it was.
+    async _saveThenAllowClose() {
+        if (this._closeSaveInFlight) return; // the leave prompt's continuation, after a close let this start early
+        this._closeSaveInFlight = true;
+        const start = Date.now();
+        let outcome = 'settled'; // a failed write settles too, and logs itself
+        let capTimer;
+        const noteTimer = setTimeout(() => {
+            this._closeSaveNoteShown = true;
+            this.showNotification('Saving before closing — close again to quit now', 'info', { sticky: true });
+        }, 300);
+        try {
+            const cap = new Promise((resolve) => {
+                capTimer = setTimeout(() => {
+                    outcome = 'capped';
+                    resolve();
+                }, 15000);
+            });
+            await Promise.race([this._settleSavesForClose(), cap]);
+            window.electronAPI.logPerf?.(`Quit save: ${Date.now() - start}ms, ${outcome}`);
+        } catch (err) {
+            window.electronAPI.logError?.('save before close failed: ' + err.message);
+        } finally {
+            clearTimeout(noteTimer);
+            clearTimeout(capTimer);
+            window.electronAPI.allowAppClose();
+        }
+    }
+
+    async _settleSavesForClose() {
+        // A file action's own saves (an undo's label) are requested only as it ends. Not _waitForRenderIdle: a render
+        // owes the disk nothing.
+        const start = Date.now();
+        while (this._fileOpInFlight && Date.now() - start < 2000) {
+            await new Promise((resolve) => setTimeout(resolve, 25));
+        }
+        try {
+            // Stops new work. A result already in flight can still land after the flush froze its copy; the next
+            // visit extracts it again.
+            this.cancelBackgroundExtraction();
+            this.sortAbortController?.abort();
+        } catch (err) {
+            window.electronAPI.logError?.('stopping extraction before close failed: ' + err.message);
+        }
+        await Promise.allSettled([
+            this._bulkRatedSaver.whenIdle(),
+            this.featureCacheStore.flush(),
+            this.tournament.flushPending(),
+        ]);
     }
 
     // Prompt shown when entering tournament mode with a saved tournament on disk:
@@ -5911,8 +5946,13 @@ class MediaViewer {
                 this.showNotification('Wait for the sort to finish', 'info');
                 return;
             }
+            // The list may have changed since this prompt opened: a button stays reachable behind it (G3 member 5).
+            if (this._refuseIfFileOpInFlight() || this._refuseIfFolderLoadInFlight()) {
+                return;
+            }
             this.restoreOriginalOrderForTournament();
-            const result = await this.tournament.handleResumeReconciled(state, currentFiles);
+            const livePaths = this.mediaFiles.map((f) => f.path);
+            const result = await this.tournament.handleResumeReconciled(state, livePaths);
             cleanup();
             if (result?.ok) {
                 if (result.removedCount > 0) {
@@ -6427,6 +6467,7 @@ class MediaViewer {
 
     async handleTournamentUndo() {
         if (!this.isTournamentMode || this.isLoading || !this.tournament.engine) return;
+        if (this._refuseIfFolderLoadInFlight()) return;
         // engine.history is the single chronological undo stack: picks and tournament-mode
         // special-folder moves interleave in it, and system `prune` entries (the -1 auto-prune in
         // _renderTournamentPairOnce, the load-failure skip in _skipFailedTournamentFile and the
@@ -6465,7 +6506,7 @@ class MediaViewer {
             try {
                 const moveResult = await window.electronAPI.moveFile({
                     sourcePath: move.newPath,
-                    targetFolder: this.baseFolderPath,
+                    targetFolder: window.electronAPI.path.dirname(move.originalPath),
                     fileName: move.fileName,
                 });
                 if (!moveResult.success) {
@@ -6543,13 +6584,7 @@ class MediaViewer {
             // engine.files from the snapshot, so the file re-pairs and reports its real tier.
             this._followRestoredFile(move, { targetPath: restoredPath }); // only now: see above
             this.tournament.engine.undoUserAction();
-            this.mediaFiles.push({
-                name: move.fileName,
-                path: move.originalPath,
-                size: move.fileSize,
-                mtimeMs: move.fileMtimeMs,
-                type: move.fileType,
-            });
+            this.mediaFiles.push(this._fileFromHistory(move));
             this.restoreFeatureCachesFromHistory(move);
             const moveIdx = this.moveHistory.lastIndexOf(move);
             if (moveIdx !== -1) this.moveHistory.splice(moveIdx, 1);
@@ -6811,7 +6846,7 @@ class MediaViewer {
         // files — both moved, then each call's secondary failed with ENOENT before
         // removeFileFromList, leaving both as phantoms in mediaFiles with orphan history entries.
         // Checked here rather than in the handlers, whose tournament branch must stay unguarded.
-        if (this.isLoading || this._fileOpInFlight) return;
+        if (this.isLoading || this._fileOpInFlight || this._folderLoadInFlight || this._tournamentPromptOpen()) return;
         if (!this.areFoldersConfigured()) {
             this.showNotification('Configure like/dislike folders in Settings (F1)', 'error');
             return;
@@ -6955,13 +6990,8 @@ class MediaViewer {
                     actionType: primaryAction,
                     mlFeatures: primaryFeatures ? Array.from(primaryFeatures) : null,
                     compareMode: true,
+                    ...this._captureUndoFields(primaryFile),
                 };
-                // Capture the rated-pair keys removeFileFromList (below) is about to prune, so undo can reinstate them.
-                const primaryPrunedKeys = this._bulkPairKeysReferencing(primaryFile.name);
-                if (primaryPrunedKeys.length > 0) primaryEntry.prunedPairKeys = primaryPrunedKeys;
-                // And the perceptual hash it drops (PR #85 review #4).
-                const primaryHash = this.perceptualHashes.get(primaryFile.path);
-                if (primaryHash !== undefined) primaryEntry.perceptualHash = primaryHash;
                 this.moveHistory.push(primaryEntry);
 
                 // Move secondary file (the other one); its folder was checked above
@@ -6988,11 +7018,8 @@ class MediaViewer {
                     actionType: secondaryAction,
                     mlFeatures: secondaryFeatures ? Array.from(secondaryFeatures) : null,
                     compareMode: true,
+                    ...this._captureUndoFields(secondaryFile),
                 };
-                const secondaryPrunedKeys = this._bulkPairKeysReferencing(secondaryFile.name);
-                if (secondaryPrunedKeys.length > 0) secondaryEntry.prunedPairKeys = secondaryPrunedKeys;
-                const secondaryHash = this.perceptualHashes.get(secondaryFile.path);
-                if (secondaryHash !== undefined) secondaryEntry.perceptualHash = secondaryHash;
                 this.moveHistory.push(secondaryEntry);
 
                 // Show notifications (if enabled)
@@ -8920,11 +8947,13 @@ class MediaViewer {
             return false;
         }
         const filenameToFile = new Map(this.mediaFiles.map((f) => [f.name, f]));
-        const sorted = result.sortedFilenames.map((name) => filenameToFile.get(name)).filter((f) => f);
-        if (sorted.length === 0) {
+        const orderedPaths = result.sortedFilenames.map((name) => filenameToFile.get(name)?.path).filter(Boolean);
+        if (orderedPaths.length === 0) {
             this.showNotification('No files to sort', 'warning');
             return false;
         }
+        // Every listed file stays (G3 member 4): one the result omits goes after the ordered ones, with no new score.
+        const sorted = SimilaritySort.alignToLive(orderedPaths, this.mediaFiles);
         // Sync prediction scores so badges align with the re-ordered files.
         if (result.scores) {
             for (const [filename, score] of Object.entries(result.scores)) {
@@ -9305,10 +9334,16 @@ class MediaViewer {
     async loadBulkRatedFile() {
         this.bulkRated = new Map();
         this.bulkRatedPairs = new Set(); // session-only; starts empty on each folder load
+        this._bulkRatedUnread = false;
+        this._bulkRatedUnreadNote?.remove();
         if (!this.baseFolderPath) return;
         try {
+            // A save of this folder still on its way would make this read older than the folder's last rating. This
+            // folder only: an offline folder's write must not hold up the load of another one.
+            await this._bulkRatedSaver.whenIdle(this.baseFolderPath);
             const result = await window.electronAPI.readBulkRatedFile(this.baseFolderPath);
-            if (!result.success || !result.data) return;
+            if (!result.success) throw new Error(result.error);
+            if (!result.data) return;
             const validNames = new Set(this.mediaFiles.map((f) => f.name));
             let pruned = false;
             for (const name of result.data.good || []) {
@@ -9323,30 +9358,58 @@ class MediaViewer {
             // Written back now, so the file is whole again before the next crash can find it torn.
             if (pruned || result.recovered) await this.saveBulkRatedFile();
         } catch (err) {
+            // "Never read" is not "no ratings": the next save would replace ratings that exist nowhere else.
+            this._bulkRatedUnread = true;
             console.warn('Failed to load .bulk_rated.json:', err.message);
+            window.electronAPI.logError?.(`Failed to read .bulk_rated.json of ${this.baseFolderPath}: ${err.message}`);
+            this._bulkRatedUnreadNote = this.showNotification(
+                `⚠️ Could not read the bulk ratings for ${this.currentFolderPath}. New ones will not be saved. To retry, open another folder and come back`,
+                'warning',
+                { sticky: true }
+            );
         }
     }
 
+    // Resolves once these ratings, or newer ones of this folder, have been attempted: a failed write warns and logs.
+    // Never rejects.
     async saveBulkRatedFile() {
         if (!this.baseFolderPath) return;
+        if (this._bulkRatedUnread) {
+            if (!this._bulkRatedSaveWarning.warned) {
+                this._bulkRatedSaveWarning.warned = true;
+                this.showNotification(
+                    `⚠️ This change was not saved: the ratings of ${this.currentFolderPath} could not be read`,
+                    'warning'
+                );
+            }
+            return;
+        }
         const data = { version: 1, good: [], bad: [] };
         for (const [name, bucket] of this.bulkRated) {
             if (bucket === 'good') data.good.push(name);
             else if (bucket === 'bad') data.bad.push(name);
         }
-        // Taken before the write's await (PR #87 review #8): a save still in flight when the user switches folder
+        // Frozen at the request (PR #87 review #8): a save still in flight or queued when the user switches folder
         // fails, if it does, for the folder it was writing, and must not use up the next folder's warning.
-        const warning = this._bulkRatedSaveWarning;
-        const folderName = this.currentFolderPath;
+        return this._bulkRatedSaver.request(this.baseFolderPath, {
+            data,
+            warning: this._bulkRatedSaveWarning,
+            folderName: this.currentFolderPath,
+        });
+    }
+
+    // The saver's write: one at a time per folder, so two saves cannot reach main in the wrong order.
+    async _writeBulkRated(folder, { data, warning, folderName }) {
         let result;
         try {
-            result = await window.electronAPI.writeBulkRatedFile(this.baseFolderPath, data);
+            result = await window.electronAPI.writeBulkRatedFile(folder, data);
         } catch (err) {
             result = { success: false, error: err.message };
         }
         // These ratings exist nowhere else, so a failed write is said, once per folder visit (R-F8).
         if (!result?.success) {
             console.warn('Failed to save .bulk_rated.json:', result?.error);
+            window.electronAPI.logError?.(`Failed to save .bulk_rated.json of ${folder}: ${result?.error}`);
             if (!warning.warned) {
                 warning.warned = true;
                 this.showNotification(`⚠️ Failed to save the bulk ratings for ${folderName}`, 'warning');
@@ -9906,7 +9969,9 @@ class MediaViewer {
             !this.isSortedByPrediction ||
             !this.isCompareMode ||
             this.mediaNavigationInProgress ||
-            this._fileOpInFlight
+            this._fileOpInFlight ||
+            this._folderLoadInFlight ||
+            this._tournamentPromptOpen()
         ) {
             return;
         }
@@ -9918,7 +9983,8 @@ class MediaViewer {
         try {
             const bulkFiles = [];
             for (const f of [left, right]) {
-                bulkFiles.push({ name: f.name });
+                const previous = this.bulkRated.get(f.name);
+                bulkFiles.push(previous ? { name: f.name, previous } : { name: f.name });
                 this.bulkRated.set(f.name, bucket);
             }
 
@@ -10805,6 +10871,8 @@ class MediaViewer {
             );
             this.extractionStartTime = null;
         }
+
+        if (this._closeSaveInFlight) return; // the quit's flush covers this visit: a second full stream only delays it
 
         // Save this run's visit, if it is still the current one; otherwise its flush on leave saved what it could. A
         // visit that could not read its cache and cannot save its work says once that the work was not saved.

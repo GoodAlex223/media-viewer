@@ -42,6 +42,23 @@ function extract(name) {
     throw new Error(`Unbalanced braces in: ${name}`);
 }
 
+// The undo methods now reach these helpers and path.dirname. Filled in only where a context leaves them
+// out, so a context that sets its own keeps it.
+function withUndoHelpers(method) {
+    return function (...args) {
+        this._moveBackFromHistory ??= extract('_moveBackFromHistory');
+        this._followRestoredFile ??= extract('_followRestoredFile');
+        this._refuseIfFolderLoadInFlight ??= extract('_refuseIfFolderLoadInFlight');
+        this._fileFromHistory ??= extract('_fileFromHistory');
+        const api = globalThis.window?.electronAPI;
+        if (api) {
+            api.path = { basename: (p) => p.slice(p.lastIndexOf('/') + 1), ...api.path };
+            api.path.dirname ??= (p) => p.slice(0, p.lastIndexOf('/'));
+        }
+        return method.apply(this, args);
+    };
+}
+
 const media = (...names) => names.map((n) => ({ name: n, path: `/f/${n}`, size: 10, type: 'image/jpeg' }));
 const activeTracker = (...skippedPaths) => {
     const t = new LikeOrSkip.SkipTracker();
@@ -387,6 +404,8 @@ describe('dislikeSkippedFiles — one guarded batch (spec § 6)', () => {
             bulkRated: new Map(),
             bulkRatedPairs: new Set(),
             _bulkPairKeysReferencing: () => [],
+            _captureUndoFields: extract('_captureUndoFields'),
+            _tournamentPromptOpen: () => false,
             getCombinedFeatures: () => null,
             removeFileFromList: extract('removeFileFromList'),
             saveBulkRatedFile: vi.fn(async () => {}),
@@ -662,7 +681,7 @@ describe('updateDislikeSkippedButton (spec § 9)', () => {
 });
 
 describe('_undoSkipBatch — the whole batch back (spec § 7)', () => {
-    const undoSkipBatch = extract('_undoSkipBatch');
+    const undoSkipBatch = withUndoHelpers(extract('_undoSkipBatch'));
     let origWindow;
     beforeEach(() => {
         origWindow = globalThis.window;
@@ -837,7 +856,7 @@ describe('_undoSkipBatch — the whole batch back (spec § 7)', () => {
 });
 
 describe('handleCancel routes a skipBatch entry to _undoSkipBatch, and only that entry', () => {
-    const handleCancel = extract('handleCancel');
+    const handleCancel = withUndoHelpers(extract('handleCancel'));
     let origWindow;
     beforeEach(() => {
         origWindow = globalThis.window;
@@ -1051,7 +1070,7 @@ describe('header actions refuse while a file action is in flight (G2 review R6)'
     }
 
     describe('switchMode', () => {
-        const switchMode = extract('switchMode');
+        const switchMode = withUndoHelpers(extract('switchMode'));
 
         it.each(['single', 'compare', 'tournament'])('refuses a switch to %s', async (mode) => {
             const ctx = baseCtx({ _applyModeSwitch: vi.fn(async () => {}), showTournamentLeavePrompt: vi.fn() });
@@ -1369,7 +1388,7 @@ describe('the tournament summary Apply and Discard refuse before acting (G2 fina
 });
 
 describe('handleCancel: a skipBatch undo waits for a running sort (G2 final review F2)', () => {
-    const handleCancel = extract('handleCancel');
+    const handleCancel = withUndoHelpers(extract('handleCancel'));
     let origWindow;
     beforeEach(() => {
         origWindow = globalThis.window;
@@ -1437,7 +1456,7 @@ describe('handleCancel: a skipBatch undo waits for a running sort (G2 final revi
 });
 
 describe('handleCancel: the compare-pair branch never pops a skipBatch (G2 final review F9)', () => {
-    const handleCancel = extract('handleCancel');
+    const handleCancel = withUndoHelpers(extract('handleCancel'));
     let origWindow;
     beforeEach(() => {
         origWindow = globalThis.window;
@@ -1523,7 +1542,7 @@ describe('nextMedia with an out-of-range cursor (G2 final review F3)', () => {
 });
 
 describe('switchMode: Tournament mode waits for a running sort (G2 final review F7)', () => {
-    const switchMode = extract('switchMode');
+    const switchMode = withUndoHelpers(extract('switchMode'));
 
     function modeCtx(overrides = {}) {
         return {
@@ -1561,7 +1580,7 @@ describe('switchMode: Tournament mode waits for a running sort (G2 final review 
 });
 
 describe('the load-error Remove action resolves its file by path (G2 final review F8)', () => {
-    const removeByPath = () => extract('_removeFailedFileByPath');
+    const removeByPath = () => withUndoHelpers(extract('_removeFailedFileByPath'));
 
     function removeCtx(overrides = {}) {
         return {
@@ -1734,7 +1753,7 @@ describe('#dislikeSkippedBtn carries the G1 folder state its neighbour has (G2 f
 
 describe('a batch and its undo round-trip the per-file caches (G2 final review F13, F6)', () => {
     const dislikeSkippedFiles = extract('dislikeSkippedFiles');
-    const undoSkipBatch = extract('_undoSkipBatch');
+    const undoSkipBatch = withUndoHelpers(extract('_undoSkipBatch'));
     const KEY = ['a', 'x'].join(String.fromCharCode(0)); // bulkPairKey's separator
     let origWindow;
     beforeEach(() => {
@@ -1795,6 +1814,8 @@ describe('a batch and its undo round-trip the per-file caches (G2 final review F
             bulkRated: new Map(),
             bulkRatedPairs: new Set([KEY]),
             _bulkPairKeysReferencing: (name) => (name === 'a' ? [KEY] : []),
+            _captureUndoFields: extract('_captureUndoFields'),
+            _tournamentPromptOpen: () => false,
             getCombinedFeatures: (p) => (p === '/f/a' ? vector : null),
             removeFileFromList: extract('removeFileFromList'),
             restoreFeatureCachesFromHistory: extract('restoreFeatureCachesFromHistory'),
@@ -1906,6 +1927,8 @@ describe('the batch releases an on-screen video BEFORE the first rename (G2 fina
             bulkRated: new Map(),
             bulkRatedPairs: new Set(),
             _bulkPairKeysReferencing: () => [],
+            _captureUndoFields: extract('_captureUndoFields'),
+            _tournamentPromptOpen: () => false,
             getCombinedFeatures: () => null,
             removeFileFromList: extract('removeFileFromList'),
             saveBulkRatedFile: vi.fn(async () => {}),

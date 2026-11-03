@@ -186,6 +186,7 @@ export default [
             'hash-pool.js',
             'hash-parity.js',
             'feature-cache-store.js',
+            'coalescing-saver.js',
         ],
         languageOptions: {
             ecmaVersion: 2022,

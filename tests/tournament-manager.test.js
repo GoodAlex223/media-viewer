@@ -137,25 +137,6 @@ describe('TournamentManager.validateStateFile', () => {
     });
 });
 
-describe('TournamentManager.handleResume', () => {
-    it('reconstructs engine from a saved state', async () => {
-        const host = makeHost(['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg']);
-        const tm = new TournamentManager(host);
-
-        await tm.handleStartClick('/test/folder', 3);
-        const pair = tm.engine.getCurrentPair();
-        await tm.handlePairResult(pair.left, pair.right);
-        tm.cancelPending(); // clear the debounce timer so it can't fire post-test
-        const savedState = tm.engine.serialize();
-
-        const tm2 = new TournamentManager(host);
-        const ok = await tm2.handleResume(savedState, ['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg']);
-        expect(ok).toBe(true);
-        expect(tm2.engine).toBeTruthy();
-        expect(tm2.engine.history.length).toBe(0); // resumed engine starts with empty undo history (session-only)
-    });
-});
-
 describe('TournamentManager.handleResumeReconciled', () => {
     it('resumes and ignores files added since the tournament started', async () => {
         const host = makeHost(['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg']);
@@ -245,6 +226,185 @@ describe('TournamentManager debounced persistence', () => {
         }
     });
 
+    // PR #95 review 1: Save & leave of a tournament resumed without a pick wrote it over the previous folder's save.
+    it('handleResumeReconciled points later writes at its own folder', async () => {
+        const host = makeHost(['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg']);
+        const tm = new TournamentManager(host);
+        await tm.handleStartClick('/A', 3);
+        const state = tm.engine.serialize();
+        tm.engine = null;
+        host.baseFolderPath = '/B';
+        await tm.handleResumeReconciled(state, ['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg']);
+        const writeSpy = globalThis.window.electronAPI.writeTournamentState;
+        writeSpy.mockClear();
+        await tm.flush();
+        expect(writeSpy.mock.calls.map((c) => c[0])).toEqual(['/B']);
+    });
+
+    // PR #95 review 5: a load nulling the engine during a write with a pick pending made flush() spin on microtasks,
+    // which starved the quit's cap and a second close.
+    it('flush() settles when the engine goes away during a write, and leaves no flag for the next tournament', async () => {
+        const tm = new TournamentManager(makeHost(['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg']));
+        await tm.handleStartClick('/A', 3);
+        let finish;
+        globalThis.window.electronAPI.writeTournamentState = vi.fn(
+            () => new Promise((resolve) => (finish = () => resolve({ success: true })))
+        );
+        const drain = tm._drain.bind(tm);
+        let drains = 0;
+        tm._drain = () => {
+            if (++drains > 50) {
+                throw new Error('flush() is spinning');
+            }
+            return drain();
+        };
+        tm._schedulePersist('/A');
+        const flushing = tm.flush();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        tm._schedulePersist('/A'); // a pick during the held write
+        tm.engine = null; // what loadFolder does
+        finish();
+        await flushing;
+        expect(tm._persistPending).toBe(false);
+    });
+
+    // PR #95 review 6: Save & leave treated a refused write as durable, and nothing logged it.
+    it('a write main refuses is logged', async () => {
+        const logError = vi.fn();
+        globalThis.window.electronAPI.logError = logError;
+        const tm = new TournamentManager(makeHost(['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg']));
+        await tm.handleStartClick('/A', 3);
+        globalThis.window.electronAPI.writeTournamentState = vi.fn(async () => ({ success: false, error: 'EPERM' }));
+        await tm.flush();
+        expect(logError).toHaveBeenCalledTimes(1);
+        expect(logError.mock.calls[0][0]).toContain('EPERM');
+    });
+
+    // PR #95 round 2, issue 2: a folder change during the wait below redirected the delete to the new folder.
+    it('a discard deletes the folder it was pressed in, whatever opens during its wait', async () => {
+        const host = makeHost(['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg']);
+        host.baseFolderPath = '/A';
+        const tm = new TournamentManager(host);
+        await tm.handleStartClick('/A', 3);
+        let finish;
+        globalThis.window.electronAPI.writeTournamentState = vi.fn(
+            () => new Promise((resolve) => (finish = () => resolve({ success: true })))
+        );
+        const remove = vi.fn().mockResolvedValueOnce({ success: false }).mockResolvedValueOnce({ success: true });
+        globalThis.window.electronAPI.deleteTournamentState = remove;
+        tm._schedulePersist('/A');
+        const draining = tm._drain();
+        const discarding = tm.handleDiscard();
+        host.baseFolderPath = '/B';
+        finish();
+        await Promise.all([draining, discarding]);
+        expect(remove.mock.calls).toEqual([['/A'], ['/A']]); // the retry too
+    });
+
+    // PR #95 round 2, issue 5: the renderer tells the user when a Save & leave did not land.
+    it('lastWriteFailed follows the latest write', async () => {
+        globalThis.window.electronAPI.logError = vi.fn();
+        const tm = new TournamentManager(makeHost(['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg']));
+        await tm.handleStartClick('/A', 3);
+        expect(tm.lastWriteFailed).toBe(false);
+        globalThis.window.electronAPI.writeTournamentState = vi.fn(async () => ({ success: false, error: 'EPERM' }));
+        await tm.flush();
+        expect(tm.lastWriteFailed).toBe(true);
+        globalThis.window.electronAPI.writeTournamentState = vi.fn(async () => ({ success: true }));
+        await tm.flush();
+        expect(tm.lastWriteFailed).toBe(false);
+    });
+
+    // PR #95 review 16: a write between main's writeFile and rename recreated the file the delete had just removed.
+    it('a discard waits for a running write before it deletes', async () => {
+        const tm = new TournamentManager(makeHost(['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg']));
+        await tm.handleStartClick('/A', 3);
+        let finish;
+        globalThis.window.electronAPI.writeTournamentState = vi.fn(
+            () => new Promise((resolve) => (finish = () => resolve({ success: true })))
+        );
+        const remove = globalThis.window.electronAPI.deleteTournamentState;
+        tm._schedulePersist('/A');
+        const draining = tm._drain();
+        const discarding = tm.handleDiscard();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(remove).not.toHaveBeenCalled();
+        finish();
+        await Promise.all([draining, discarding]);
+        expect(remove).toHaveBeenCalledTimes(1);
+    });
+
+    // G3 member 6: flush() forces a write of the engine as it stands. A quit must write what is owed, and nothing else.
+    it('flushPending() writes a queued pick and clears its timer', async () => {
+        vi.useFakeTimers();
+        try {
+            const tm = new TournamentManager(makeHost(['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg']));
+            await tm.handleStartClick('/test/folder', 3);
+            const writeSpy = globalThis.window.electronAPI.writeTournamentState;
+            writeSpy.mockClear();
+            tm._schedulePersist('/test/folder');
+            await tm.flushPending();
+            expect(writeSpy).toHaveBeenCalledTimes(1);
+            expect(tm._persistTimer).toBeNull();
+            await vi.advanceTimersByTimeAsync(600);
+            expect(writeSpy).toHaveBeenCalledTimes(1);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('flushPending() waits for a write already running', async () => {
+        const tm = new TournamentManager(makeHost(['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg']));
+        await tm.handleStartClick('/test/folder', 3);
+        let finish;
+        globalThis.window.electronAPI.writeTournamentState = vi.fn(
+            () => new Promise((resolve) => (finish = () => resolve({ success: true })))
+        );
+        tm._schedulePersist('/test/folder');
+        const draining = tm._drain();
+        let flushed = false;
+        const flush = tm.flushPending().then(() => {
+            flushed = true;
+        });
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(flushed).toBe(false);
+        finish();
+        await Promise.all([draining, flush]);
+    });
+
+    it('flushPending() also waits for the write a pick during the running one starts', async () => {
+        const tm = new TournamentManager(makeHost(['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg']));
+        await tm.handleStartClick('/test/folder', 3);
+        const finish = [];
+        globalThis.window.electronAPI.writeTournamentState = vi.fn(
+            () => new Promise((resolve) => finish.push(() => resolve({ success: true })))
+        );
+        tm._schedulePersist('/test/folder');
+        const draining = tm._drain();
+        const flush = tm.flushPending();
+        tm._persistPending = true; // a pick during the write: its finally starts the next one
+        let flushed = false;
+        flush.then(() => {
+            flushed = true;
+        });
+        finish[0]();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(finish).toHaveLength(2);
+        expect(flushed).toBe(false);
+        finish[1]();
+        await Promise.all([draining, flush]);
+    });
+
+    it('flushPending() writes nothing with nothing owed, an engine in place or not', async () => {
+        const tm = new TournamentManager(makeHost(['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg']));
+        await tm.flushPending();
+        await tm.handleStartClick('/test/folder', 3);
+        const writeSpy = globalThis.window.electronAPI.writeTournamentState;
+        writeSpy.mockClear();
+        await tm.flushPending();
+        expect(writeSpy).not.toHaveBeenCalled();
+    });
+
     it('flush() writes immediately and clears the pending timer', async () => {
         vi.useFakeTimers();
         try {
@@ -257,6 +417,8 @@ describe('TournamentManager debounced persistence', () => {
             tm._schedulePersist('/test/folder');
             await tm.flush();
             expect(writeSpy).toHaveBeenCalledTimes(1);
+
+            expect(vi.getTimerCount()).toBe(0); // the armed timer is gone, not just forgotten
 
             // the armed timer must not fire a second write afterwards
             await vi.advanceTimersByTimeAsync(600);

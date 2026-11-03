@@ -36,6 +36,7 @@ describe('renderer media URLs (G1 I1)', () => {
         'recent-folders.js',
         'media-url.js',
         'feature-cache-store.js',
+        'coalescing-saver.js',
         'face-detector.js',
         'feature-extractor.js',
         'sorting-worker.js',

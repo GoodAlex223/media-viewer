@@ -5,6 +5,7 @@ import { MlTrainingManager } from '../ml-training.js';
 import * as LikeOrSkip from '../like-or-skip.js';
 import * as SimilaritySort from '../similarity-sort.js';
 import * as HashPool from '../hash-pool.js';
+import { CoalescingSaver } from '../coalescing-saver.js';
 import { stubFeatureCacheStore } from './feature-cache-harness.js';
 import { fakeHashPool } from './hash-pool-harness.js';
 // Extracted methods resolve media-viewer.js's namespace import through the global object (G2).
@@ -226,6 +227,23 @@ const areFoldersConfigured = extractMethod('areFoldersConfigured');
 const computeSortProgressView = extractMethod('computeSortProgressView');
 const insertNewFilesInSortedOrder = extractAsyncMethod('insertNewFilesInSortedOrder');
 const applyCachedSortOrder = extractAsyncMethod('applyCachedSortOrder');
+
+// The undo methods now reach these helpers and path.dirname. Filled in only where a context leaves them
+// out, so a context that sets its own keeps it.
+function withUndoHelpers(method) {
+    return function (...args) {
+        this._moveBackFromHistory ??= extractAsyncMethod('_moveBackFromHistory');
+        this._followRestoredFile ??= extractMethod('_followRestoredFile');
+        this._refuseIfFolderLoadInFlight ??= extractMethod('_refuseIfFolderLoadInFlight');
+        this._fileFromHistory ??= extractMethod('_fileFromHistory');
+        const api = globalThis.window?.electronAPI;
+        if (api) {
+            api.path = { basename: (p) => p.slice(p.lastIndexOf('/') + 1), ...api.path };
+            api.path.dirname ??= (p) => p.slice(0, p.lastIndexOf('/'));
+        }
+        return method.apply(this, args);
+    };
+}
 
 describe('formatElapsed', () => {
     it('returns "?" for NaN', () => {
@@ -1362,6 +1380,22 @@ describe('computeJxlFrameSchedule', () => {
 
 describe('applyPredictionSortResult', () => {
     const applyPredictionSortResult = extractMethod('applyPredictionSortResult');
+
+    // G3 member 4: an order that lost a listed file took it out of the session's list.
+    it('keeps a listed file the result omits, after the ordered ones, with no new score', () => {
+        const ctx = baseCtx();
+        applyPredictionSortResult.call(ctx, { sortedFilenames: ['c.png', 'a.png'], scores: { 'c.png': 0.9 } });
+        expect(ctx.mediaFiles.map((f) => f.name)).toEqual(['c.png', 'a.png', 'b.png']);
+        expect(ctx.predictionScores.has('/d/b.png')).toBe(false);
+    });
+
+    it('a name the list does not hold changes nothing, and a result of only those is "No files to sort"', () => {
+        const ctx = baseCtx();
+        ctx.showNotification = vi.fn();
+        expect(applyPredictionSortResult.call(ctx, { sortedFilenames: ['gone.png'] })).toBe(false);
+        expect(ctx.mediaFiles.map((f) => f.name)).toEqual(['a.png', 'b.png', 'c.png']);
+        expect(ctx.showNotification).toHaveBeenCalledWith('No files to sort', 'warning');
+    });
 
     function baseCtx() {
         return {
@@ -2741,7 +2775,7 @@ describe('_waitForRenderIdle (G2 final review F4)', () => {
 });
 
 describe('handleCancel feature restore', () => {
-    const handleCancel = extractAsyncMethod('handleCancel');
+    const handleCancel = withUndoHelpers(extractAsyncMethod('handleCancel'));
 
     function make576() {
         const v = new Float32Array(576);
@@ -2856,17 +2890,16 @@ describe('handleCancel feature restore', () => {
 
     it('every undo that puts a file back on the list gives it the mtime its history entry recorded (review #6)', () => {
         // Source check over the seven list restores (handleCancel's six: single, the bulk pair's remaining file, two
-        // pair branches of two; the tournament's one): each `size: <entry>.fileSize` is followed by its mtimeMs.
+        // pair branches of two; the tournament's one): each goes through _fileFromHistory, which carries the mtimeMs.
         for (const [name, sites] of [
             ['handleCancel', 6],
             ['handleTournamentUndo', 1],
         ]) {
             const body = methodSource(name);
-            const restores = [...body.matchAll(/size: (\w+)\.fileSize,\s*mtimeMs: (\w+)\.fileMtimeMs,/g)];
-            expect(restores, name).toHaveLength(sites);
-            for (const m of restores) expect(m[2], name).toBe(m[1]);
-            expect([...body.matchAll(/size: \w+\.fileSize,/g)], name).toHaveLength(sites);
+            expect([...body.matchAll(/this\._fileFromHistory\(\w+\)/g)], name).toHaveLength(sites);
+            expect([...body.matchAll(/size: \w+\.fileSize,/g)], name).toHaveLength(0);
         }
+        expect(methodSource('_fileFromHistory')).toMatch(/size: entry\.fileSize,\s*mtimeMs: entry\.fileMtimeMs,/);
     });
 
     it('compare-mode pair-undo restores caches for both files', async () => {
@@ -3008,6 +3041,7 @@ describe('handleCancel feature restore', () => {
         const showMedia = vi.fn();
         const nextMedia = vi.fn();
         const ctx = {
+            _tournamentPromptOpen: () => false,
             isSortedByPrediction: true,
             isCompareMode: true,
             compareLeftFile: { name: 'a.jpg', path: '/f/a.jpg' },
@@ -3038,6 +3072,7 @@ describe('handleCancel feature restore', () => {
         const bulkPairKey = extractMethod('bulkPairKey');
         const showMedia = vi.fn();
         const ctx = {
+            _tournamentPromptOpen: () => false,
             isSortedByPrediction: true,
             isCompareMode: true,
             compareLeftFile: { name: 'a.jpg', path: '/f/a.jpg' },
@@ -3057,9 +3092,26 @@ describe('handleCancel feature restore', () => {
         // The model is no longer updated per-rating, so there is no worker round trip to wait
         // for — applyBulkRating renders synchronously within the same call, every time.
         expect(showMedia).toHaveBeenCalledTimes(1);
-        // bulkFiles carries only the name now — nothing computes or stores features for it
+        // bulkFiles carries the name and any earlier label — nothing computes or stores features for it
         // (getCombinedFeatures is never called from applyBulkRating any more).
         expect(ctx.moveHistory[0].bulkFiles).toEqual([{ name: 'a.jpg' }, { name: 'z.jpg' }]);
+    });
+
+    // PR #95 review 4: an undo deleted a label the file already had before this rating.
+    it("applyBulkRating records each file's earlier label, and undoBulkRating gives it back", async () => {
+        const undoBulkRating = extractAsyncMethod('undoBulkRating');
+        const ctx = {
+            bulkRated: new Map([['a.jpg', 'good']]),
+            bulkRatedPairs: new Set(['a.jpg|z.jpg']),
+            bulkPairKey: () => 'a.jpg|z.jpg',
+            saveBulkRatedFile: vi.fn(async () => {}),
+            showNotification: vi.fn(),
+        };
+        ctx.bulkRated.set('z.jpg', 'bad');
+        ctx.bulkRated.set('a.jpg', 'bad');
+        await undoBulkRating.call(ctx, { bulkFiles: [{ name: 'a.jpg', previous: 'good' }, { name: 'z.jpg' }] });
+        expect([...ctx.bulkRated]).toEqual([['a.jpg', 'good']]);
+        expect(ctx.saveBulkRatedFile).toHaveBeenCalledOnce();
     });
 
     it('applyBulkRating drops a re-entrant press while navigation is already in flight', async () => {
@@ -3068,6 +3120,7 @@ describe('handleCancel feature restore', () => {
         const saveBulkRatedFile = vi.fn(async () => {});
         const showMedia = vi.fn();
         const ctx = {
+            _tournamentPromptOpen: () => false,
             isSortedByPrediction: true,
             isCompareMode: true,
             mediaNavigationInProgress: true, // e.g. the previous rating's showMedia() render is still in flight
@@ -3167,8 +3220,15 @@ describe('handleCancel feature restore', () => {
 describe('bulk-rated persistence', () => {
     const loadBulkRatedFile = extractAsyncMethod('loadBulkRatedFile');
     const saveBulkRatedFile = extractAsyncMethod('saveBulkRatedFile');
+    const writeBulkRated = extractAsyncMethod('_writeBulkRated');
     let origWindow;
     let written;
+
+    /** The context's saver, as the constructor wires it. */
+    function withSaver(ctx) {
+        ctx._bulkRatedSaver = new CoalescingSaver((folder, payload) => writeBulkRated.call(ctx, folder, payload));
+        return ctx;
+    }
 
     beforeEach(() => {
         origWindow = globalThis.window;
@@ -3191,14 +3251,14 @@ describe('bulk-rated persistence', () => {
     });
 
     it('hydrates the bulkRated map and prunes filenames absent from mediaFiles', async () => {
-        const ctx = {
+        const ctx = withSaver({
             baseFolderPath: '/folder',
             mediaFiles: [
                 { name: 'a.jpg', path: '/folder/a.jpg' },
                 { name: 'b.jpg', path: '/folder/b.jpg' },
             ],
             bulkRated: new Map(),
-        };
+        });
         ctx.saveBulkRatedFile = saveBulkRatedFile.bind(ctx);
         await loadBulkRatedFile.call(ctx);
         expect(ctx.bulkRated.get('a.jpg')).toBe('good');
@@ -3209,13 +3269,13 @@ describe('bulk-rated persistence', () => {
     });
 
     it('serializes the bulkRated map back to {version, good, bad}', async () => {
-        const ctx = {
+        const ctx = withSaver({
             baseFolderPath: '/folder',
             bulkRated: new Map([
                 ['x.png', 'good'],
                 ['y.png', 'bad'],
             ]),
-        };
+        });
         await saveBulkRatedFile.call(ctx);
         expect(written).toEqual({ version: 1, good: ['x.png'], bad: ['y.png'] });
     });
@@ -3228,13 +3288,13 @@ describe('bulk-rated persistence', () => {
             .mockResolvedValueOnce({ success: false, error: 'EPERM' })
             .mockRejectedValueOnce(new Error('IPC gone'))
             .mockResolvedValueOnce({ success: false, error: 'EBUSY' });
-        const ctx = {
+        const ctx = withSaver({
             baseFolderPath: '/folder',
             currentFolderPath: 'folder',
             bulkRated: new Map([['x.png', 'good']]),
             _bulkRatedSaveWarning: { warned: false },
             showNotification: vi.fn(),
-        };
+        });
         await saveBulkRatedFile.call(ctx);
         await saveBulkRatedFile.call(ctx);
         expect(ctx.showNotification.mock.calls).toEqual([['⚠️ Failed to save the bulk ratings for folder', 'warning']]);
@@ -3255,13 +3315,13 @@ describe('bulk-rated persistence', () => {
             .fn()
             .mockImplementationOnce(() => new Promise((resolve) => (failA = resolve)))
             .mockResolvedValueOnce({ success: false, error: 'EPERM' });
-        const ctx = {
+        const ctx = withSaver({
             baseFolderPath: '/A',
             currentFolderPath: 'A',
             bulkRated: new Map([['x.png', 'good']]),
             _bulkRatedSaveWarning: { warned: false },
             showNotification: vi.fn(),
-        };
+        });
         const saveA = saveBulkRatedFile.call(ctx);
         // The switch to B (loadFolder's part of it), while A's write is still in flight.
         Object.assign(ctx, { baseFolderPath: '/B', currentFolderPath: 'B', _bulkRatedSaveWarning: { warned: false } });
@@ -3274,14 +3334,224 @@ describe('bulk-rated persistence', () => {
         warn.mockRestore();
     });
 
+    // G3 member 2: 29 of 300 overlapping pairs left the older data on disk, on the real main.
+    it('a save made while another writes reaches main after it, with the newest data', async () => {
+        const finish = [];
+        const calls = [];
+        globalThis.window.electronAPI.writeBulkRatedFile = vi.fn((_folder, data) => {
+            calls.push(data);
+            return new Promise((resolve) => finish.push(() => resolve({ success: true })));
+        });
+        const ctx = withSaver({
+            baseFolderPath: '/folder',
+            currentFolderPath: 'folder',
+            bulkRated: new Map([['one.png', 'good']]),
+            _bulkRatedSaveWarning: { warned: false },
+            showNotification: vi.fn(),
+        });
+        const first = saveBulkRatedFile.call(ctx);
+        ctx.bulkRated.set('two.png', 'bad');
+        const second = saveBulkRatedFile.call(ctx);
+        ctx.bulkRated.set('three.png', 'good');
+        const third = saveBulkRatedFile.call(ctx);
+        expect(calls).toHaveLength(1);
+        finish[0]();
+        await first;
+        await vi.waitFor(() => expect(calls).toHaveLength(2));
+        finish[1]();
+        await Promise.all([second, third]); // the promise still means "written"
+        expect(calls[1]).toEqual({ version: 1, good: ['one.png', 'three.png'], bad: ['two.png'] });
+        expect(calls).toHaveLength(2);
+    });
+
+    it("a queued save keeps its own folder's ratings when the folder changes before it runs", async () => {
+        const finish = [];
+        const calls = [];
+        globalThis.window.electronAPI.writeBulkRatedFile = vi.fn((folder, data) => {
+            calls.push([folder, data.good]);
+            return new Promise((resolve) => finish.push(() => resolve({ success: true })));
+        });
+        const ctx = withSaver({
+            baseFolderPath: '/A',
+            currentFolderPath: 'A',
+            bulkRated: new Map([['a1.png', 'good']]),
+            _bulkRatedSaveWarning: { warned: false },
+            showNotification: vi.fn(),
+        });
+        const running = saveBulkRatedFile.call(ctx);
+        ctx.bulkRated.set('a2.png', 'good');
+        const queued = saveBulkRatedFile.call(ctx);
+        Object.assign(ctx, { baseFolderPath: '/B', currentFolderPath: 'B', bulkRated: new Map() });
+        finish[0]();
+        await running;
+        await vi.waitFor(() => expect(calls).toHaveLength(2));
+        finish[1]();
+        await queued;
+        expect(calls[1]).toEqual(['/A', ['a1.png', 'a2.png']]);
+    });
+
+    it('a load reads only after its own folder has no save left, and does not wait on another folder', async () => {
+        const order = [];
+        let finishWrite;
+        globalThis.window.electronAPI.writeBulkRatedFile = vi.fn(() => {
+            order.push('write');
+            return new Promise((resolve) => {
+                finishWrite = () => {
+                    order.push('written');
+                    resolve({ success: true });
+                };
+            });
+        });
+        globalThis.window.electronAPI.readBulkRatedFile = vi.fn(async (folder) => {
+            order.push(`read ${folder}`);
+            return { success: true, data: { version: 1, good: [], bad: [] } };
+        });
+        const ctx = withSaver({
+            baseFolderPath: '/A',
+            currentFolderPath: 'A',
+            mediaFiles: [],
+            bulkRated: new Map([['x.png', 'good']]),
+            _bulkRatedSaveWarning: { warned: false },
+            showNotification: vi.fn(),
+        });
+        const saving = saveBulkRatedFile.call(ctx);
+
+        ctx.baseFolderPath = '/B';
+        await loadBulkRatedFile.call(ctx); // the write on /A is still running
+        expect(order).toEqual(['write', 'read /B']);
+
+        ctx.baseFolderPath = '/A';
+        const loadingA = loadBulkRatedFile.call(ctx);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(order).toEqual(['write', 'read /B']);
+        finishWrite();
+        await Promise.all([saving, loadingA]);
+        expect(order).toEqual(['write', 'read /B', 'written', 'read /A']);
+    });
+
+    // PR #95 review 2: a failed read counted as no ratings, and the next rating replaced the whole file.
+    describe('a read that failed', () => {
+        const failingRead = {
+            'main says no': async () => ({ success: false, error: 'EBUSY' }),
+            'the call throws': async () => {
+                throw new Error('IPC gone');
+            },
+        };
+
+        it.each(Object.keys(failingRead))('%s: warns once, logs, and refuses every save of the visit', async (how) => {
+            const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+            const write = vi.fn(async () => ({ success: true }));
+            const logError = vi.fn();
+            Object.assign(globalThis.window.electronAPI, {
+                readBulkRatedFile: failingRead[how],
+                writeBulkRatedFile: write,
+                logError,
+            });
+            const ctx = withSaver({
+                baseFolderPath: '/folder',
+                currentFolderPath: 'folder',
+                mediaFiles: [{ name: 'x.png' }],
+                bulkRated: new Map(),
+                _bulkRatedSaveWarning: { warned: false },
+                showNotification: vi.fn(),
+            });
+            await loadBulkRatedFile.call(ctx);
+            ctx.bulkRated.set('x.png', 'good');
+            await saveBulkRatedFile.call(ctx);
+            await saveBulkRatedFile.call(ctx);
+            expect(write).not.toHaveBeenCalled();
+            // Round 2, issue 4: these ratings vanish, so the read's warning stays up and says what actually retries...
+            expect(ctx.showNotification).toHaveBeenCalledTimes(2);
+            const [message, type, options] = ctx.showNotification.mock.calls[0];
+            expect(message).toContain('folder');
+            expect(message).toContain('open another folder and come back');
+            expect(type).toBe('warning');
+            expect(options).toEqual({ sticky: true });
+            // ...and the first refused save says so too, once.
+            expect(ctx.showNotification.mock.calls[1][0]).toContain('not saved');
+            expect(logError).toHaveBeenCalledTimes(1);
+            warn.mockRestore();
+        });
+
+        it('the next load that reads re-arms the saves', async () => {
+            const write = vi.fn(async () => ({ success: true }));
+            const read = vi
+                .fn()
+                .mockResolvedValueOnce({ success: false, error: 'EBUSY' })
+                .mockResolvedValueOnce({ success: true, data: { version: 1, good: ['x.png'], bad: [] } });
+            Object.assign(globalThis.window.electronAPI, {
+                readBulkRatedFile: read,
+                writeBulkRatedFile: write,
+                logError: vi.fn(),
+            });
+            const ctx = withSaver({
+                baseFolderPath: '/folder',
+                currentFolderPath: 'folder',
+                mediaFiles: [{ name: 'x.png' }],
+                bulkRated: new Map(),
+                _bulkRatedSaveWarning: { warned: false },
+                showNotification: vi.fn(),
+            });
+            const note = { remove: vi.fn() };
+            ctx.showNotification.mockReturnValueOnce(note);
+            await loadBulkRatedFile.call(ctx);
+            await loadBulkRatedFile.call(ctx);
+            expect(note.remove).toHaveBeenCalledOnce(); // its warning does not outlive the visit
+            expect(ctx.bulkRated.get('x.png')).toBe('good');
+            await saveBulkRatedFile.call(ctx);
+            expect(write).toHaveBeenCalledTimes(1);
+        });
+
+        it('a missing file is not a failed read: saves go on', async () => {
+            const write = vi.fn(async () => ({ success: true }));
+            Object.assign(globalThis.window.electronAPI, {
+                readBulkRatedFile: async () => ({ success: true, data: null }),
+                writeBulkRatedFile: write,
+            });
+            const ctx = withSaver({
+                baseFolderPath: '/folder',
+                currentFolderPath: 'folder',
+                mediaFiles: [],
+                bulkRated: new Map(),
+                _bulkRatedSaveWarning: { warned: false },
+                showNotification: vi.fn(),
+            });
+            await loadBulkRatedFile.call(ctx);
+            await saveBulkRatedFile.call(ctx);
+            expect(write).toHaveBeenCalledTimes(1);
+            expect(ctx.showNotification).not.toHaveBeenCalled();
+        });
+    });
+
+    // PR #95 review 6: the toast dies with the window at a quit, so a failed write must reach the session log too.
+    it('a failed save is logged', async () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const logError = vi.fn();
+        Object.assign(globalThis.window.electronAPI, {
+            writeBulkRatedFile: async () => ({ success: false, error: 'EPERM' }),
+            logError,
+        });
+        const ctx = withSaver({
+            baseFolderPath: '/folder',
+            currentFolderPath: 'folder',
+            bulkRated: new Map([['x.png', 'good']]),
+            _bulkRatedSaveWarning: { warned: true }, // already warned this visit: the log still gets it
+            showNotification: vi.fn(),
+        });
+        await saveBulkRatedFile.call(ctx);
+        expect(logError).toHaveBeenCalledTimes(1);
+        expect(logError.mock.calls[0][0]).toContain('EPERM');
+        warn.mockRestore();
+    });
+
     it('a successful save posts nothing', async () => {
-        const ctx = {
+        const ctx = withSaver({
             baseFolderPath: '/folder',
             currentFolderPath: 'folder',
             bulkRated: new Map([['x.png', 'good']]),
             _bulkRatedSaveWarning: { warned: false },
             showNotification: vi.fn(),
-        };
+        });
         await saveBulkRatedFile.call(ctx);
         expect(ctx.showNotification).not.toHaveBeenCalled();
         expect(ctx._bulkRatedSaveWarning.warned).toBe(false);
@@ -3293,6 +3563,7 @@ describe('applyBulkRating', () => {
 
     function makeCtx(overrides = {}) {
         return {
+            _tournamentPromptOpen: () => false,
             isSortedByPrediction: true,
             isCompareMode: true,
             compareLeftFile: { name: 'a.jpg', path: '/f/a.jpg' },
@@ -3338,6 +3609,16 @@ describe('applyBulkRating', () => {
         expect(ctx.moveHistory).toHaveLength(0);
         expect(ctx.nextMedia).not.toHaveBeenCalled();
         expect(ctx.saveBulkRatedFile).not.toHaveBeenCalled();
+    });
+
+    // PR #95 review 4: what undoBulkRating needs to give an earlier label back.
+    it("records a file's earlier label, and only when it had one", async () => {
+        const ctx = makeCtx();
+        ctx.bulkRated.set(ctx.compareLeftFile.name, 'bad');
+        await applyBulkRating.call(ctx, 'good');
+        const [left, right] = ctx.moveHistory[0].bulkFiles;
+        expect(left).toEqual({ name: ctx.compareLeftFile.name, previous: 'bad' });
+        expect(right).toEqual({ name: ctx.compareRightFile.name });
     });
 
     it('no-ops when a compare file is missing', async () => {
@@ -3603,6 +3884,8 @@ describe('bulkRatedPairs key capture + restore across undo (G1 T3)', () => {
             bulkRatedPairs: new Set(pairs),
             bulkPairKey,
             _bulkPairKeysReferencing: keysReferencing,
+            _captureUndoFields: extractMethod('_captureUndoFields'),
+            _tournamentPromptOpen: () => false,
             saveBulkRatedFile: () => {},
             likeOrSkip: new LikeOrSkip.SkipTracker(),
         };
@@ -3720,8 +4003,8 @@ describe('bulkRatedPairs key capture + restore across undo (G1 T3)', () => {
     });
 
     it('moveCurrentFile files a fallback extraction under the visit the move started in (close-out cut 8)', async () => {
-        // Moves don't refuse during a folder load: a loadFolder already listing when the move starts ends the visit
-        // during the extraction's await. Read after the await, the visit was always the current one.
+        // A results' visit is the one its work started in, whatever happens across the extraction's await. Read after
+        // the await, the visit was always the current one. Moves now refuse during a load; the store's rule stands.
         const moveCurrentFile = extractAsyncMethod('moveCurrentFile');
         const a = { name: 'a.jpg', path: '/f/a.jpg', size: 10, mtimeMs: 7, type: 'image/jpeg' };
         const started = Object.freeze({ id: 1, folder: '/f' });
@@ -3801,10 +4084,10 @@ describe('bulkRatedPairs key capture + restore across undo (G1 T3)', () => {
             const body = methodSource(name);
             const prune = body.indexOf('this.removeFileFromList(');
             expect(prune, name).toBeGreaterThan(-1);
-            const hits = [...body.matchAll(/this\.perceptualHashes\.get\(/g)].map((m) => m.index);
+            const hits = [...body.matchAll(/\.\.\.this\._captureUndoFields\(/g)].map((m) => m.index);
             expect(hits, name).toHaveLength(stashes);
             for (const idx of hits) expect(idx, name).toBeLessThan(prune);
-            expect(body, name).toContain('perceptualHash');
+            expect(methodSource('_captureUndoFields'), name).toContain('this.perceptualHashes.get(file.path)');
         }
     });
 
@@ -3823,7 +4106,7 @@ describe('bulkRatedPairs key capture + restore across undo (G1 T3)', () => {
 
     it('moveToSpecialFolder and moveComparePair capture before they prune (source order)', () => {
         // These two are DOM/dialog-heavy; assert the ordering invariant on the source instead:
-        // every _bulkPairKeysReferencing( capture precedes the first removeFileFromList( call,
+        // every _captureUndoFields( capture precedes the first removeFileFromList( call,
         // and the captured keys land on the history entry as prunedPairKeys.
         for (const [name, captures] of [
             ['moveToSpecialFolder', 1],
@@ -3832,16 +4115,16 @@ describe('bulkRatedPairs key capture + restore across undo (G1 T3)', () => {
             const body = methodSource(name);
             const prune = body.indexOf('this.removeFileFromList(');
             expect(prune, name).toBeGreaterThan(-1);
-            const hits = [...body.matchAll(/this\._bulkPairKeysReferencing\(/g)].map((m) => m.index);
+            const hits = [...body.matchAll(/\.\.\.this\._captureUndoFields\(/g)].map((m) => m.index);
             expect(hits, name).toHaveLength(captures);
             for (const idx of hits) expect(idx, name).toBeLessThan(prune);
-            expect(body, name).toContain('prunedPairKeys');
+            expect(methodSource('_captureUndoFields'), name).toContain('prunedPairKeys');
         }
     });
 });
 
 describe('handleCancel reinstates bulkRatedPairs keys (G1 T3)', () => {
-    const handleCancel = extractAsyncMethod('handleCancel');
+    const handleCancel = withUndoHelpers(extractAsyncMethod('handleCancel'));
     const bulkPairKey = extractMethod('bulkPairKey');
     let origWindow;
     beforeEach(() => {
@@ -5253,6 +5536,7 @@ describe('loadFolder empty-folder teardown (Fix B follow-up)', () => {
 
     function makeCtx() {
         const ctx = {
+            _closeTournamentPrompts: vi.fn(),
             isTournamentMode: false,
             tournament: { engine: 'stale-engine' },
             _onOrderChanged: vi.fn(),
@@ -5872,6 +6156,9 @@ describe('handleAppCloseRequest', () => {
     const handleAppCloseRequest = extractMethod('handleAppCloseRequest');
     let allowAppClose, logError;
 
+    // The renderer's way to close, once it decides to (its own tests: rating-data-safety-glue.test.js).
+    const closing = (ctx) => Object.assign(ctx, { _saveThenAllowClose: vi.fn() });
+
     beforeEach(() => {
         allowAppClose = vi.fn();
         logError = vi.fn();
@@ -5885,36 +6172,37 @@ describe('handleAppCloseRequest', () => {
         delete globalThis.document;
     });
 
-    it('allows close immediately when not in tournament mode', () => {
-        const ctx = { isTournamentMode: false, tournament: {}, showTournamentLeavePrompt: vi.fn() };
+    it('goes straight to the save-then-close when not in tournament mode', () => {
+        const ctx = closing({ isTournamentMode: false, tournament: {}, showTournamentLeavePrompt: vi.fn() });
         handleAppCloseRequest.call(ctx);
-        expect(allowAppClose).toHaveBeenCalledTimes(1);
+        expect(ctx._saveThenAllowClose).toHaveBeenCalledTimes(1);
         expect(ctx.showTournamentLeavePrompt).not.toHaveBeenCalled();
     });
 
-    it('allows close immediately when the tournament is complete', () => {
-        const ctx = {
+    it('goes straight to the save-then-close when the tournament is complete', () => {
+        const ctx = closing({
             isTournamentMode: true,
             tournament: { engine: { isComplete: () => true } },
             showTournamentLeavePrompt: vi.fn(),
-        };
+        });
         handleAppCloseRequest.call(ctx);
-        expect(allowAppClose).toHaveBeenCalledTimes(1);
+        expect(ctx._saveThenAllowClose).toHaveBeenCalledTimes(1);
         expect(ctx.showTournamentLeavePrompt).not.toHaveBeenCalled();
     });
 
-    it('shows the leave prompt for an incomplete tournament; its continuation allows close', () => {
-        const ctx = {
+    it('shows the leave prompt for an incomplete tournament; its continuation saves, then closes', () => {
+        const ctx = closing({
             isTournamentMode: true,
             tournament: { engine: { isComplete: () => false } },
             showTournamentLeavePrompt: vi.fn(),
-        };
+        });
         handleAppCloseRequest.call(ctx);
         expect(ctx.showTournamentLeavePrompt).toHaveBeenCalledTimes(1);
+        expect(ctx._saveThenAllowClose).not.toHaveBeenCalled();
         expect(allowAppClose).not.toHaveBeenCalled();
         const continuation = ctx.showTournamentLeavePrompt.mock.calls[0][0];
         continuation();
-        expect(allowAppClose).toHaveBeenCalledTimes(1);
+        expect(ctx._saveThenAllowClose).toHaveBeenCalledTimes(1);
     });
 
     it('re-entrancy guard: no-ops when the LEAVE prompt is already open', () => {
@@ -5937,8 +6225,8 @@ describe('handleAppCloseRequest', () => {
 
     it('does NOT guard when the RESUME prompt is open — window stays closable (allows close)', () => {
         // The 'Resume tournament?' prompt reuses the SAME modal but shows while isTournamentMode
-        // is still false (before entering); clicking X during it must fall through to
-        // allowAppClose(), not be swallowed by the leave-prompt re-entrancy guard.
+        // is still false (before entering); clicking X during it must fall through to the
+        // save-then-close, not be swallowed by the leave-prompt re-entrancy guard.
         globalThis.document = {
             getElementById: (id) => {
                 if (id === 'tournamentResumeModal') return { style: { display: 'flex' } };
@@ -5946,9 +6234,66 @@ describe('handleAppCloseRequest', () => {
                 return null;
             },
         };
-        const ctx = { isTournamentMode: false, tournament: {}, showTournamentLeavePrompt: vi.fn() };
+        const ctx = closing({ isTournamentMode: false, tournament: {}, showTournamentLeavePrompt: vi.fn() });
+        handleAppCloseRequest.call(ctx);
+        expect(ctx._saveThenAllowClose).toHaveBeenCalledTimes(1);
+    });
+
+    it('a second close once the note has shown closes at once, ahead of everything else', () => {
+        // The leave prompt being "open" would swallow it: the way out must not depend on that check.
+        globalThis.document = {
+            getElementById: (id) => {
+                if (id === 'tournamentResumeModal') return { style: { display: 'flex' } };
+                if (id === 'tournamentResumeTitle') return { textContent: 'Leave tournament?' };
+                return null;
+            },
+        };
+        const ctx = closing({
+            _closeSaveInFlight: true,
+            _closeSaveNoteShown: true,
+            isTournamentMode: false,
+            tournament: {},
+            showTournamentLeavePrompt: vi.fn(),
+        });
         handleAppCloseRequest.call(ctx);
         expect(allowAppClose).toHaveBeenCalledTimes(1);
+        expect(ctx._saveThenAllowClose).not.toHaveBeenCalled();
+    });
+
+    // PR #95 review 9: the prompt's own write ran outside the cap, with every further close swallowed.
+    it('a close after a choice in the leave prompt is let through', () => {
+        globalThis.document = {
+            getElementById: (id) => {
+                if (id === 'tournamentResumeModal') return { style: { display: 'flex' } };
+                if (id === 'tournamentResumeTitle') return { textContent: 'Leave tournament?' };
+                return null;
+            },
+        };
+        const ctx = closing({
+            _leaveChoiceMade: true,
+            isTournamentMode: true,
+            tournament: { engine: { isComplete: () => false } },
+            showTournamentLeavePrompt: vi.fn(),
+        });
+        handleAppCloseRequest.call(ctx);
+        // Round 2, issue 3: through the quit's saves, with their cap and note, not straight out.
+        expect(ctx._saveThenAllowClose).toHaveBeenCalledTimes(1);
+        expect(allowAppClose).not.toHaveBeenCalled();
+        expect(ctx.showTournamentLeavePrompt).not.toHaveBeenCalled();
+    });
+
+    // PR #95 review 10: nothing has invited a second close until the note shows, and it would drop a queued save.
+    it('a second close before the note has shown is ignored', () => {
+        const ctx = closing({
+            _closeSaveInFlight: true,
+            _closeSaveNoteShown: false,
+            isTournamentMode: false,
+            tournament: {},
+            showTournamentLeavePrompt: vi.fn(),
+        });
+        handleAppCloseRequest.call(ctx);
+        expect(allowAppClose).not.toHaveBeenCalled();
+        expect(ctx._saveThenAllowClose).not.toHaveBeenCalled();
     });
 
     it('still allows close if the handler throws (fail-safe)', () => {
@@ -5987,7 +6332,7 @@ describe('extraction progress sink', () => {
 });
 
 describe('handleTournamentUndo (unified undo stack)', () => {
-    const handleTournamentUndo = extractAsyncMethod('handleTournamentUndo');
+    const handleTournamentUndo = withUndoHelpers(extractAsyncMethod('handleTournamentUndo'));
 
     function makeCtx(pending, overrides = {}) {
         const engine = {
@@ -8013,7 +8358,7 @@ const IN_FLIGHT_NOTICE = 'A move is still in progress — press Undo again in a 
 describe('_fileOpInFlight — one file action at a time (G1)', () => {
     const moveCurrentFile = extractAsyncMethod('moveCurrentFile');
     const moveToSpecialFolder = extractAsyncMethod('moveToSpecialFolder');
-    const handleCancel = extractAsyncMethod('handleCancel');
+    const handleCancel = withUndoHelpers(extractAsyncMethod('handleCancel'));
     const nextMedia = extractMethod('nextMedia');
     const previousMedia = extractMethod('previousMedia');
 
@@ -8057,7 +8402,11 @@ describe('_fileOpInFlight — one file action at a time (G1)', () => {
             _followRestoredFile: extractMethod('_followRestoredFile'), // PR #78 review #2
             getCombinedFeatures: () => null,
             _bulkPairKeysReferencing: () => [],
+            _captureUndoFields: extractMethod('_captureUndoFields'),
+            _tournamentPromptOpen: () => false,
             perceptualHashes: new Map(), // the move sites stash a hash from it (PR #85 review #4)
+            predictionScores: new Map(), // and a score and a label (G3 member 3)
+            bulkRated: new Map(),
             removeFileFromList: vi.fn(function (p) {
                 this.mediaFiles = this.mediaFiles.filter((f) => f.path !== p);
             }),
@@ -8236,7 +8585,11 @@ describe('_fileOpInFlight — compare pair moves and bulk rating (G1)', () => {
             areFoldersConfigured: () => true,
             _refuseIfNeedsRegrant: () => false,
             _bulkPairKeysReferencing: () => [],
+            _captureUndoFields: extractMethod('_captureUndoFields'),
+            _tournamentPromptOpen: () => false,
             perceptualHashes: new Map(), // the move sites stash a hash from it (PR #85 review #4)
+            predictionScores: new Map(), // and a score and a label (G3 member 3)
+            bulkRated: new Map(),
             removeFileFromList: vi.fn(function (p) {
                 this.mediaFiles = this.mediaFiles.filter((f) => f.path !== p);
             }),
@@ -8714,7 +9067,11 @@ describe('a refused folder check is not "missing" (deep review #7)', () => {
             _refuseUngrantedFolder: vi.fn(() => true),
             getCombinedFeatures: () => null,
             _bulkPairKeysReferencing: () => [],
+            _captureUndoFields: extractMethod('_captureUndoFields'),
+            _tournamentPromptOpen: () => false,
             perceptualHashes: new Map(), // the move sites stash a hash from it (PR #85 review #4)
+            predictionScores: new Map(), // and a score and a label (G3 member 3)
+            bulkRated: new Map(),
             removeFileFromList: vi.fn(function (p) {
                 this.mediaFiles = this.mediaFiles.filter((f) => f.path !== p);
             }),
@@ -8886,7 +9243,7 @@ describe('grant refresh is single-flight (deep review #3)', () => {
 // source folder after a move, undo restores to "name (n).ext". The restore legs rebuilt the list
 // entry (and the feature caches) from the OLD name, pointing at the other file.
 describe('undo follows where a file was actually put back (PR #78 review #2)', () => {
-    const handleCancel = extractAsyncMethod('handleCancel');
+    const handleCancel = withUndoHelpers(extractAsyncMethod('handleCancel'));
     const _followRestoredFile = extractMethod('_followRestoredFile');
     let origWindow;
 

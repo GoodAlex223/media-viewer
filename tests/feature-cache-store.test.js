@@ -827,6 +827,91 @@ describe('requestSave: the frozen copy and the queue', () => {
     });
 });
 
+describe('flush (G3 member 6: what a quit waits for)', () => {
+    async function readVisit(files, folder = '/A') {
+        main.seed(folder, files);
+        const ctx = makeStore(main, { files });
+        const v = ctx.store.beginVisit(folder);
+        await ctx.store.ensureRead();
+        return { ...ctx, v };
+    }
+
+    it("saves the visit's unsaved entries", async () => {
+        const files = makeFiles('/A', 'a', 4);
+        const { store, host, v } = await readVisit(files.slice(0, 3));
+        host.files = files;
+        store.putFeature(v, '/A/a3.jpg', vec());
+        await store.flush();
+        expect(main.entriesOf('/A').has('a3.jpg')).toBe(true);
+    });
+
+    it('waits for a queued save of an ended visit', async () => {
+        const files = makeFiles('/A', 'a', 5);
+        const { store, host, v } = await readVisit(files.slice(0, 3));
+        host.files = files;
+        store.putFeature(v, '/A/a3.jpg', vec());
+        const release = main.hold('featureCacheWriteChunk', 1);
+        const streaming = store.requestSave();
+        await release.reached;
+        store.putFeature(v, '/A/a4.jpg', vec());
+        store.endVisit(); // queues its flush behind the streaming save, and the visit is gone
+        let flushed = false;
+        const flush = store.flush().then(() => {
+            flushed = true;
+        });
+        await settle();
+        expect(flushed).toBe(false);
+        release();
+        await Promise.all([streaming, flush]);
+        expect(main.writesTo('/A')).toHaveLength(2);
+        expect(main.entriesOf('/A').has('a4.jpg')).toBe(true);
+    });
+
+    it('waits for a save requested while it waits', async () => {
+        const files = makeFiles('/A', 'a', 5);
+        const { store, host, v } = await readVisit(files.slice(0, 3));
+        host.files = files;
+        store.putFeature(v, '/A/a3.jpg', vec());
+        const release = main.hold('featureCacheWriteChunk', 1);
+        const flush = store.flush();
+        await release.reached;
+        store.putFeature(v, '/A/a4.jpg', vec());
+        store.requestSave();
+        release();
+        await flush;
+        expect(main.writesTo('/A')).toHaveLength(2);
+        expect(main.entriesOf('/A').has('a4.jpg')).toBe(true);
+    });
+
+    it('keeps waiting while the chain grows behind the save it is waiting on', async () => {
+        const { store } = makeStore(main);
+        let finishFirst, finishSecond;
+        const first = new Promise((resolve) => (finishFirst = resolve));
+        const second = new Promise((resolve) => (finishSecond = resolve));
+        store._saveChain = first;
+        let flushed = false;
+        const flush = store.flush().then(() => {
+            flushed = true;
+        });
+        await settle();
+        store._saveChain = first.then(() => second); // requested after flush took its look at the chain
+        finishFirst();
+        await settle();
+        expect(flushed).toBe(false);
+        finishSecond();
+        await flush;
+    });
+
+    it('owes nothing and writes nothing for a clean visit, or with no visit', async () => {
+        const files = makeFiles('/A', 'a', 3);
+        const { store } = await readVisit(files);
+        await store.flush();
+        store.endVisit();
+        await store.flush();
+        expect(main.writes).toHaveLength(0);
+    });
+});
+
 describe('refusals (spec § 7.3)', () => {
     it("an explained refusal reads the file again, then saves it with the visit's work, and shows nothing", async () => {
         // Review Focus 5: the source folder is also the like folder, and training wrote its cache mid-visit. The D4

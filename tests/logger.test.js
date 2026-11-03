@@ -3,6 +3,7 @@ import { createRequire } from 'module';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import { EventEmitter } from 'events';
 
 const require = createRequire(import.meta.url);
 
@@ -238,6 +239,48 @@ describe('logger', () => {
             logger.init(testLogDir);
             logger.log('main', 'late');
             expect(readLines().at(-1)).toBe(`[2026-10-06 ${pad(hour)}:15:00.000] [INFO] [main] late`);
+        });
+    });
+
+    describe('installCrashLogging() (G3 member 7)', () => {
+        it('logs an uncaught exception through the monitor event, with its origin and stack', () => {
+            logger.init(testLogDir);
+            const proc = new EventEmitter();
+            logger.installCrashLogging(proc);
+            const err = new Error('boom');
+            proc.emit('uncaughtExceptionMonitor', err, 'uncaughtException');
+            const log = fs.readFileSync(logger.getLogPath(), 'utf8');
+            expect(log).toContain('[ERROR] [process] uncaughtException: Error: boom');
+            expect(log).toContain('logger.test.js'); // the stack, not only the message
+        });
+
+        // Electron shows its error box only while it is the sole 'uncaughtException' listener (measured, spec § 2).
+        it("adds no 'uncaughtException' or 'unhandledRejection' listener", () => {
+            const proc = new EventEmitter();
+            logger.installCrashLogging(proc);
+            expect(proc.listenerCount('uncaughtException')).toBe(0);
+            expect(proc.listenerCount('unhandledRejection')).toBe(0);
+            expect(proc.listenerCount('uncaughtExceptionMonitor')).toBe(1);
+        });
+
+        it('logs a thrown non-Error too', () => {
+            logger.init(testLogDir);
+            const proc = new EventEmitter();
+            logger.installCrashLogging(proc);
+            proc.emit('uncaughtExceptionMonitor', 'just a string', 'uncaughtException');
+            expect(fs.readFileSync(logger.getLogPath(), 'utf8')).toContain('uncaughtException: just a string');
+        });
+
+        it('a failure while logging does not become a second exception', () => {
+            logger.init(testLogDir);
+            const proc = new EventEmitter();
+            logger.installCrashLogging(proc);
+            const hostile = {
+                get stack() {
+                    throw new Error('no stack for you');
+                },
+            };
+            expect(() => proc.emit('uncaughtExceptionMonitor', hostile, 'uncaughtException')).not.toThrow();
         });
     });
 

@@ -5,6 +5,7 @@ const fsSync = require('fs'); // createReadStream/createWriteStream for streamin
 const { execFile } = require('child_process');
 const { promisify } = require('util');
 const logger = require('./logger');
+logger.installCrashLogging();
 const { isMediaFile, getMimeType } = require('./media-formats');
 const { packFeatureChunk } = require('./feature-cache-transport');
 const {

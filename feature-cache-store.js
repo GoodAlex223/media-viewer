@@ -414,6 +414,20 @@ export class FeatureCacheStore {
     }
 
     /**
+     * What a quit waits for: this visit's unsaved entries, then every save in the chain, an ended visit's included.
+     * A refused save's re-read and re-save are not waited for: they cost a re-extraction next time, not data.
+     * Never rejects.
+     */
+    async flush() {
+        await this.saveIfDirty();
+        let tail;
+        do {
+            tail = this._saveChain;
+            await tail;
+        } while (tail !== this._saveChain);
+    }
+
+    /**
      * The tail of an extraction run (the AI sort's Phase 2, the CLIP kickoff) for the visit it ran in. Nothing when
      * that visit is over: its flush on leave saved what it could (for a visit whose read failed, only a covering
      * copy). When the visit could not read its cache and its work cannot be saved, one warning per visit says so
