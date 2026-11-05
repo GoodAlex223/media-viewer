@@ -189,6 +189,16 @@ Outcome across the usable contexts:
 - **A side agent's note, relayed by the user, confirmed:** my write-up implied the fp32 switch was what the fix lacked. P4a changes only the CLIP half; the 64 hand-crafted dims come from the renderer's extraction, which P4a leaves alone, so a re-check after P4a with the same candidates would likely fail again. The verdict and the pass mark are unchanged. The report, the § 6 rows and A1's closeout gate note now put a decided fix for the metadata gap before the re-check. Re-reading for the note also showed that the as-trained column already estimates the other fix (sort-time vectors carrying metadata): 0.918 in A against 0.782 without metadata, a lead, since it was a control.
 - **Where the run's evidence lives, for the review** (a second side-agent note: the job's scratch folder is deleted with the job): `%APPDATA%\media_viewer\research\2026-11-05-real-folders\` on the user's machine, outside any repository. It holds `real-folders.md` and `.json` (section 10's source), both runs' console output, the first run's saved taste, `repro-check.js`, both name-check scripts (made to read their own folder), and a `README.txt`. Hashes were checked after the copy, and both scripts were re-run from the copy with unchanged results. Its `pairs.json` holds real paths: never commit or paste it.
 
+### 2026-11-06 — PHASE: Review round 1 (issuecomment-6671026802: 8 issues, 3 held back)
+
+- **Fixed in the script** (each test seen failing first; 42 of 42 pass): #1 only a folder read becomes a status, and an evaluation that throws fails the run (`measurePair`); #5 the repo refusal also checks the real path, so a junction no longer gets past; #6 a cache of another version is refused as `unreadable: CACHE_VERSION`, pinned to `media-viewer.js`'s constant by a test; #7 the flags are validated (integers, minimums 2/1/2, unknown flags refused, a fixed usage line that repeats no input). A `value === undefined` check was dropped as dead code: no input reaches it that the integer test or the required-flag check doesn't already refuse.
+- **Mutation check, in a scratch copy:** 13 of 13 killed (9 new mutants, plus the 4 old ones whose code moved), with a 42-of-42 baseline before and after, and nothing left in the worktree.
+- **#3 measured, not changed:** a probe reproduced the run's folds exactly (clamped AUC equal to the saved means, difference 0) and re-scored today's learner by raw margin. 0.0% of held-out scores reached the clamp, and AUC and likes in the first 60 were unchanged to four decimals in both tastes, so every gain stands, the +0.058 lead included. Grouping took 529 s at 31,049 files and 105 s at 14,961 in that probe, with the CPU shared with the mutation run.
+- **#4 computed from the saved results:** the corrected intervals are 1.871× wider, and no conclusion changes (report § 10 lists them).
+- **#2, #3, #4 and #8 are preconditions** on the re-check row in § 6, so closeout carries them to BACKLOG. #2 changes the user-approved rule and is the user's call.
+- **Provenance:** the report's numbers come from the script at `c61843b`. This round's script changes touch only paths that run never reached, which the README and report § 10 now say.
+- The reviewer session's transcript holds no remark beyond the comment.
+
 ---
 
 ## 5. Key Discoveries
@@ -204,7 +214,7 @@ Outcome across the usable contexts:
 | Idea | Rationale | Effort | Priority |
 |------|-----------|--------|----------|
 | Close the train/score metadata gap (🟤, Claude-surfaced), **before the re-check below** | Measured here: today's model loses 0.19-0.29 AUC between training and sort-time vectors. Two candidate fixes, both leads: leave dims 42–47 and 54–61 out of training (0.782 in A, +0.058; B +0.007, CI spans zero), or pass metadata to background and priority extraction so sort-time vectors match (the as-trained column estimates it: 0.918 in A, 1.000 in B, with the open question whether folder-separating metadata ranks a main folder's files too). The user decides which; it needs its own pass mark | S-M | H |
-| Re-run this check after the gap fix, on fp32 vectors once P4a lands | § 2's outcome table sends a wait to after P4a, but fp32 changes only the CLIP half and the measured loss is in the metadata dims, so after P4a alone it would likely fail again (a side agent's note, confirmed 2026-11-05). Pre-register the chosen gap fix as a candidate | S | M |
+| Re-run this check after the gap fix, on fp32 vectors once P4a lands | § 2's outcome table sends a wait to after P4a, but fp32 changes only the CLIP half and the measured loss is in the metadata dims, so after P4a alone it would likely fail again (a side agent's note, confirmed 2026-11-05). Pre-register the chosen gap fix as a candidate. **Preconditions before its pass mark is committed (PR #97 review):** (a) read the active model's vectors: D29 puts fp32 in an optional `clipVectors` field keyed by model id, with no version bump, so today's reader of `clipVector` would measure q8 again and nothing would show it (review #8); (b) "go, z-scoring only" requires z-scoring to pass clauses 1–3 on its own, not only to sit within 0.01 of the converged fit (review #2; changes the user-approved rule, so it's the user's call; recommended); (c) score every learner the way the shipped model will be scored: through `predict()` if A1 keeps its clamp at \|z\| > 20, else every learner by margin (review #3; in this run no held-out score reached the clamp, so nothing changed); (d) clause 2 uses the Nadeau–Bengio corrected resampled t interval, about 1.9× wider at 5 × 2 folds (review #4) | S-M | M |
 | A converged fit's cost at real sizes (🟤, input to A1) | About 50 s per fit at 25,000 labels on one thread, against the report's estimate of under a second; A1 would need a cap, a warm start or a worker budget | S | M |
 | Measure near-duplicate thresholds on these contexts for P4c | The group counts here are a first look at real copy rates | S | L |
 
@@ -237,14 +247,17 @@ None yet.
 | Mutation check, in a scratch copy | 21 of 21 killed | Baseline read before and after. Two survivors on the way each exposed a test gap, both closed: a fatal error whose message holds a path, and a fold-balance fixture with more likes only |
 | Pre-commit hook on the merge | Pass, 2,636 unit tests | `prototypes/` and `docs/research/` byte-identical to `96d9b22` afterwards |
 | Real run | Exit 0, 55 min; controls passed; outcome wait | Taste B reproduced in all 345 non-timing values across the two runs; the comparison caught a planted 1e-9 change |
+| Self-test after review round 1 | Pass, 42 of 42 | 11 new tests, the 6 behaviour tests seen failing on the unfixed code |
+| Mutation check, review round 1 | 13 of 13 killed | Baseline 42 of 42 before and after |
+| Clamp probe (#3) | No held-out score at 0 or 1; AUC shift 0.0000 | Reproduced the saved means exactly before measuring |
 
 ---
 
 ## 8. Review
 
 - [x] Self-review complete (every report number checked against the run's output; the wording fixes of `747bea4` and `5cf4b2c`)
-- [ ] Review in a separate chat (asked first; the user runs it)
-- [ ] Review comments addressed
+- [x] Review in a separate chat (asked first; the user ran it: round 1, issuecomment-6671026802)
+- [x] Review comments addressed (round 1; the response comment names the fix commit)
 - [ ] Approved
 
 ---

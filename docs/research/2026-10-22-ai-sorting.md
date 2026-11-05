@@ -570,6 +570,18 @@ and 0.469-0.508 in B (bound: within 0.064): passed. Letting near-copies straddle
 0.001 in A and 0.011 in B, so the copies did not inflate these numbers much. A second run reproduced taste B's
 result in every one of its 345 values apart from timings; a planted change of 1e-9 was caught.
 
+**Checks added after review (PR #97).**
+- The intervals above are plain paired t-intervals over 10 correlated fold results (5 folds x 2 repeats). The
+  Nadeau-Bengio correction for overlapping training sets widens each about 1.9 times. Taste A's converged gain then
+  spans +0.001 to +0.010 and the metadata-free lead +0.047 to +0.068. Every interval that excluded zero still does,
+  and every one that spanned it still does.
+- Today's learner is scored through the app's sigmoid, which returns exactly 1 or 0 past |z| > 20, while the
+  converged learners are ranked by raw margin, so ties could flatter the converged gains. Re-scored by raw margin on
+  the same folds, today's learner gave the same AUC to four decimals in both tastes: no held-out score reached the
+  clamp. Every gain above stands as measured.
+- The script was hardened after this run (flag checks, the repo refusal through junctions, a cache-version check, and
+  a throwing evaluation now fails the run). This run reached none of those paths.
+
 **Outcome by the pass mark: wait.** Neither fix step passes in either taste. The step is not dropped. The plan
 sent it to a re-check after the switch to fp32 CLIP, the only setting in which section 6 found it helping a
 quality taste. But fp32 changes only the CLIP half, and the larger loss below sits in the metadata dims, so a

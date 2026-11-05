@@ -50,6 +50,9 @@ const SCORING_DEFAULTS = extractFeatures(
     {}
 );
 
+// The cache version the app trains from (media-viewer.js `static FEATURE_CACHE_VERSION`; the self-test compares).
+const FEATURE_CACHE_VERSION = 4;
+
 // The pass mark's constants (plan § 2, verdict() below).
 const MIN_LABELS_PER_CLASS = 30;
 const MIN_AUC_GAIN = 0.03;
@@ -68,6 +71,11 @@ async function loadTrainingFolder(dir) {
         createReadStream: fs.createReadStream,
         json: STREAM_JSON,
     });
+    if (version !== FEATURE_CACHE_VERSION) {
+        // The app's rule (review #6): _loadVectorCache returns no entries for another version, and the app
+        // re-extracts rather than train on them.
+        throw Object.assign(new Error('the feature cache has another version'), { code: 'CACHE_VERSION' });
+    }
     const counts = {
         version,
         listed: current.size,
@@ -825,8 +833,8 @@ function renderMarkdown(contexts, outcome) {
 
 // ---------------------------------------------------------------- the command line
 
-function insideGitRepo(target) {
-    let dir = path.resolve(target);
+function underGitRepo(start) {
+    let dir = start;
     for (;;) {
         if (fs.existsSync(path.join(dir, '.git'))) {
             return true;
@@ -839,20 +847,91 @@ function insideGitRepo(target) {
     }
 }
 
+/** `target` with every junction and link resolved as far as the path exists; the rest is appended as written. */
+function realPathAsFarAsItExists(target) {
+    const rest = [];
+    let dir = path.resolve(target);
+    for (;;) {
+        try {
+            return path.join(fs.realpathSync.native(dir), ...rest);
+        } catch {
+            const parent = path.dirname(dir);
+            if (parent === dir) {
+                return path.resolve(target);
+            }
+            rest.unshift(path.basename(dir));
+            dir = parent;
+        }
+    }
+}
+
+/** Checked by the path as written and by its real path, so a junction or link into a repository is refused too (review #5). */
+function insideGitRepo(target) {
+    return underGitRepo(path.resolve(target)) || underGitRepo(realPathAsFarAsItExists(target));
+}
+
+/** One pair, end to end: its counts, its status, and its result when it is usable. */
+async function measurePair(pair, options = {}, evaluate = evaluateContext) {
+    const log = options.log || (() => {});
+    const context = { status: 'measured' };
+    let like;
+    let dislike;
+    try {
+        like = await loadTrainingFolder(pair.like);
+        dislike = await loadTrainingFolder(pair.dislike);
+    } catch (error) {
+        // A folder that cannot be read is a status. The code alone: a Node error's message carries the path.
+        context.status = `unreadable: ${error.code || error.name}`;
+        return context;
+    }
+    context.likes = like.n;
+    context.dislikes = dislike.n;
+    context.counts = { like: like.counts, dislike: dislike.counts };
+    log(`  ${like.n} likes, ${dislike.n} dislikes after the cache filter`);
+    if (Math.min(like.n, dislike.n) < MIN_LABELS_PER_CLASS) {
+        context.status = `too small (under ${MIN_LABELS_PER_CLASS} labels in a class)`;
+        return context;
+    }
+    // Not caught (review #1): an evaluation that throws fails the run. Caught, it would leave this context out of
+    // the verdict, which would then be decided on the others; "usable" is defined by labels, not by finishing.
+    context.result = evaluate(buildContext(like, dislike), options);
+    return context;
+}
+
+// Each number flag and its minimum (review #7). Anything else, a typo included, stops the run before it starts.
+const NUMBER_FLAGS = { folds: 2, repeats: 1, trials: 2 };
+const TEXT_FLAGS = ['pairs', 'out'];
+const USAGE =
+    'usage: node real-folders.js --pairs <pairs.json> --out <dir> [--folds n>=2] [--repeats n>=1] [--trials n>=2]';
+const usageError = () => Object.assign(new Error('usage'), { code: 'USAGE' });
+
 function parseArgs(argv) {
     const args = { folds: 5, repeats: 2, trials: 8 };
     for (let i = 0; i < argv.length; i += 2) {
-        const key = argv[i].replace(/^--/, '');
-        args[key] = ['folds', 'repeats', 'trials'].includes(key) ? Number(argv[i + 1]) : argv[i + 1];
+        const key = argv[i].startsWith('--') ? argv[i].slice(2) : '';
+        // A missing value needs no check of its own: Number(undefined) fails the integer test, and an empty
+        // --pairs or --out fails the check below.
+        const value = argv[i + 1];
+        if (Object.hasOwn(NUMBER_FLAGS, key)) {
+            const number = Number(value);
+            if (!Number.isInteger(number) || number < NUMBER_FLAGS[key]) {
+                throw usageError();
+            }
+            args[key] = number;
+        } else if (TEXT_FLAGS.includes(key)) {
+            args[key] = value;
+        } else {
+            throw usageError();
+        }
+    }
+    if (!args.pairs || !args.out) {
+        throw usageError();
     }
     return args;
 }
 
 async function main(argv) {
     const args = parseArgs(argv);
-    if (!args.pairs || !args.out) {
-        throw Object.assign(new Error('usage'), { code: 'USAGE' });
-    }
     if (insideGitRepo(args.out) || insideGitRepo(args.pairs)) {
         console.error('refused: the output folder and the pairs file must be outside any git repository');
         process.exitCode = 2;
@@ -864,28 +943,12 @@ async function main(argv) {
     const contexts = [];
     for (let p = 0; p < pairs.length; p++) {
         log(`pair ${p + 1}/${pairs.length}`);
-        const context = { status: 'measured' };
-        try {
-            const like = await loadTrainingFolder(pairs[p].like);
-            const dislike = await loadTrainingFolder(pairs[p].dislike);
-            context.likes = like.n;
-            context.dislikes = dislike.n;
-            context.counts = { like: like.counts, dislike: dislike.counts };
-            log(`  ${like.n} likes, ${dislike.n} dislikes after the cache filter`);
-            if (Math.min(like.n, dislike.n) < MIN_LABELS_PER_CLASS) {
-                context.status = `too small (under ${MIN_LABELS_PER_CLASS} labels in a class)`;
-            } else {
-                context.result = evaluateContext(buildContext(like, dislike), {
-                    folds: args.folds,
-                    repeats: args.repeats,
-                    trials: args.trials,
-                    log,
-                });
-            }
-        } catch (error) {
-            // The code alone: a Node error's message carries the path.
-            context.status = `unreadable: ${error.code || error.name}`;
-        }
+        const context = await measurePair(pairs[p], {
+            folds: args.folds,
+            repeats: args.repeats,
+            trials: args.trials,
+            log,
+        });
         contexts.push(context);
         // Saved after every context, so a stopped run keeps what it measured. No letters yet: those follow size.
         C.writeJson(path.join(args.out, 'real-folders.partial.json'), contexts);
@@ -906,6 +969,10 @@ if (require.main === module) {
     main(process.argv.slice(2)).catch((error) => {
         // The code alone: a Node error's message carries the path, and this output may be pasted anywhere.
         console.error(`failed: ${error.code || error.name}`);
+        if (error.code === 'USAGE') {
+            // A fixed line: it repeats nothing that was typed.
+            console.error(USAGE);
+        }
         process.exitCode = 1;
     });
 }
@@ -926,4 +993,7 @@ module.exports = {
     pairedStats,
     evaluateContext,
     verdict,
+    FEATURE_CACHE_VERSION,
+    measurePair,
+    parseArgs,
 };

@@ -78,7 +78,7 @@ function memoryContext(likes, dislikes, rowOf, seed = 7) {
 
 const QUICK = { folds: 3, repeats: 1, trials: 2, sizes: [3, 10], knnTest: 30 };
 
-function writeCacheFolder(dir, items) {
+function writeCacheFolder(dir, items, version = 4) {
     fs.mkdirSync(dir, { recursive: true });
     const features = {};
     for (const item of items) {
@@ -93,7 +93,7 @@ function writeCacheFolder(dir, items) {
             mtime: item.mtime ?? stat.mtimeMs,
         };
     }
-    fs.writeFileSync(path.join(dir, '.feature_cache.json'), JSON.stringify({ version: 4, features }));
+    fs.writeFileSync(path.join(dir, '.feature_cache.json'), JSON.stringify({ version, features }));
 }
 
 // ---------------------------------------------------------------- reading a folder's cache
@@ -133,6 +133,117 @@ describe('loadTrainingFolder', () => {
         assert.equal(loaded.n, 1);
         assert.ok(Math.abs(loaded.vectors[1] - 0.01) < 1e-6, 'vector half comes first');
         assert.ok(Math.abs(loaded.vectors[FEATURE_DIM + 2] - 0.002) < 1e-6, 'CLIP half follows at offset 64');
+    });
+
+    test('a cache of another version is refused, as ml-training.js refuses it (review #6)', async () => {
+        const dir = tempDir();
+        writeCacheFolder(dir, [{ name: 'a.jpg' }, { name: 'b.jpg' }], RF.FEATURE_CACHE_VERSION + 1);
+        await assert.rejects(RF.loadTrainingFolder(dir), { code: 'CACHE_VERSION' });
+        // Control: the same folder at the app's version loads.
+        writeCacheFolder(dir, [{ name: 'a.jpg' }, { name: 'b.jpg' }], RF.FEATURE_CACHE_VERSION);
+        assert.equal((await RF.loadTrainingFolder(dir)).n, 2);
+    });
+
+    test('the version it expects is the app’s FEATURE_CACHE_VERSION', () => {
+        const source = fs.readFileSync(path.join(C.REPO, 'media-viewer.js'), 'utf8');
+        const match = source.match(/static FEATURE_CACHE_VERSION = (\d+);/);
+        assert.ok(match, 'the constant is still declared this way');
+        assert.equal(RF.FEATURE_CACHE_VERSION, Number(match[1]));
+    });
+});
+
+// ---------------------------------------------------------------- one pair, end to end
+
+describe('measurePair (review #1)', () => {
+    function smallPair(root, n = 40) {
+        const random = C.mulberry32(5);
+        const make = (dir) =>
+            writeCacheFolder(
+                dir,
+                Array.from({ length: n }, (_, i) => ({ name: `f${i}.jpg`, vector: [...randomFeatures(random)] }))
+            );
+        const like = path.join(root, 'like');
+        const dislike = path.join(root, 'dislike');
+        make(like);
+        make(dislike);
+        return { like, dislike };
+    }
+
+    test('an evaluation that throws fails the run instead of leaving the verdict to the other contexts', async () => {
+        const pair = smallPair(tempDir());
+        const boom = () => {
+            throw new RangeError('evaluation failed');
+        };
+        await assert.rejects(RF.measurePair(pair, {}, boom), RangeError);
+    });
+
+    test('a folder that cannot be read is a status, and evaluation is not attempted', async () => {
+        let called = false;
+        const missing = path.join(tempDir(), 'missing');
+        const context = await RF.measurePair({ like: missing, dislike: missing }, {}, () => {
+            called = true;
+        });
+        assert.equal(context.status, 'unreadable: ENOENT');
+        assert.equal(called, false);
+    });
+
+    test('a context under the floor is a status, and evaluation is not attempted', async () => {
+        let called = false;
+        const context = await RF.measurePair(smallPair(tempDir(), 5), {}, () => {
+            called = true;
+        });
+        assert.match(context.status, /^too small/);
+        assert.equal(context.likes, 5);
+        assert.equal(called, false);
+    });
+
+    test('a usable context is evaluated with the options given', async () => {
+        let seen;
+        const context = await RF.measurePair(smallPair(tempDir()), { folds: 3 }, (ctx, options) => {
+            seen = { n: ctx.n, folds: options.folds };
+            return { marker: true };
+        });
+        assert.deepEqual(seen, { n: 80, folds: 3 });
+        assert.equal(context.status, 'measured');
+        assert.deepEqual(context.result, { marker: true });
+    });
+});
+
+// ---------------------------------------------------------------- the flags
+
+describe('parseArgs (review #7)', () => {
+    const base = ['--pairs', 'p.json', '--out', 'o'];
+    const usage = { code: 'USAGE' };
+
+    test('defaults, and valid values taken as integers', () => {
+        assert.deepEqual(RF.parseArgs(base), { folds: 5, repeats: 2, trials: 8, pairs: 'p.json', out: 'o' });
+        assert.deepEqual(RF.parseArgs([...base, '--folds', '3', '--repeats', '1', '--trials', '2']), {
+            folds: 3,
+            repeats: 1,
+            trials: 2,
+            pairs: 'p.json',
+            out: 'o',
+        });
+    });
+
+    test('a number that is not an integer, or below its minimum, is refused', () => {
+        for (const bad of [
+            ['--folds', 'abc'],
+            ['--folds', '2.5'],
+            ['--folds', '1'],
+            ['--repeats', '0'],
+            ['--trials', '1'],
+            ['--trials', ''],
+        ]) {
+            assert.throws(() => RF.parseArgs([...base, ...bad]), usage, bad.join(' '));
+        }
+    });
+
+    test('an unknown flag, a missing value, or a missing --pairs or --out is refused', () => {
+        assert.throws(() => RF.parseArgs([...base, '--fold', '10']), usage);
+        assert.throws(() => RF.parseArgs([...base, '--folds']), usage);
+        assert.throws(() => RF.parseArgs(['--pairs', 'p.json']), usage);
+        assert.throws(() => RF.parseArgs(['--out', 'o']), usage);
     });
 });
 
@@ -504,7 +615,7 @@ describe('the command line', () => {
     function run(args) {
         return spawnSync(process.execPath, [SCRIPT, ...args], { encoding: 'utf8', timeout: 180000 });
     }
-    const FAST = ['--folds', '3', '--repeats', '1', '--trials', '1'];
+    const FAST = ['--folds', '3', '--repeats', '1', '--trials', '2'];
 
     test('no file or folder name reaches any output, and the numbers do', () => {
         const root = tempDir();
@@ -576,5 +687,46 @@ describe('the command line', () => {
         const r2 = run(['--pairs', tracked, '--out', tempDir('rf-out-'), ...FAST]);
         assert.notEqual(r2.status, 0);
         assert.ok(r2.stderr.includes('refused'), r2.stderr);
+    });
+
+    test('a junction into a git repository does not get past the refusal (review #5)', () => {
+        // A throwaway "repository" (the guard looks for a .git entry) and a junction to a folder inside it.
+        const repo = tempDir('rf-repo-');
+        fs.mkdirSync(path.join(repo, '.git'));
+        const inner = path.join(repo, 'inner');
+        fs.mkdirSync(inner);
+        const link = path.join(tempDir('rf-link-'), 'link');
+        fs.symlinkSync(inner, link, 'junction');
+        try {
+            const outside = tempDir();
+            const pairs = path.join(outside, 'pairs.json');
+            fs.writeFileSync(pairs, '[]');
+            // Control: the junction leads where the test says it does.
+            assert.equal(fs.realpathSync.native(link), fs.realpathSync.native(inner));
+
+            const r1 = run(['--pairs', pairs, '--out', path.join(link, 'out'), ...FAST]);
+            assert.notEqual(r1.status, 0);
+            assert.ok(r1.stderr.includes('refused'), r1.stderr);
+            assert.deepEqual(fs.readdirSync(inner), [], 'nothing was written into the repository');
+
+            fs.writeFileSync(path.join(inner, 'pairs.json'), '[]');
+            const r2 = run(['--pairs', path.join(link, 'pairs.json'), '--out', tempDir('rf-out-'), ...FAST]);
+            assert.notEqual(r2.status, 0);
+            assert.ok(r2.stderr.includes('refused'), r2.stderr);
+        } finally {
+            // Remove the junction itself before the temp folders go, so no cleanup can follow it.
+            fs.unlinkSync(link);
+        }
+    });
+
+    test('an unknown flag fails with the usage line, names nothing, and writes nothing (review #7)', () => {
+        const out = path.join(tempDir(), 'out');
+        const pairs = path.join(tempDir(), 'pairs.json');
+        fs.writeFileSync(pairs, '[]');
+        const r = run(['--pairs', pairs, '--out', out, `--${SENTINEL}`, '3']);
+        assert.notEqual(r.status, 0);
+        assert.ok(r.stderr.includes('USAGE'), r.stderr);
+        assert.ok(!(r.stdout + r.stderr).includes(SENTINEL), r.stderr);
+        assert.equal(fs.existsSync(out), false);
     });
 });
