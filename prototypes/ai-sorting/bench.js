@@ -973,4 +973,4 @@ if (require.main === module) {
     main();
 }
 
-module.exports = { logisticFit, ridgeFit, appLogisticFit, centroidFit, knnFit };
+module.exports = { logisticFit, ridgeFit, appLogisticFit, trainStandardisedFit, standardiser, centroidFit, knnFit };

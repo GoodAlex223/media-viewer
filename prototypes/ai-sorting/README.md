@@ -79,6 +79,21 @@ python -I -c "import zipfile,sys; zipfile.ZipFile(sys.argv[1]).extractall(sys.ar
 `clip-b32-q8` is exactly what the app runs today (`main.js`: `Xenova/clip-vit-base-patch32`, q8,
 `image_embeds`, L2-normalised).
 
+## The real-folder check
+
+`real-folders.js` asks whether the learner fix also ranks better on the user's own like and dislike folders. It is
+the gate on A1 (v2 spec § 12.3). It reads each folder's `.feature_cache.json` and needs no model and no image decode:
+
+```
+node $P/real-folders.js --pairs <pairs.json> --out <dir>   # [--folds 5] [--repeats 2] [--trials 8]
+node --test $P/real-folders.selftest.js
+```
+
+`<pairs.json>` is `[{ "like": "<folder>", "dislike": "<folder>" }]`, one entry per context, because like and dislike
+folders are chosen per main folder and each pair is its own taste. **This repository is public**: keep the pairs file
+and the output outside it (the script refuses otherwise). The script writes and prints numbers and context letters
+only, never a file or folder name. It only reads the folders. Plan, about 20 minutes on one thread for 30,000 labels.
+
 ## What it measures
 
 | Script / section | Question | Metric |
