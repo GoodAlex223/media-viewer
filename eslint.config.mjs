@@ -71,6 +71,7 @@ export default [
     {
         files: [
             'main.js',
+            'app-menu.js',
             'logger.js',
             'path-grants.js',
             'ipc-guard.js',

@@ -35,6 +35,7 @@ Pre-commit hook (Husky): `node scripts/check-secrets.js` (staged-diff secret sca
 ```
 media_viewer/
 ├── main.js              # Electron main process: IPC handlers (every one registered through ipc-guard), file ops, navigation lock
+├── app-menu.js          # The application menu: Electron's default without Reload and Force Reload, since a reload fires no close event and so skips the save at quit
 ├── path-grants.js       # Folder grants: persisted userData/folder-grants.json, containment checks, grant status for absent drives (§ Security)
 ├── ipc-guard.js         # IPC registration wrapper: sender-frame check + per-argument kinds; refusals return the channel's failure value and are logged
 ├── app-protocol.js      # The app scheme's handler (app://media-viewer/): app files from an allowlist, granted media under /@fs/ (path-grants.js's shared read rule), the CSP response header
