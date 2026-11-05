@@ -186,6 +186,7 @@ Outcome across the usable contexts:
   - **What it found instead:** the train/score metadata mismatch is the larger loss. Today's model reaches 0.918 / 1.000 as trained and 0.724 / 0.707 as scored. Leaving metadata out of training gains +0.058 in A (CI +0.052 to +0.063, all folds) and +0.007 in B (CI spans zero), but it was not pre-registered, so it's a lead, not a result. Re-checked in code before writing it up: every writer of the source folder's feature cache leaves metadata out (worker `extract` posts pixels only, `media-viewer.js:10563`; priority extraction calls `extractFeatures(imageData)`, `:10062`; the only `computeFeatures` caller passes `useHostCache: false`, `:252`).
   - **Cost:** a converged fit takes about 50 s at about 25,000 labels (1,052 L-BFGS iterations), against 0.3 s for today's SGD.
   - Report section 10 holds the overall numbers, with dated notes where the original text asserts the fix (Summary 1, Ranking row 1, Recommendation 1, the 64-features caveat, *Left undone*, question 7). The README's time estimate is replaced with the measured 55 minutes.
+- **A side agent's note, relayed by the user, confirmed:** my write-up implied the fp32 switch was what the fix lacked. P4a changes only the CLIP half; the 64 hand-crafted dims come from the renderer's extraction, which P4a leaves alone, so a re-check after P4a with the same candidates would likely fail again. The verdict and the pass mark are unchanged. The report, the § 6 rows and A1's closeout gate note now put a decided fix for the metadata gap before the re-check. Re-reading for the note also showed that the as-trained column already estimates the other fix (sort-time vectors carrying metadata): 0.918 in A against 0.782 without metadata, a lead, since it was a control.
 
 ---
 
@@ -201,8 +202,8 @@ Outcome across the usable contexts:
 
 | Idea | Rationale | Effort | Priority |
 |------|-----------|--------|----------|
-| Re-run this check on fp32 vectors after P4a | The outcome was wait, which § 2 sends here; the report found the learner fix helps quality tastes only with fp32, and this run is q8 only. Add the metadata-free variant as a pre-registered candidate | S | M |
-| Close the train/score metadata gap (🟤, Claude-surfaced) | Measured here: today's model loses 0.19-0.29 AUC between training and sort-time vectors. Two candidate fixes: leave dims 42–47 and 54–61 out of training (+0.058 in A, not pre-registered), or pass metadata to background and priority extraction so sort-time vectors match. Needs its own pass mark | S-M | H |
+| Close the train/score metadata gap (🟤, Claude-surfaced), **before the re-check below** | Measured here: today's model loses 0.19-0.29 AUC between training and sort-time vectors. Two candidate fixes, both leads: leave dims 42–47 and 54–61 out of training (0.782 in A, +0.058; B +0.007, CI spans zero), or pass metadata to background and priority extraction so sort-time vectors match (the as-trained column estimates it: 0.918 in A, 1.000 in B, with the open question whether folder-separating metadata ranks a main folder's files too). The user decides which; it needs its own pass mark | S-M | H |
+| Re-run this check after the gap fix, on fp32 vectors once P4a lands | § 2's outcome table sends a wait to after P4a, but fp32 changes only the CLIP half and the measured loss is in the metadata dims, so after P4a alone it would likely fail again (a side agent's note, confirmed 2026-11-05). Pre-register the chosen gap fix as a candidate | S | M |
 | A converged fit's cost at real sizes (🟤, input to A1) | About 50 s per fit at 25,000 labels on one thread, against the report's estimate of under a second; A1 would need a cap, a warm start or a worker budget | S | M |
 | Measure near-duplicate thresholds on these contexts for P4c | The group counts here are a first look at real copy rates | S | L |
 
@@ -258,7 +259,7 @@ Run after the merge, on `main`.
 | `docs/archive/plans/` — plan moved here, original deleted | |
 | `DONE.md` — entry with plan link, summary, key changes | |
 | `WEEKLY.md` — Summary-Table Status an identifier; Daily-Schedule entry marked done; the user-in-the-loop line | |
-| `BACKLOG.md` / `TODO.md` — the three entries closed, plus A1's gate note, in the closeout commit | |
+| `BACKLOG.md` / `TODO.md` — the three entries closed, plus A1's gate note (wait; re-check after a decided fix for the metadata gap, not after P4a alone), in the closeout commit | |
 | Deploy record | N/A: no deploy step (WEEKLY: Auto-deploy no) |
 | Live docs — late findings corrected; the v2 spec's superseded note | |
 | `docs/README.md` — plan indexed | |

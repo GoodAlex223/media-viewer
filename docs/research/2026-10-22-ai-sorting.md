@@ -102,9 +102,10 @@ scale, as a rough guide.
    (`fit-timing.js`), so the app needs a primal solver such as L-BFGS, whose cost grows with labels x dimensions
    (estimate: well under a second for a few thousand labels). Optional later: blend in 3-nearest-neighbour scoring,
    the best learner here once each class has 10 or more examples.
-   **Real folders, 2026-11-05 (section 10):** neither step passed on the user's own folders, so this step waits for
-   a re-check after the fp32 switch. The check also found the metadata half doing harm, because a sort scores
-   vectors that lack it, and a converged fit taking about 50 s at 25,000 labels.
+   **Real folders, 2026-11-05 (section 10):** neither step passed on the user's own folders, so this step waits.
+   The larger loss there is in the metadata half, which a sort scores without, so the re-check should follow a
+   decided fix for that gap, not only the fp32 switch, which changes the CLIP half alone. The check also found a
+   converged fit taking about 50 s at 25,000 labels.
 2. **Group near-duplicates (M, about 3-5 SP).** Compute a second embedding, DINOv2-small with registers in fp32
    (Apache-2.0, 88 MB, about 90-100 ms per image on the CPU; never its q8 file), in the background extraction pass,
    and offer "group copies" as connected groups above one cosine threshold, found with the VP-tree that
@@ -569,8 +570,11 @@ and 0.469-0.508 in B (bound: within 0.064): passed. Letting near-copies straddle
 0.001 in A and 0.011 in B, so the copies did not inflate these numbers much. A second run reproduced taste B's
 result in every one of its 345 values apart from timings; a planted change of 1e-9 was caught.
 
-**Outcome by the pass mark: wait.** Neither fix step passes in either taste. The step is not dropped: it waits for
-a re-check after the switch to fp32 CLIP, the only setting in which section 6 found it helping a quality taste.
+**Outcome by the pass mark: wait.** Neither fix step passes in either taste. The step is not dropped. The plan
+sent it to a re-check after the switch to fp32 CLIP, the only setting in which section 6 found it helping a
+quality taste. But fp32 changes only the CLIP half, and the larger loss below sits in the metadata dims, so a
+re-check after fp32 alone would likely meet the same gap. The gap needs a decided fix first, and the re-check
+should carry that fix as a candidate fixed in advance.
 
 **What the numbers show instead** (a reading, not a pass-mark result):
 - The largest loss on real folders is the mismatch between training and scoring, not the learner. Today's model
@@ -582,7 +586,10 @@ a re-check after the switch to fp32 CLIP, the only setting in which section 6 fo
 - Leaving the metadata out of training is the one variant that clearly helps in A (+0.058, every fold won) and
   does no harm in B (+0.007, CI spanning zero). It was not a pre-registered candidate, so it is a lead for a new
   check, not a result. The other way to close the gap is to give background extraction the metadata, so that the
-  vectors a sort scores match the ones the model trained on.
+  vectors a sort scores match the ones the model trained on. The as-trained column already estimates that option:
+  held-out files scored with their metadata reach 0.918 in A with today's learner, against 0.782 with the metadata
+  left out. It was a control, not a candidate, so it is a lead too. This check also cannot show whether metadata
+  that separates a like folder from a dislike folder ranks a main folder's unrated files as well.
 - A converged fit took about 50 s at about 25,000 labels (1,052 L-BFGS iterations on one thread) where today's SGD
   takes 0.3 s; the recommendation's estimate of "well under a second for a few thousand labels" does not reach
   folders of this size.
