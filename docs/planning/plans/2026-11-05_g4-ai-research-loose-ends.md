@@ -17,7 +17,7 @@
 - [x] `96d9b22` is an ancestor of the branch, its files byte-identical, its `docs/README.md` row present (`74c5daa`)
 - [x] Personal-data check of all 43 files and the commit message passed, with a control that fires
 - [x] `real-folders.js` and its self-test committed before the first real run, so the pass mark below predates every number (`c61843b`)
-- [ ] Real run done; overall numbers only in the report; the outgoing diff grepped for names
+- [x] Real run done; overall numbers only in the report; the outgoing diff grepped for names (`747bea4`)
 - [ ] Parked commit kept as a verified patch, then the branch deleted (user's condition: "if nothing will be lost")
 - [ ] One PR open against `main`
 
@@ -149,7 +149,7 @@ Outcome across the usable contexts:
 3. [x] Commit this plan, the patch and the index rows (`b965eff`)
 4. [x] Self-test first, seen failing; then `real-folders.js`; self-test passing; commit before any real run (`c61843b`)
 5. [x] Real run on the three contexts, in the job scratch folder (first attempt 2026-11-05, after `c61843b`, stopped by Claude Code for low memory; see the log. Restarted on the user's word, same evening; finished in 55 min. **Outcome: wait**)
-6. [ ] Overall numbers into the report, stating how many tastes the verdict rests on; replace the README's "Plan, about 20 minutes" with the measured time; re-run the outgoing name check; commit
+6. [x] Overall numbers into the report, stating how many tastes the verdict rests on; replace the README's "Plan, about 20 minutes" with the measured time; re-run the outgoing name check; commit (`747bea4`; name check on it: the same 8 file names, 1 stem and 1 folder string as at `c61843b`, all coincidences by shape and surroundings)
 7. [ ] Push; delete `g3-departed-clips-parked` once the patch is on origin; open the PR; ask about deleting `research/local-ai-sorting` on origin; ask before any review in this chat
 
 ---
