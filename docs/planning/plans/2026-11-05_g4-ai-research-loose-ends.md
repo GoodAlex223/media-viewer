@@ -16,7 +16,7 @@
 **Success Criteria**:
 - [x] `96d9b22` is an ancestor of the branch, its files byte-identical, its `docs/README.md` row present (`74c5daa`)
 - [x] Personal-data check of all 43 files and the commit message passed, with a control that fires
-- [ ] `real-folders.js` and its self-test committed before the first real run, so the pass mark below predates every number
+- [x] `real-folders.js` and its self-test committed before the first real run, so the pass mark below predates every number (`c61843b`)
 - [ ] Real run done; overall numbers only in the report; the outgoing diff grepped for names
 - [ ] Parked commit kept as a verified patch, then the branch deleted (user's condition: "if nothing will be lost")
 - [ ] One PR open against `main`
@@ -148,7 +148,7 @@ Outcome across the usable contexts:
 2. [x] Save the parked commit as a patch and verify it: patch ID equal, parent + patch = the commit's tree. Then one fixture path's folder name replaced by a placeholder, verified as the only difference
 3. [x] Commit this plan, the patch and the index rows (`b965eff`)
 4. [x] Self-test first, seen failing; then `real-folders.js`; self-test passing; commit before any real run (`c61843b`)
-5. [ ] Real run on the three contexts, in the job scratch folder (started 2026-11-05, after `c61843b`; in the background)
+5. [x] Real run on the three contexts, in the job scratch folder (first attempt 2026-11-05, after `c61843b`, stopped by Claude Code for low memory; see the log. Restarted on the user's word, same evening; finished in 55 min. **Outcome: wait**)
 6. [ ] Overall numbers into the report, stating how many tastes the verdict rests on; replace the README's "Plan, about 20 minutes" with the measured time; re-run the outgoing name check; commit
 7. [ ] Push; delete `g3-departed-clips-parked` once the patch is on origin; open the PR; ask about deleting `research/local-ai-sorting` on origin; ask before any review in this chat
 
@@ -172,6 +172,20 @@ Outcome across the usable contexts:
 - **A mutant escaped its scratch copy**: with the repo refusal off, it wrote to the `--out` the test named, inside the worktree, because `MV_REPO` pointed there. Every later run then failed on that folder. It looked like a flake and failed every time. The folder's two files were read and deleted, and the mutation harness now cleans up after each mutant.
 - **Outgoing name check** (counts only, planted controls fire), over every folder and file name in the three contexts, on the branch as of `c61843b`: 8 file names, 1 stem and 1 folder string matched, all coincidences by shape and surroundings (digit tails of Commons IDs, common words, a `README.md`, a single-letter folder string). No distinctive name. To re-run before the push, since the numbers commit is still to come.
 - **Tools in the job scratch folder, not in git** (`$CLAUDE_JOB_DIR/tmp`): `pairs.json` (real paths, never commit), `real-folders/` (the run's output: `real-folders.md`, `.json`, or `.partial.json` while running), `outgoing-name-check.js` and `outgoing-name-hits.js`, `mutate.js`.
+- **First real run, stopped, not failed** (started 14:21 local, in the background):
+  - The lopsided taste finished in about 5 minutes (partial file written 14:26). Its counts match the model cache (14,776 / 185), with nothing stale, pruned or missing CLIP.
+  - The largest taste (31,049 files) ran about 46 minutes awake and finished the grouping, the 2 × 5 folds, the curve up to 300 per side and the shuffled-label control. The power log then shows a hibernation from 15:12:49 to 21:03:01.
+  - Claude Code stopped the run at 21:03:24, 23 seconds after the wake, for low memory (1.2 GB free of 15.2 GB), with the plain-fold control and kNN still to run.
+  - The script saves each finished taste but does not reuse it, so a restart measures the lopsided taste again. A resume flag would save 5 minutes, which isn't worth a change to code committed before the run.
+  - "Plan, about 20 minutes" was low for the largest taste: the README gets the time measured on the rerun.
+  - The restart waits for the user, per the rule on stopped background runs.
+- **The real run** (restarted on the user's "yes, restart", 21:49:23 to 22:44:46, exit 0):
+  - Counts match the model cache in all three contexts: 17,507 / 13,542; 14,776 / 185; 4 / 22. Nothing stale and no missing CLIP; 6 cache entries for files no longer in a dislike folder were skipped.
+  - Both shuffled-label controls passed, so the outcome is not void. Reproducible: taste B matched the first run's saved result in all 345 non-timing values, and a planted 1e-9 change was caught.
+  - **Outcome by the pass mark, applied as written: wait.** A: best candidate converged + z-scoring, +0.005 (CI +0.003 to +0.008), short of +0.03. B: both candidates far worse (-0.266, -0.356). C: too small. A1 waits and is re-checked after P4a, per § 2.
+  - **What it found instead:** the train/score metadata mismatch is the larger loss. Today's model reaches 0.918 / 1.000 as trained and 0.724 / 0.707 as scored. Leaving metadata out of training gains +0.058 in A (CI +0.052 to +0.063, all folds) and +0.007 in B (CI spans zero), but it was not pre-registered, so it's a lead, not a result. Re-checked in code before writing it up: every writer of the source folder's feature cache leaves metadata out (worker `extract` posts pixels only, `media-viewer.js:10563`; priority extraction calls `extractFeatures(imageData)`, `:10062`; the only `computeFeatures` caller passes `useHostCache: false`, `:252`).
+  - **Cost:** a converged fit takes about 50 s at about 25,000 labels (1,052 L-BFGS iterations), against 0.3 s for today's SGD.
+  - Report section 10 holds the overall numbers, with dated notes where the original text asserts the fix (Summary 1, Ranking row 1, Recommendation 1, the 64-features caveat, *Left undone*, question 7). The README's time estimate is replaced with the measured 55 minutes.
 
 ---
 
@@ -187,7 +201,9 @@ Outcome across the usable contexts:
 
 | Idea | Rationale | Effort | Priority |
 |------|-----------|--------|----------|
-| Re-run this check on fp32 vectors after P4a | The report found the learner fix helps quality tastes only with fp32; this run is q8 only | S | M |
+| Re-run this check on fp32 vectors after P4a | The outcome was wait, which § 2 sends here; the report found the learner fix helps quality tastes only with fp32, and this run is q8 only. Add the metadata-free variant as a pre-registered candidate | S | M |
+| Close the train/score metadata gap (🟤, Claude-surfaced) | Measured here: today's model loses 0.19-0.29 AUC between training and sort-time vectors. Two candidate fixes: leave dims 42–47 and 54–61 out of training (+0.058 in A, not pre-registered), or pass metadata to background and priority extraction so sort-time vectors match. Needs its own pass mark | S-M | H |
+| A converged fit's cost at real sizes (🟤, input to A1) | About 50 s per fit at 25,000 labels on one thread, against the report's estimate of under a second; A1 would need a cap, a warm start or a worker budget | S | M |
 | Measure near-duplicate thresholds on these contexts for P4c | The group counts here are a first look at real copy rates | S | L |
 
 ### Technical Debt
@@ -195,7 +211,7 @@ Outcome across the usable contexts:
 | Item | Why It Exists | Impact | Remediation |
 |------|---------------|--------|-------------|
 | 173 `Liked_N`/`Disliked_N`-style names across 20 tracked files, tests included, against spec § 15's "never folder names" | Written before the rule, or as test fixtures | M: the rule and the tree disagree | The user rules: replace with placeholders, or narrow the rule. Frozen docs may take placeholder redactions (ruling of 2026-10-30) |
-| The training/scoring vector mismatch (dims 42–47, 54–61) | Background extraction posts no metadata | M: A1's "check first" item; confirmed in code, its size measured here | A1 decides, with this run's numbers |
+| The training/scoring vector mismatch (dims 42–47, 54–61) | Background and priority extraction post no metadata | H, measured: 0.918 → 0.724 (A), 1.000 → 0.707 (B) between training and sort-time vectors | The "close the gap" row above |
 
 ### Spawned Tasks
 
@@ -209,7 +225,7 @@ None yet.
 
 - [x] `node --test prototypes/ai-sorting/real-folders.selftest.js`: the cache filter, the as-scored transform against `extractFeatures`, L-BFGS against the exact dual solver, group folds, planted signal, planted leak, shuffled labels, each verdict outcome, the privacy sentinels, the repo refusal
 - [x] Hooks on every commit
-- [ ] The real run's count cross-check against the model cache's summary (17,507 / 13,542; 14,776 / 185; 4 / 22)
+- [x] The real run's count cross-check against the model cache's summary (17,507 / 13,542; 14,776 / 185; 4 / 22): all three match
 
 ### Test Results
 
@@ -218,6 +234,7 @@ None yet.
 | Self-test | Pass, 31 of 31 | Seen failing first; re-run on the formatted commit |
 | Mutation check, in a scratch copy | 21 of 21 killed | Baseline read before and after. Two survivors on the way each exposed a test gap, both closed: a fatal error whose message holds a path, and a fold-balance fixture with more likes only |
 | Pre-commit hook on the merge | Pass, 2,636 unit tests | `prototypes/` and `docs/research/` byte-identical to `96d9b22` afterwards |
+| Real run | Exit 0, 55 min; controls passed; outcome wait | Taste B reproduced in all 345 non-timing values across the two runs; the comparison caught a planted 1e-9 change |
 
 ---
 

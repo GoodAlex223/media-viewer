@@ -1,7 +1,7 @@
 # AI image sorting the app could run locally
 
-**Date:** 2026-10-22 · **Status:** research spike with a throwaway prototype
-([`prototypes/ai-sorting/`](../../prototypes/ai-sorting/README.md)); nothing in the app changed.
+**Date:** 2026-10-22, real-folder check added 2026-11-05 (section 10) · **Status:** research spike with a throwaway
+prototype ([`prototypes/ai-sorting/`](../../prototypes/ai-sorting/README.md)); nothing in the app changed.
 
 The question: what is the most capable AI sorting this app could run on the user's own machine, and does the best
 candidate beat what the app does today? Six parallel research surveys covered newer image embeddings, aesthetic
@@ -21,6 +21,9 @@ sort and hash code. A fresh-context verifier then re-derived the numbers and re-
    converged L2 logistic regression on standardised inputs reaches +0.10 to +0.21 (95-100%), ranking at 0.70-0.96
    where the app reaches 0.57-0.86. On the quality taste of item 6 the same fix helps only together with CLIP's
    fp32 file (+0.03 to +0.10; on today's q8 vectors -0.01 to -0.03).
+   **On the user's own folders this did not hold (2026-11-05, section 10):** in two real tastes neither step gained
+   the +0.03 AUC the pass mark asked for (+0.005 at best, -0.27 at worst). The larger loss there is that the model
+   trains on file metadata that a sort never sees.
 2. **Skips help a weak learner and can hurt a good one.** The better learner alone doubles the likes found per 60
    files shown in a like-or-skip simulation (16.8 to 33.9). Skips as weak dislikes add about 2-3 more when every
    skip is a real dislike, but when the user also passes a fifth of the files they would have liked, they cost the
@@ -68,7 +71,7 @@ are per image, batch 1, on this laptop under its normal background load, as the 
 
 | # | Upgrade | Improves | Evidence | Speed | Size / memory | Licence | Effort | Verdict |
 |---|---|---|---|---|---|---|---|---|
-| 1 | Standardise the like model's inputs (training files' statistics); then fit it to convergence (L2 logistic, C = 1) | AI sort | measured on subject tastes: AUC +0.10 to +0.20 (inputs only), +0.10 to +0.21 (converged fit); on the quality taste only with row 4 | today's SGD: 5-6 ms per fit at 500 labels (832 dims); a converged fit needs a primal solver (estimate: under 1 s) | 0 | own code | S | **do first** |
+| 1 | Standardise the like model's inputs (training files' statistics); then fit it to convergence (L2 logistic, C = 1) | AI sort | measured on subject tastes: AUC +0.10 to +0.20 (inputs only), +0.10 to +0.21 (converged fit); on the quality taste only with row 4 | today's SGD: 5-6 ms per fit at 500 labels (832 dims); a converged fit needs a primal solver (estimate: under 1 s) | 0 | own code | S | **do first**; on real folders: wait (section 10) |
 | 2 | Duplicate grouping on DINOv2-S/14 with registers, fp32 | new "group copies" view | measured: 99.6% of copy pairs at 0.1% false pairs; R@1 1.000 | 93-99 ms in Electron; DirectML no faster (84-92 ms) | 88 MB; 0.24 GB peak RSS | Apache-2.0 | M | **do** |
 | 3 | Inference in a `utilityProcess`; DirectML adapter 0 on Windows | UI responsiveness, speed | measured: per-image (p99 56-211 ms) and load (0.4-1.0 s) stalls leave the main thread; its p99 stays about 20 ms | CLIP B/32 fp32: 20-30 ms on DirectML | 0 | MIT runtime; DirectML redistributable | M | **do before adding a model** |
 | 4 | Switch CLIP from its q8 file to fp32 | quality-based tastes, strict copy detection | measured: quality taste +0.05 to +0.12 AUC; copies at 0.1% false pairs 0.804 vs 0.762; subject tasks within 0.03 | Node CPU 43-75 ms vs 30-58 ms; DirectML 20-30 ms (q8 crashes there) | 352 MB vs 89 MB; 0.50-0.74 GB peak RSS | MIT | S | **do with 3** |
@@ -99,6 +102,9 @@ scale, as a rough guide.
    (`fit-timing.js`), so the app needs a primal solver such as L-BFGS, whose cost grows with labels x dimensions
    (estimate: well under a second for a few thousand labels). Optional later: blend in 3-nearest-neighbour scoring,
    the best learner here once each class has 10 or more examples.
+   **Real folders, 2026-11-05 (section 10):** neither step passed on the user's own folders, so this step waits for
+   a re-check after the fp32 switch. The check also found the metadata half doing harm, because a sort scores
+   vectors that lack it, and a converged fit taking about 50 s at 25,000 labels.
 2. **Group near-duplicates (M, about 3-5 SP).** Compute a second embedding, DINOv2-small with registers in fp32
    (Apache-2.0, 88 MB, about 90-100 ms per image on the CPU; never its q8 file), in the background extraction pass,
    and offer "group copies" as connected groups above one cosine threshold, found with the VP-tree that
@@ -514,6 +520,77 @@ trials); the recommended first fix, today's learner on inputs standardised with 
 gains less here (+0.03 to +0.16, 73-100%). Here, where the subjects are harder to recognise, SigLIP 2 B/16 in fp32 beats CLIP on every measure:
 subject P@1 0.686 against 0.631, copies 0.79 against 0.70, like-model AUC +0.01 to +0.03.
 
+### 10. The user's own folders: the learner fix does not hold there (added 2026-11-05)
+
+**How.** `prototypes/ai-sorting/real-folders.js` ran the like model's learners on the user's own like and dislike
+folders. It reads the vectors the app already caches beside them (today's q8 CLIP plus the 64 hand-crafted
+features), so nothing was decoded, downloaded or uploaded, and only the overall numbers below were kept. The user
+picks a like and a dislike folder for each main folder, so each pair is its own taste, and no two were pooled. The
+pairs are the three that the app's model cache still listed. That cache keeps the last five models by recency, so
+older tastes are missing by age, not by choice. Asked whether to add other pairs, the user chose to finish with these.
+One pair has 4 likes, below the floor of 30 per class, so **the verdict rests on two tastes**, and one of those has
+only 185 dislikes.
+
+Held-out files were scored the way a sort scores them. The app trains on vectors that carry the file's metadata
+(size, resolution, format, video, faces: dims 42-47 and 54-61). The vectors a sort scores come from background or
+priority extraction, which passes none (`media-viewer.js` sends `feature-worker.js` pixels only). So those dims of
+every held-out vector were set to the values `extractFeatures` gives without metadata. Near-copies (CLIP cosine at
+least 0.95) shared a fold; 5 folds x 2 repeats. The pass mark was committed with the script before any number
+existed: in every usable taste, the better of the two fix steps must gain at least +0.03 mean paired AUC against
+today's learner, with its 95% CI above zero, and must not lose likes among the first 60 shown.
+
+| | Taste A | Taste B |
+|---|---:|---:|
+| likes / dislikes | 17,507 / 13,542 | 14,776 / 185 (98.8% likes) |
+| near-copy groups at cosine 0.95 | 1,648 groups, 3,746 files; largest 12; 472 hold a like and a dislike | 901 groups, 2,018 files; largest 9; 39 mixed |
+
+Held-out ROC AUC, all labels, scored as a sort sees the files; gain against today's learner with its paired 95% CI;
+"as trained" scores the same held-out files with their metadata, which is what a plain cross-validation reports.
+Rows in italics are for context only, not candidates under the pass mark:
+
+| learner | A | A gain | A as trained | B | B gain | B as trained |
+|---|---:|---:|---:|---:|---:|---:|
+| app today | 0.724 | | 0.918 | 0.707 | | 1.000 |
+| app + z-scoring (fix, step 1) | 0.646 | -0.078 (-0.097 to -0.059) | 0.874 | 0.352 | -0.356 (-0.433 to -0.278) | 0.999 |
+| converged + z-scoring (fix, step 2) | 0.729 | +0.005 (+0.003 to +0.008) | 0.931 | 0.442 | -0.266 (-0.331 to -0.201) | 1.000 |
+| *converged + z-scoring, metadata left out of training* | 0.782 | +0.058 (+0.052 to +0.063) | 0.782 | 0.714 | +0.007 (-0.035 to +0.049) | 0.714 |
+| *app today, CLIP only* | 0.738 | +0.014 (+0.009 to +0.019) | 0.738 | 0.734 | +0.026 (-0.015 to +0.068) | 0.734 |
+| *converged + z-scoring, CLIP only* | 0.764 | +0.040 (+0.035 to +0.046) | 0.764 | 0.702 | -0.006 (-0.051 to +0.040) | 0.702 |
+| *kNN-3 on CLIP, 500 held-out files per fold* | 0.712 | | | 0.700 | | |
+
+Likes among the first 60 shown, in A: 53.0 for today's learner, 40.2 with z-scoring, 55.2 with the converged fit
+(+2.2, +0.8 to +3.6) and 57.2 with the metadata left out. In B any order shows almost only likes (59.6 of 60), so
+that clause does not apply. In the learning curve (n likes + n dislikes), neither fix step gains at 3, 10 or 30
+per side in either taste (every CI spans zero, or the gain is below it), and both lose at 100 and 300 per side in
+A (converged -0.033 and -0.058, z-scoring -0.069 and -0.094).
+
+**Controls.** With labels shuffled, every main learner landed at 0.493-0.498 in A (bound: within 0.010 of 0.5)
+and 0.469-0.508 in B (bound: within 0.064): passed. Letting near-copies straddle folds moved today's learner by
+0.001 in A and 0.011 in B, so the copies did not inflate these numbers much. A second run reproduced taste B's
+result in every one of its 345 values apart from timings; a planted change of 1e-9 was caught.
+
+**Outcome by the pass mark: wait.** Neither fix step passes in either taste. The step is not dropped: it waits for
+a re-check after the switch to fp32 CLIP, the only setting in which section 6 found it helping a quality taste.
+
+**What the numbers show instead** (a reading, not a pass-mark result):
+- The largest loss on real folders is the mismatch between training and scoring, not the learner. Today's model
+  ranks held-out files at 0.918 (A) and 1.000 (B) while they carry their metadata, and at 0.724 and 0.707 as a sort
+  sees them. In these folders the metadata carries much of the class signal (as trained, 0.918 and 1.000, against
+  0.738 and 0.734 for today's learner on CLIP alone), and a sort never sees it.
+- Z-scoring makes the mismatch worse, likely because it scales the metadata dims up to the size of every other
+  feature, so the model leans on exactly what scoring takes away. In B its ranking falls below chance (0.352).
+- Leaving the metadata out of training is the one variant that clearly helps in A (+0.058, every fold won) and
+  does no harm in B (+0.007, CI spanning zero). It was not a pre-registered candidate, so it is a lead for a new
+  check, not a result. The other way to close the gap is to give background extraction the metadata, so that the
+  vectors a sort scores match the ones the model trained on.
+- A converged fit took about 50 s at about 25,000 labels (1,052 L-BFGS iterations on one thread) where today's SGD
+  takes 0.3 s; the recommendation's estimate of "well under a second for a few thousand labels" does not reach
+  folders of this size.
+
+Not modelled: bulk-rated corrections, which train from the source folder's metadata-free vectors, and fp32 CLIP,
+which needs a re-extraction. The run took 55 minutes on one thread on the laptop described under *How this was
+done*.
+
 ## What the research found (cited sources)
 
 **Image embeddings.** Every modern contrastive encoder beats the app's CLIP ViT-B/32 (ImageNet zero-shot 63.3%,
@@ -576,7 +653,9 @@ DirectML itself is in sustained engineering, with new feature work moved to Wind
   decode costs are higher than measured here, and full-resolution quality cues (focus, noise) are invisible.
 - **The 64 hand-crafted features are handicapped here.** Their file-metadata part (size, resolution, format,
   video) is nearly constant across thumbnails and their 3 face numbers are zero, so they carry less signal than in
-  real folders. That is why the recommendation keeps them, standardised, instead of dropping them.
+  real folders. That is why the recommendation keeps them, standardised, instead of dropping them. On the user's
+  folders (section 10) the metadata part does carry signal, but a sort scores vectors without it, so training on
+  it costs ranking quality.
 - **Balanced, small label sets.** n likes always meet n dislikes; real like and dislike folders are imbalanced.
 - **One machine, under load.** Timings come from one laptop while another session ran tests in the same checkout.
   The dedicated timing runs were sequential, one encoder per process, but background load was not controlled.
@@ -595,7 +674,8 @@ DirectML itself is in sustained engineering, with new feature work moved to Wind
 - **utilityProcess** was measured as a stall comparison, not built into the app.
 - **SigLIP 2 fp16 on the CPU** fails to load (an ONNX Runtime graph-fusion error); not investigated further,
   since fp16 belongs on the GPU.
-- **Real-folder validation** on the user's own like and dislike folders, by the ground rule of this task.
+- **Real-folder validation** on the user's own like and dislike folders, by the ground rule of this task. Done
+  afterwards with the user's consent, overall numbers only: section 10.
 - **Videos** (keyframes) were not tested.
 
 ## Open questions (decisions for you; the assumption I took is named)
@@ -626,6 +706,7 @@ DirectML itself is in sustained engineering, with new feature work moved to Wind
 7. **Real-data check.** The benchmark's tastes are synthetic (liked subjects, reviewer-promoted quality). The
    decisive test is your own like and dislike folders, cross-validated locally with nothing uploaded. I did not
    touch them (your rule: repo or public-domain images only). Should a follow-up run the same harness on them?
+   *Answered 2026-11-05:* yes, through a driver that reads the app's cached vectors; section 10.
 
 ## Sources
 

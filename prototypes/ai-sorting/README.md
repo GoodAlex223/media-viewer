@@ -92,7 +92,11 @@ node --test $P/real-folders.selftest.js
 `<pairs.json>` is `[{ "like": "<folder>", "dislike": "<folder>" }]`, one entry per context, because like and dislike
 folders are chosen per main folder and each pair is its own taste. **This repository is public**: keep the pairs file
 and the output outside it (the script refuses otherwise). The script writes and prints numbers and context letters
-only, never a file or folder name. It only reads the folders. Plan, about 20 minutes on one thread for 30,000 labels.
+only, never a file or folder name. It only reads the folders. Measured on the report's laptop: 55 minutes on one
+thread for two measured contexts of 31,049 and 14,961 labels, most of it in the converged fits on the larger one
+(about 50 s per fit). Keep the machine awake: a first background run was stopped for low memory just after the
+laptop woke from hibernation. The script saves each finished context to `real-folders.partial.json` but does not
+resume from it. The result is the report's section 10.
 
 ## What it measures
 
