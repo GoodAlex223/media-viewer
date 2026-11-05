@@ -93,8 +93,10 @@ Before any release, verify the following scenarios work correctly.
 
 ### Rating Data Safety (2026-11-02, G3)
 
-- [ ] Bulk-rate a pair (Both good), reopen the folder: the label is still there
-- [ ] Move a bulk-rated file with Like, undo it: the file comes back with its label and badge, in its original folder
+A bulk label has no on-screen sign: read it in the folder's `.bulk_rated.json` (`good` and `bad` list file names). The badge is the AI score, shown while the AI order is on.
+
+- [ ] Bulk-rate a pair (Both good), reopen the folder: both names are still under `good`. The first pair can differ, since a reopened folder has lost the AI order
+- [ ] Move a bulk-rated file with Like: its name leaves `good`. Undo it: the file is back in its original folder, with its name in `good` and the same badge
 - [ ] The same with a special move and with a compare-pair move
 - [ ] Press a rating key repeatedly while a large folder opens: no file moves until the first file is on screen
 - [ ] Close the window during background extraction: it closes, and on reopening the folder the extracted features are not recomputed
@@ -102,6 +104,7 @@ Before any release, verify the following scenarios work correctly.
 - [ ] Lock `.bulk_rated.json` in another program, or give it a UTF-8 BOM, and open the folder: a warning says ratings cannot be read; bulk-rate a pair and check the file on disk is unchanged
 - [ ] Press Tournament mode so a prompt opens, then press a rating key: nothing moves. Then Tab or Shift+Tab to the Like button behind the prompt and press Enter: nothing moves
 - [ ] With a tournament prompt open, Tab to change-folder and pick another folder: the prompt closes, and that folder's saved tournament is untouched
+- [ ] Ctrl+R and Ctrl+Shift+R do nothing, and the View menu has no Reload; F12 still opens developer tools
 
 ---
 

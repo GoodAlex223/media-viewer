@@ -366,6 +366,40 @@ test.describe('G3 rating data safety', () => {
         });
     });
 
+    // A reload fires no close event, so it would skip the save at quit (PR #95 review 13; the user ruled on 2026-11-05).
+    test.describe('the menu has no reload', () => {
+        for (const [name, modifiers] of [
+            ['Ctrl+R', ['control']],
+            ['Ctrl+Shift+R', ['control', 'shift']],
+        ]) {
+            test(`${name} leaves the page as it is`, async () => {
+                await page.evaluate(() => {
+                    window.__notReloaded = true;
+                });
+                await electronApp.evaluate(({ BrowserWindow }, mods) => {
+                    const { webContents } = BrowserWindow.getAllWindows()[0];
+                    webContents.focus();
+                    webContents.sendInputEvent({ type: 'keyDown', keyCode: 'R', modifiers: mods });
+                    webContents.sendInputEvent({ type: 'keyUp', keyCode: 'R', modifiers: mods });
+                }, modifiers);
+                await page.waitForTimeout(1500);
+                expect(await page.evaluate(() => window.__notReloaded === true)).toBe(true);
+            });
+        }
+
+        test('the rest of the default menu stays', async () => {
+            const roles = await electronApp.evaluate(({ Menu }) => {
+                const walk = (menu) => menu.items.flatMap((i) => [i.role, ...(i.submenu ? walk(i.submenu) : [])]);
+                return walk(Menu.getApplicationMenu()).filter(Boolean);
+            });
+            expect(roles).not.toContain('reload');
+            expect(roles).not.toContain('forcereload');
+            for (const role of ['quit', 'copy', 'paste', 'toggledevtools', 'zoomin', 'togglefullscreen', 'close']) {
+                expect(roles).toContain(role);
+            }
+        });
+    });
+
     test.describe('member 7: main logs what it did not catch', () => {
         async function newestSessionLog() {
             const logsDir = await electronApp.evaluate(({ app }) => app.getPath('logs'));

@@ -37,6 +37,12 @@ Completed tasks with implementation details and learnings.
 
 ## 2026-10 (October)
 
+### 2026-11-05 — G3 post-merge checks passed; the reload roles removed
+
+- **Manual scenarios**: the user ran all of `docs/MANUAL_TESTING.md` § Rating Data Safety on `main`, the close during extraction and the quit on a very large cache included: 9/9 passed.
+- **Reload**: Ctrl+R and Ctrl+Shift+R reloaded the page with no `close` event, skipping the save at quit (PR #95 review 13). `app-menu.js` is Electron's default menu without those two roles, and without Help, which only linked to Electron's website. The default menu was dumped from a bare Electron window first. Developer tools stay. The new E2Es failed before the change.
+- **Docs**: the manual steps said a bulk label could be seen on screen; it can only be read in `.bulk_rated.json`.
+
 ### 2026-11-03 — Group G3: Rating data that can't go wrong 🟤 🏆 (Cleanup Week #5, Oct 26–30, run Nov 2–3) — **7/7, MERGED `b9c76c0`** (PR #95)
 
 **Plan**: [2026-11-02_g3-rating-data-safety.md](../archive/plans/2026-11-02_g3-rating-data-safety.md). **Spec**: [G3 Rating Data Safety](../superpowers/specs/2026-11-02-g3-rating-data-safety-design.md) (approved 2026-11-02; the user skipped the brainstorm's questions, so its ten design calls are mine, listed in § 4).

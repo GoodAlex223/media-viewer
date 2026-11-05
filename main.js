@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, globalShortcut, protocol, session } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, globalShortcut, Menu, protocol, session } = require('electron');
 const path = require('path');
 const fs = require('fs').promises;
 const fsSync = require('fs'); // createReadStream/createWriteStream for streaming the feature cache
@@ -6,6 +6,7 @@ const { execFile } = require('child_process');
 const { promisify } = require('util');
 const logger = require('./logger');
 logger.installCrashLogging();
+const { appMenuTemplate } = require('./app-menu');
 const { isMediaFile, getMimeType } = require('./media-formats');
 const { packFeatureChunk } = require('./feature-cache-transport');
 const {
@@ -264,6 +265,8 @@ async function createWindow() {
 app.whenReady().then(async () => {
     // Initialize file logger
     logger.init(app.getPath('logs'));
+
+    Menu.setApplicationMenu(Menu.buildFromTemplate(appMenuTemplate()));
 
     // Intercept console methods to also write to log file
     const formatArgs = (args) => args.map((a) => (a instanceof Error ? a.stack || String(a) : String(a))).join(' ');
