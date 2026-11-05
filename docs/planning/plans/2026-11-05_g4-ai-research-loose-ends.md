@@ -86,7 +86,7 @@ Outcome across the usable contexts:
 
 ### Assumptions
 
-- The three pairs in the model cache are the contexts worth measuring. If other main folders matter, their pairs can be added to the pairs file and re-run.
+- The three pairs in the model cache stand in for the user's tastes. **This is a real limit on the verdict.** The cache keeps only the last 5 models (`MODEL_CACHE_LIMIT`), all 5 were saved on 2026-11-05, and 3 of them are the tiny pair, so older main folders are absent by recency, not by choice. With the tiny pair below the floor, the verdict rests on two tastes, one of them with only 185 dislikes. The report must say how many tastes it rests on. Other main folders' pairs could have been added: asked on 2026-11-05 whether any should be, the user ruled "no, finish with the current pairs".
 - The cached vectors match what the app trains on, which the stale filter and a count cross-check against the model cache's summary (17,507 / 13,542 etc.) test.
 
 ### Edge Cases
@@ -146,11 +146,11 @@ Outcome across the usable contexts:
 
 1. [x] Personal-data check; merge `96d9b22` (`74c5daa`)
 2. [x] Save the parked commit as a patch and verify it: patch ID equal, parent + patch = the commit's tree. Then one fixture path's folder name replaced by a placeholder, verified as the only difference
-3. [ ] Commit this plan, the patch and the index rows
-4. [ ] Self-test first, seen failing; then `real-folders.js`; self-test passing; commit before any real run
-5. [ ] Real run on the three contexts, in the job scratch folder
-6. [ ] Overall numbers into the report; grep the outgoing diff; commit
-7. [ ] Push; delete `g3-departed-clips-parked` once the patch is on origin; open the PR; ask about deleting `research/local-ai-sorting` on origin
+3. [x] Commit this plan, the patch and the index rows (`b965eff`)
+4. [x] Self-test first, seen failing; then `real-folders.js`; self-test passing; commit before any real run (`c61843b`)
+5. [ ] Real run on the three contexts, in the job scratch folder (started 2026-11-05, after `c61843b`; in the background)
+6. [ ] Overall numbers into the report, stating how many tastes the verdict rests on; replace the README's "Plan, about 20 minutes" with the measured time; re-run the outgoing name check; commit
+7. [ ] Push; delete `g3-departed-clips-parked` once the patch is on origin; open the PR; ask about deleting `research/local-ai-sorting` on origin; ask before any review in this chat
 
 ---
 
@@ -163,6 +163,15 @@ Outcome across the usable contexts:
 - Lint and format on a scratch copy of the prototype: ESLint 0 problems over 22 files, Prettier clean, so no ignore entry is needed.
 - App code the harness reuses, `b7e07f9..main`: `ml-model.js`, `ml-worker.js`, `feature-extractor.js` and `sorting-worker.js` unchanged; `perceptual-hash.js` gained one export.
 - Parked branch: of 314 meaningful added lines, 303 were verbatim in the archived plan, so "nothing lost" was not yet true. 11 were not: 6 comment lines, one test-mock line repeated 4 times and one test assertion. The patch closes that gap.
+
+### 2026-11-05 — PHASE: Implementation
+
+- **Deviations from the approved description, each told to the user**: the check runs per context rather than on one pair, after the user explained their use; pairs come from the model cache, so nobody types a path and no name reaches the chat; the patch was not in the description, and was added to meet the user's condition on the delete.
+- **Measured, not inferred**: `extractFeatures` itself shows metadata changes exactly dims 42–47 and 54–61 and no pixel dim, which turns the spec's "inferred, not measured" into a measurement. The self-test pins it. The size of the effect on ranking comes from the real run.
+- **Bugs the self-test caught in my first draft**: the fold balance mixed the two classes, so a like-only group avoided a fold for its dislike count (`likes 36,24,24,20,16`); the solver stopped on a relative-objective check before the gradient met its bound.
+- **A mutant escaped its scratch copy**: with the repo refusal off, it wrote to the `--out` the test named, inside the worktree, because `MV_REPO` pointed there. Every later run then failed on that folder. It looked like a flake and failed every time. The folder's two files were read and deleted, and the mutation harness now cleans up after each mutant.
+- **Outgoing name check** (counts only, planted controls fire), over every folder and file name in the three contexts, on the branch as of `c61843b`: 8 file names, 1 stem and 1 folder string matched, all coincidences by shape and surroundings (digit tails of Commons IDs, common words, a `README.md`, a single-letter folder string). No distinctive name. To re-run before the push, since the numbers commit is still to come.
+- **Tools in the job scratch folder, not in git** (`$CLAUDE_JOB_DIR/tmp`): `pairs.json` (real paths, never commit), `real-folders/` (the run's output: `real-folders.md`, `.json`, or `.partial.json` while running), `outgoing-name-check.js` and `outgoing-name-hits.js`, `mutate.js`.
 
 ---
 
@@ -198,14 +207,17 @@ None yet.
 
 ### Test Plan
 
-- [ ] `node --test prototypes/ai-sorting/real-folders.selftest.js`: the cache filter, the as-scored transform against `extractFeatures`, L-BFGS against the exact dual solver, group folds, planted signal, planted leak, shuffled labels, each verdict outcome, the privacy sentinels, the repo refusal
-- [ ] Hooks on every commit
-- [ ] The real run's count cross-check against the model cache's summary
+- [x] `node --test prototypes/ai-sorting/real-folders.selftest.js`: the cache filter, the as-scored transform against `extractFeatures`, L-BFGS against the exact dual solver, group folds, planted signal, planted leak, shuffled labels, each verdict outcome, the privacy sentinels, the repo refusal
+- [x] Hooks on every commit
+- [ ] The real run's count cross-check against the model cache's summary (17,507 / 13,542; 14,776 / 185; 4 / 22)
 
 ### Test Results
 
 | Test | Result | Notes |
 |------|--------|-------|
+| Self-test | Pass, 31 of 31 | Seen failing first; re-run on the formatted commit |
+| Mutation check, in a scratch copy | 21 of 21 killed | Baseline read before and after. Two survivors on the way each exposed a test gap, both closed: a fatal error whose message holds a path, and a fold-balance fixture with more likes only |
+| Pre-commit hook on the merge | Pass, 2,636 unit tests | `prototypes/` and `docs/research/` byte-identical to `96d9b22` afterwards |
 
 ---
 
