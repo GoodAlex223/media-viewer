@@ -1,0 +1,5 @@
+{"a":"clip-b32-q8 (q8, cpu)","b":"clip-b32-fp32 (fp32, cpu)","images":993,"cosMedian":0.9152,"cosP10":0.8639,"cosMin":0.6851}
+{"a":"clip-b32-bnb4 (bnb4, cpu)","b":"clip-b32-fp32 (fp32, cpu)","images":993,"cosMedian":0.9692,"cosP10":0.951,"cosMin":0.8454}
+{"a":"siglip2-b16-224-q8 (q8, cpu)","b":"siglip2-b16-224-fp32 (fp32, cpu)","images":993,"cosMedian":0.7854,"cosP10":0.6632,"cosMin":0.5417}
+{"a":"siglip2-b16-224-bnb4 (bnb4, cpu)","b":"siglip2-b16-224-fp32 (fp32, cpu)","images":993,"cosMedian":0.968,"cosP10":0.9508,"cosMin":0.8889}
+{"a":"dinov2reg-s-q8 (q8, cpu)","b":"dinov2reg-s-fp32 (fp32, cpu)","images":993,"cosMedian":0.8055,"cosP10":0.4493,"cosMin":0.0051}

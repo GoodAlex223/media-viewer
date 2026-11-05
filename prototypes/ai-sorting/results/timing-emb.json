@@ -1,0 +1,930 @@
+[
+    {
+        "file": "onnx/vision_model.onnx",
+        "key": "clip-b16-fp32",
+        "repo": "Xenova/clip-vit-base-patch16",
+        "dtype": "fp32",
+        "device": "dml",
+        "dmlDevice": null,
+        "dim": 512,
+        "n": 103,
+        "modelMB": 345.1,
+        "loadMs": 1521,
+        "rssDeltaLoadMB": 146,
+        "rssPeakMB": 406,
+        "timing": {
+            "inferMedianMs": 26.9,
+            "inferP90Ms": 30.8,
+            "prepMedianMs": 11.4,
+            "decodeMedianMs": 10.7,
+            "totalMedianMs": 49.2,
+            "totalSeconds": 6.3
+        },
+        "eventLoopDelayMs": {
+            "p50": 5.5,
+            "p99": 44,
+            "max": 1134.6
+        },
+        "host": {
+            "cpus": 16,
+            "cpu": "AMD Ryzen 7 6800H with Radeon Graphics         ",
+            "runtime": "node v22.17.1"
+        }
+    },
+    {
+        "file": "onnx/vision_model.onnx",
+        "key": "clip-b16-fp32",
+        "repo": "Xenova/clip-vit-base-patch16",
+        "dtype": "fp32",
+        "device": "cpu",
+        "dmlDevice": null,
+        "dim": 512,
+        "n": 103,
+        "modelMB": 345.1,
+        "loadMs": 889,
+        "rssDeltaLoadMB": 382,
+        "rssPeakMB": 514,
+        "timing": {
+            "inferMedianMs": 121.7,
+            "inferP90Ms": 140.3,
+            "prepMedianMs": 15.1,
+            "decodeMedianMs": 13.8,
+            "totalMedianMs": 151.3,
+            "totalSeconds": 16.2
+        },
+        "eventLoopDelayMs": {
+            "p50": 5.2,
+            "p99": 178.8,
+            "max": 250.6
+        },
+        "host": {
+            "cpus": 16,
+            "cpu": "AMD Ryzen 7 6800H with Radeon Graphics         ",
+            "runtime": "electron 39.1.2"
+        }
+    },
+    {
+        "file": "onnx/vision_model.onnx",
+        "key": "clip-b16-fp32",
+        "repo": "Xenova/clip-vit-base-patch16",
+        "dtype": "fp32",
+        "device": "cpu",
+        "dmlDevice": null,
+        "dim": 512,
+        "n": 103,
+        "modelMB": 345.1,
+        "loadMs": 977,
+        "rssDeltaLoadMB": 377,
+        "rssPeakMB": 848,
+        "timing": {
+            "inferMedianMs": 150.5,
+            "inferP90Ms": 188.1,
+            "prepMedianMs": 16.6,
+            "decodeMedianMs": 15.6,
+            "totalMedianMs": 185.9,
+            "totalSeconds": 19.5
+        },
+        "eventLoopDelayMs": {
+            "p50": 5.4,
+            "p99": 242.4,
+            "max": 289.4
+        },
+        "host": {
+            "cpus": 16,
+            "cpu": "AMD Ryzen 7 6800H with Radeon Graphics         ",
+            "runtime": "node v22.17.1"
+        }
+    },
+    {
+        "file": "onnx/vision_model_bnb4.onnx",
+        "key": "clip-b32-bnb4",
+        "repo": "Xenova/clip-vit-base-patch32",
+        "dtype": "bnb4",
+        "device": "dml",
+        "dmlDevice": null,
+        "dim": 512,
+        "n": 103,
+        "modelMB": 58.3,
+        "loadMs": 2355,
+        "rssDeltaLoadMB": 153,
+        "rssPeakMB": 253,
+        "timing": {
+            "inferMedianMs": 481.4,
+            "inferP90Ms": 1024.4,
+            "prepMedianMs": 21.6,
+            "decodeMedianMs": 22.4,
+            "totalMedianMs": 523.4,
+            "totalSeconds": 67.8
+        },
+        "eventLoopDelayMs": {
+            "p50": 9,
+            "p99": 1175.5,
+            "max": 2302.7
+        },
+        "host": {
+            "cpus": 16,
+            "cpu": "AMD Ryzen 7 6800H with Radeon Graphics         ",
+            "runtime": "node v22.17.1"
+        }
+    },
+    {
+        "file": "onnx/vision_model_bnb4.onnx",
+        "key": "clip-b32-bnb4",
+        "repo": "Xenova/clip-vit-base-patch32",
+        "dtype": "bnb4",
+        "device": "cpu",
+        "dmlDevice": null,
+        "dim": 512,
+        "n": 103,
+        "modelMB": 58.3,
+        "loadMs": 531,
+        "rssDeltaLoadMB": 93,
+        "rssPeakMB": 233,
+        "timing": {
+            "inferMedianMs": 118.7,
+            "inferP90Ms": 211,
+            "prepMedianMs": 16.9,
+            "decodeMedianMs": 15.8,
+            "totalMedianMs": 155.1,
+            "totalSeconds": 17.7
+        },
+        "eventLoopDelayMs": {
+            "p50": 8,
+            "p99": 243.4,
+            "max": 286.3
+        },
+        "host": {
+            "cpus": 16,
+            "cpu": "AMD Ryzen 7 6800H with Radeon Graphics         ",
+            "runtime": "electron 39.1.2"
+        }
+    },
+    {
+        "file": "onnx/vision_model_bnb4.onnx",
+        "key": "clip-b32-bnb4",
+        "repo": "Xenova/clip-vit-base-patch32",
+        "dtype": "bnb4",
+        "device": "cpu",
+        "dmlDevice": null,
+        "dim": 512,
+        "n": 103,
+        "modelMB": 58.3,
+        "loadMs": 560,
+        "rssDeltaLoadMB": 90,
+        "rssPeakMB": 207,
+        "timing": {
+            "inferMedianMs": 134.4,
+            "inferP90Ms": 180.3,
+            "prepMedianMs": 21.5,
+            "decodeMedianMs": 28.9,
+            "totalMedianMs": 190.2,
+            "totalSeconds": 20.1
+        },
+        "eventLoopDelayMs": {
+            "p50": 8.8,
+            "p99": 213.9,
+            "max": 283.9
+        },
+        "host": {
+            "cpus": 16,
+            "cpu": "AMD Ryzen 7 6800H with Radeon Graphics         ",
+            "runtime": "node v22.17.1"
+        }
+    },
+    {
+        "file": "onnx/vision_model.onnx",
+        "key": "clip-b32-fp32",
+        "repo": "Xenova/clip-vit-base-patch32",
+        "dtype": "fp32",
+        "device": "dml",
+        "dmlDevice": null,
+        "dim": 512,
+        "n": 103,
+        "modelMB": 351.7,
+        "loadMs": 3618,
+        "rssDeltaLoadMB": 128,
+        "rssPeakMB": 506,
+        "timing": {
+            "inferMedianMs": 29.8,
+            "inferP90Ms": 40.8,
+            "prepMedianMs": 15.3,
+            "decodeMedianMs": 17.5,
+            "totalMedianMs": 64.6,
+            "totalSeconds": 12.4
+        },
+        "eventLoopDelayMs": {
+            "p50": 6.2,
+            "p99": 71.7,
+            "max": 5507.1
+        },
+        "host": {
+            "cpus": 16,
+            "cpu": "AMD Ryzen 7 6800H with Radeon Graphics         ",
+            "runtime": "node v22.17.1"
+        }
+    },
+    {
+        "file": "onnx/vision_model.onnx",
+        "key": "clip-b32-fp32",
+        "repo": "Xenova/clip-vit-base-patch32",
+        "dtype": "fp32",
+        "device": "cpu",
+        "dmlDevice": null,
+        "dim": 512,
+        "n": 103,
+        "modelMB": 351.7,
+        "loadMs": 1544,
+        "rssDeltaLoadMB": 389,
+        "rssPeakMB": 797,
+        "timing": {
+            "inferMedianMs": 62.1,
+            "inferP90Ms": 85.5,
+            "prepMedianMs": 17,
+            "decodeMedianMs": 17.4,
+            "totalMedianMs": 100.1,
+            "totalSeconds": 10.9
+        },
+        "eventLoopDelayMs": {
+            "p50": 5.4,
+            "p99": 107,
+            "max": 245.4
+        },
+        "host": {
+            "cpus": 16,
+            "cpu": "AMD Ryzen 7 6800H with Radeon Graphics         ",
+            "runtime": "electron 39.1.2"
+        }
+    },
+    {
+        "file": "onnx/vision_model.onnx",
+        "key": "clip-b32-fp32",
+        "repo": "Xenova/clip-vit-base-patch32",
+        "dtype": "fp32",
+        "device": "cpu",
+        "dmlDevice": null,
+        "dim": 512,
+        "n": 103,
+        "modelMB": 351.7,
+        "loadMs": 1681,
+        "rssDeltaLoadMB": 385,
+        "rssPeakMB": 735,
+        "timing": {
+            "inferMedianMs": 74.8,
+            "inferP90Ms": 102.8,
+            "prepMedianMs": 19.8,
+            "decodeMedianMs": 19.6,
+            "totalMedianMs": 115.5,
+            "totalSeconds": 12.5
+        },
+        "eventLoopDelayMs": {
+            "p50": 6.6,
+            "p99": 147.2,
+            "max": 200.7
+        },
+        "host": {
+            "cpus": 16,
+            "cpu": "AMD Ryzen 7 6800H with Radeon Graphics         ",
+            "runtime": "node v22.17.1"
+        }
+    },
+    {
+        "file": "onnx/vision_model_quantized.onnx",
+        "key": "clip-b32-q8",
+        "repo": "Xenova/clip-vit-base-patch32",
+        "dtype": "q8",
+        "device": "cpu",
+        "dmlDevice": null,
+        "dim": 512,
+        "n": 103,
+        "modelMB": 89.1,
+        "loadMs": 952,
+        "rssDeltaLoadMB": 131,
+        "rssPeakMB": 197,
+        "timing": {
+            "inferMedianMs": 80.2,
+            "inferP90Ms": 126.8,
+            "prepMedianMs": 18.2,
+            "decodeMedianMs": 17.2,
+            "totalMedianMs": 115.4,
+            "totalSeconds": 12.7
+        },
+        "eventLoopDelayMs": {
+            "p50": 6.7,
+            "p99": 184,
+            "max": 254.3
+        },
+        "host": {
+            "cpus": 16,
+            "cpu": "AMD Ryzen 7 6800H with Radeon Graphics         ",
+            "runtime": "electron 39.1.2"
+        }
+    },
+    {
+        "file": "onnx/vision_model_quantized.onnx",
+        "key": "clip-b32-q8",
+        "repo": "Xenova/clip-vit-base-patch32",
+        "dtype": "q8",
+        "device": "cpu",
+        "dmlDevice": null,
+        "dim": 512,
+        "n": 103,
+        "modelMB": 89.1,
+        "loadMs": 1508,
+        "rssDeltaLoadMB": 131,
+        "rssPeakMB": 152,
+        "timing": {
+            "inferMedianMs": 57.6,
+            "inferP90Ms": 103.3,
+            "prepMedianMs": 18.7,
+            "decodeMedianMs": 20.5,
+            "totalMedianMs": 102.6,
+            "totalSeconds": 11.2
+        },
+        "eventLoopDelayMs": {
+            "p50": 6.6,
+            "p99": 136.7,
+            "max": 179.3
+        },
+        "host": {
+            "cpus": 16,
+            "cpu": "AMD Ryzen 7 6800H with Radeon Graphics         ",
+            "runtime": "node v22.17.1"
+        }
+    },
+    {
+        "file": "onnx/model.onnx",
+        "key": "dinov2reg-s-fp32",
+        "repo": "onnx-community/dinov2-with-registers-small",
+        "dtype": "fp32",
+        "device": "dml",
+        "dmlDevice": null,
+        "dim": 384,
+        "n": 103,
+        "modelMB": 88.5,
+        "loadMs": 1381,
+        "rssDeltaLoadMB": 109,
+        "rssPeakMB": 379,
+        "timing": {
+            "inferMedianMs": 91.5,
+            "inferP90Ms": 99.3,
+            "prepMedianMs": 11.5,
+            "decodeMedianMs": 10.9,
+            "totalMedianMs": 114.6,
+            "totalSeconds": 13.7
+        },
+        "eventLoopDelayMs": {
+            "p50": 7.4,
+            "p99": 125.5,
+            "max": 1772.1
+        },
+        "host": {
+            "cpus": 16,
+            "cpu": "AMD Ryzen 7 6800H with Radeon Graphics         ",
+            "runtime": "node v22.17.1"
+        }
+    },
+    {
+        "file": "onnx/model.onnx",
+        "key": "dinov2reg-s-fp32",
+        "repo": "onnx-community/dinov2-with-registers-small",
+        "dtype": "fp32",
+        "device": "cpu",
+        "dmlDevice": null,
+        "dim": 384,
+        "n": 103,
+        "modelMB": 88.5,
+        "loadMs": 509,
+        "rssDeltaLoadMB": 127,
+        "rssPeakMB": 252,
+        "timing": {
+            "inferMedianMs": 98.6,
+            "inferP90Ms": 113.2,
+            "prepMedianMs": 15.3,
+            "decodeMedianMs": 13.7,
+            "totalMedianMs": 129.2,
+            "totalSeconds": 13.6
+        },
+        "eventLoopDelayMs": {
+            "p50": 6.7,
+            "p99": 131.4,
+            "max": 166.9
+        },
+        "host": {
+            "cpus": 16,
+            "cpu": "AMD Ryzen 7 6800H with Radeon Graphics         ",
+            "runtime": "electron 39.1.2"
+        }
+    },
+    {
+        "file": "onnx/model.onnx",
+        "key": "dinov2reg-s-fp32",
+        "repo": "onnx-community/dinov2-with-registers-small",
+        "dtype": "fp32",
+        "device": "cpu",
+        "dmlDevice": null,
+        "dim": 384,
+        "n": 103,
+        "modelMB": 88.5,
+        "loadMs": 505,
+        "rssDeltaLoadMB": 121,
+        "rssPeakMB": 239,
+        "timing": {
+            "inferMedianMs": 101,
+            "inferP90Ms": 126.8,
+            "prepMedianMs": 15.7,
+            "decodeMedianMs": 14.8,
+            "totalMedianMs": 133.9,
+            "totalSeconds": 14.4
+        },
+        "eventLoopDelayMs": {
+            "p50": 7.3,
+            "p99": 161.7,
+            "max": 191
+        },
+        "host": {
+            "cpus": 16,
+            "cpu": "AMD Ryzen 7 6800H with Radeon Graphics         ",
+            "runtime": "node v22.17.1"
+        }
+    },
+    {
+        "file": "onnx/model_quantized.onnx",
+        "key": "dinov2reg-s-q8",
+        "repo": "onnx-community/dinov2-with-registers-small",
+        "dtype": "q8",
+        "device": "dml",
+        "dmlDevice": null,
+        "dim": 384,
+        "n": 103,
+        "modelMB": 24.4,
+        "loadMs": 1535,
+        "rssDeltaLoadMB": 105,
+        "rssPeakMB": 384,
+        "timing": {
+            "inferMedianMs": 96.7,
+            "inferP90Ms": 110.3,
+            "prepMedianMs": 12,
+            "decodeMedianMs": 11.4,
+            "totalMedianMs": 122.2,
+            "totalSeconds": 14.7
+        },
+        "eventLoopDelayMs": {
+            "p50": 8.5,
+            "p99": 129.7,
+            "max": 2115
+        },
+        "host": {
+            "cpus": 16,
+            "cpu": "AMD Ryzen 7 6800H with Radeon Graphics         ",
+            "runtime": "node v22.17.1"
+        }
+    },
+    {
+        "file": "onnx/model_quantized.onnx",
+        "key": "dinov2reg-s-q8",
+        "repo": "onnx-community/dinov2-with-registers-small",
+        "dtype": "q8",
+        "device": "cpu",
+        "dmlDevice": null,
+        "dim": 384,
+        "n": 103,
+        "modelMB": 24.4,
+        "loadMs": 419,
+        "rssDeltaLoadMB": 68,
+        "rssPeakMB": 187,
+        "timing": {
+            "inferMedianMs": 84.2,
+            "inferP90Ms": 98.8,
+            "prepMedianMs": 14.7,
+            "decodeMedianMs": 12.3,
+            "totalMedianMs": 111.9,
+            "totalSeconds": 11.9
+        },
+        "eventLoopDelayMs": {
+            "p50": 7.2,
+            "p99": 120.1,
+            "max": 137.9
+        },
+        "host": {
+            "cpus": 16,
+            "cpu": "AMD Ryzen 7 6800H with Radeon Graphics         ",
+            "runtime": "electron 39.1.2"
+        }
+    },
+    {
+        "file": "onnx/model_quantized.onnx",
+        "key": "dinov2reg-s-q8",
+        "repo": "onnx-community/dinov2-with-registers-small",
+        "dtype": "q8",
+        "device": "cpu",
+        "dmlDevice": null,
+        "dim": 384,
+        "n": 103,
+        "modelMB": 24.4,
+        "loadMs": 499,
+        "rssDeltaLoadMB": 62,
+        "rssPeakMB": 177,
+        "timing": {
+            "inferMedianMs": 89.1,
+            "inferP90Ms": 103.5,
+            "prepMedianMs": 14.9,
+            "decodeMedianMs": 13.5,
+            "totalMedianMs": 117.3,
+            "totalSeconds": 12.8
+        },
+        "eventLoopDelayMs": {
+            "p50": 7.7,
+            "p99": 132.6,
+            "max": 323.5
+        },
+        "host": {
+            "cpus": 16,
+            "cpu": "AMD Ryzen 7 6800H with Radeon Graphics         ",
+            "runtime": "node v22.17.1"
+        }
+    },
+    {
+        "file": "onnx/model.onnx",
+        "key": "dinov3-s16-fp32",
+        "repo": "onnx-community/dinov3-vits16-pretrain-lvd1689m-ONNX",
+        "dtype": "fp32",
+        "device": "cpu",
+        "dmlDevice": null,
+        "dim": 384,
+        "n": 103,
+        "modelMB": 86.5,
+        "loadMs": 488,
+        "rssDeltaLoadMB": 121,
+        "rssPeakMB": 243,
+        "timing": {
+            "inferMedianMs": 57.8,
+            "inferP90Ms": 72.1,
+            "prepMedianMs": 12.3,
+            "decodeMedianMs": 12.8,
+            "totalMedianMs": 84.3,
+            "totalSeconds": 8.8
+        },
+        "eventLoopDelayMs": {
+            "p50": 9,
+            "p99": 99,
+            "max": 105.8
+        },
+        "host": {
+            "cpus": 16,
+            "cpu": "AMD Ryzen 7 6800H with Radeon Graphics         ",
+            "runtime": "electron 39.1.2"
+        }
+    },
+    {
+        "file": "onnx/model.onnx",
+        "key": "dinov3-s16-fp32",
+        "repo": "onnx-community/dinov3-vits16-pretrain-lvd1689m-ONNX",
+        "dtype": "fp32",
+        "device": "cpu",
+        "dmlDevice": null,
+        "dim": 384,
+        "n": 103,
+        "modelMB": 86.5,
+        "loadMs": 704,
+        "rssDeltaLoadMB": 116,
+        "rssPeakMB": 230,
+        "timing": {
+            "inferMedianMs": 56.3,
+            "inferP90Ms": 75.1,
+            "prepMedianMs": 12.8,
+            "decodeMedianMs": 13.2,
+            "totalMedianMs": 83.1,
+            "totalSeconds": 9
+        },
+        "eventLoopDelayMs": {
+            "p50": 10.5,
+            "p99": 95.6,
+            "max": 139.9
+        },
+        "host": {
+            "cpus": 16,
+            "cpu": "AMD Ryzen 7 6800H with Radeon Graphics         ",
+            "runtime": "node v22.17.1"
+        }
+    },
+    {
+        "file": "onnx/vision_model_bnb4.onnx",
+        "key": "siglip2-b16-224-bnb4",
+        "repo": "onnx-community/siglip2-base-patch16-224-ONNX",
+        "dtype": "bnb4",
+        "device": "dml",
+        "dmlDevice": null,
+        "dim": 768,
+        "n": 103,
+        "modelMB": 57.6,
+        "loadMs": 1386,
+        "rssDeltaLoadMB": 149,
+        "rssPeakMB": 388,
+        "timing": {
+            "inferMedianMs": 632.4,
+            "inferP90Ms": 984.7,
+            "prepMedianMs": 13.5,
+            "decodeMedianMs": 15.1,
+            "totalMedianMs": 660,
+            "totalSeconds": 78.1
+        },
+        "eventLoopDelayMs": {
+            "p50": 10.7,
+            "p99": 1382,
+            "max": 2732.6
+        },
+        "host": {
+            "cpus": 16,
+            "cpu": "AMD Ryzen 7 6800H with Radeon Graphics         ",
+            "runtime": "node v22.17.1"
+        }
+    },
+    {
+        "file": "onnx/vision_model_bnb4.onnx",
+        "key": "siglip2-b16-224-bnb4",
+        "repo": "onnx-community/siglip2-base-patch16-224-ONNX",
+        "dtype": "bnb4",
+        "device": "cpu",
+        "dmlDevice": null,
+        "dim": 768,
+        "n": 103,
+        "modelMB": 57.6,
+        "loadMs": 593,
+        "rssDeltaLoadMB": 94,
+        "rssPeakMB": 239,
+        "timing": {
+            "inferMedianMs": 222.3,
+            "inferP90Ms": 285.8,
+            "prepMedianMs": 13.1,
+            "decodeMedianMs": 14.1,
+            "totalMedianMs": 249.8,
+            "totalSeconds": 26.5
+        },
+        "eventLoopDelayMs": {
+            "p50": 8.8,
+            "p99": 345,
+            "max": 417.9
+        },
+        "host": {
+            "cpus": 16,
+            "cpu": "AMD Ryzen 7 6800H with Radeon Graphics         ",
+            "runtime": "electron 39.1.2"
+        }
+    },
+    {
+        "file": "onnx/vision_model_bnb4.onnx",
+        "key": "siglip2-b16-224-bnb4",
+        "repo": "onnx-community/siglip2-base-patch16-224-ONNX",
+        "dtype": "bnb4",
+        "device": "cpu",
+        "dmlDevice": null,
+        "dim": 768,
+        "n": 103,
+        "modelMB": 57.6,
+        "loadMs": 554,
+        "rssDeltaLoadMB": 89,
+        "rssPeakMB": 214,
+        "timing": {
+            "inferMedianMs": 250.5,
+            "inferP90Ms": 346.6,
+            "prepMedianMs": 14.1,
+            "decodeMedianMs": 16.5,
+            "totalMedianMs": 279.1,
+            "totalSeconds": 30
+        },
+        "eventLoopDelayMs": {
+            "p50": 10.9,
+            "p99": 449.8,
+            "max": 528
+        },
+        "host": {
+            "cpus": 16,
+            "cpu": "AMD Ryzen 7 6800H with Radeon Graphics         ",
+            "runtime": "node v22.17.1"
+        }
+    },
+    {
+        "file": "onnx/vision_model_fp16.onnx",
+        "key": "siglip2-b16-224-fp16",
+        "repo": "onnx-community/siglip2-base-patch16-224-ONNX",
+        "dtype": "fp16",
+        "device": "dml",
+        "dmlDevice": null,
+        "dim": 768,
+        "n": 103,
+        "modelMB": 186,
+        "loadMs": 1695,
+        "rssDeltaLoadMB": 128,
+        "rssPeakMB": 422,
+        "timing": {
+            "inferMedianMs": 32,
+            "inferP90Ms": 40.2,
+            "prepMedianMs": 13,
+            "decodeMedianMs": 12.9,
+            "totalMedianMs": 57.9,
+            "totalSeconds": 8.3
+        },
+        "eventLoopDelayMs": {
+            "p50": 8.1,
+            "p99": 67,
+            "max": 2139.1
+        },
+        "host": {
+            "cpus": 16,
+            "cpu": "AMD Ryzen 7 6800H with Radeon Graphics         ",
+            "runtime": "node v22.17.1"
+        }
+    },
+    {
+        "file": "onnx/vision_model.onnx",
+        "key": "siglip2-b16-224-fp32",
+        "repo": "onnx-community/siglip2-base-patch16-224-ONNX",
+        "dtype": "fp32",
+        "device": "dml",
+        "dmlDevice": null,
+        "dim": 768,
+        "n": 103,
+        "modelMB": 371.8,
+        "loadMs": 2581,
+        "rssDeltaLoadMB": 137,
+        "rssPeakMB": 375,
+        "timing": {
+            "inferMedianMs": 36.1,
+            "inferP90Ms": 46.4,
+            "prepMedianMs": 13.9,
+            "decodeMedianMs": 15.6,
+            "totalMedianMs": 67.2,
+            "totalSeconds": 9.2
+        },
+        "eventLoopDelayMs": {
+            "p50": 5.2,
+            "p99": 82.2,
+            "max": 1730.2
+        },
+        "host": {
+            "cpus": 16,
+            "cpu": "AMD Ryzen 7 6800H with Radeon Graphics         ",
+            "runtime": "node v22.17.1"
+        }
+    },
+    {
+        "file": "onnx/vision_model.onnx",
+        "key": "siglip2-b16-224-fp32",
+        "repo": "onnx-community/siglip2-base-patch16-224-ONNX",
+        "dtype": "fp32",
+        "device": "cpu",
+        "dmlDevice": null,
+        "dim": 768,
+        "n": 103,
+        "modelMB": 371.8,
+        "loadMs": 2826,
+        "rssDeltaLoadMB": 408,
+        "rssPeakMB": 913,
+        "timing": {
+            "inferMedianMs": 198.6,
+            "inferP90Ms": 306.5,
+            "prepMedianMs": 14.6,
+            "decodeMedianMs": 16,
+            "totalMedianMs": 235.5,
+            "totalSeconds": 27.2
+        },
+        "eventLoopDelayMs": {
+            "p50": 5.2,
+            "p99": 395.1,
+            "max": 498.9
+        },
+        "host": {
+            "cpus": 16,
+            "cpu": "AMD Ryzen 7 6800H with Radeon Graphics         ",
+            "runtime": "electron 39.1.2"
+        }
+    },
+    {
+        "file": "onnx/vision_model.onnx",
+        "key": "siglip2-b16-224-fp32",
+        "repo": "onnx-community/siglip2-base-patch16-224-ONNX",
+        "dtype": "fp32",
+        "device": "cpu",
+        "dmlDevice": null,
+        "dim": 768,
+        "n": 103,
+        "modelMB": 371.8,
+        "loadMs": 1833,
+        "rssDeltaLoadMB": 404,
+        "rssPeakMB": 697,
+        "timing": {
+            "inferMedianMs": 227.2,
+            "inferP90Ms": 318.1,
+            "prepMedianMs": 17.6,
+            "decodeMedianMs": 33.1,
+            "totalMedianMs": 285.4,
+            "totalSeconds": 30.8
+        },
+        "eventLoopDelayMs": {
+            "p50": 8.6,
+            "p99": 397.1,
+            "max": 556.8
+        },
+        "host": {
+            "cpus": 16,
+            "cpu": "AMD Ryzen 7 6800H with Radeon Graphics         ",
+            "runtime": "node v22.17.1"
+        }
+    },
+    {
+        "file": "onnx/vision_model.onnx",
+        "key": "siglip2-b32-256-fp32",
+        "repo": "onnx-community/siglip2-base-patch32-256-ONNX",
+        "dtype": "fp32",
+        "device": "dml",
+        "dmlDevice": null,
+        "dim": 768,
+        "n": 103,
+        "modelMB": 378.5,
+        "loadMs": 1972,
+        "rssDeltaLoadMB": 144,
+        "rssPeakMB": 399,
+        "timing": {
+            "inferMedianMs": 26.8,
+            "inferP90Ms": 34.9,
+            "prepMedianMs": 14.7,
+            "decodeMedianMs": 13.2,
+            "totalMedianMs": 53.6,
+            "totalSeconds": 8
+        },
+        "eventLoopDelayMs": {
+            "p50": 5.1,
+            "p99": 67.6,
+            "max": 2181
+        },
+        "host": {
+            "cpus": 16,
+            "cpu": "AMD Ryzen 7 6800H with Radeon Graphics         ",
+            "runtime": "node v22.17.1"
+        }
+    },
+    {
+        "file": "onnx/vision_model.onnx",
+        "key": "siglip2-b32-256-fp32",
+        "repo": "onnx-community/siglip2-base-patch32-256-ONNX",
+        "dtype": "fp32",
+        "device": "cpu",
+        "dmlDevice": null,
+        "dim": 768,
+        "n": 103,
+        "modelMB": 378.5,
+        "loadMs": 1197,
+        "rssDeltaLoadMB": 413,
+        "rssPeakMB": 537,
+        "timing": {
+            "inferMedianMs": 75.1,
+            "inferP90Ms": 106.7,
+            "prepMedianMs": 16,
+            "decodeMedianMs": 14.7,
+            "totalMedianMs": 107.1,
+            "totalSeconds": 11.5
+        },
+        "eventLoopDelayMs": {
+            "p50": 5.1,
+            "p99": 132.6,
+            "max": 158.1
+        },
+        "host": {
+            "cpus": 16,
+            "cpu": "AMD Ryzen 7 6800H with Radeon Graphics         ",
+            "runtime": "electron 39.1.2"
+        }
+    },
+    {
+        "file": "onnx/vision_model.onnx",
+        "key": "siglip2-b32-256-fp32",
+        "repo": "onnx-community/siglip2-base-patch32-256-ONNX",
+        "dtype": "fp32",
+        "device": "cpu",
+        "dmlDevice": null,
+        "dim": 768,
+        "n": 103,
+        "modelMB": 378.5,
+        "loadMs": 1052,
+        "rssDeltaLoadMB": 409,
+        "rssPeakMB": 918,
+        "timing": {
+            "inferMedianMs": 54.9,
+            "inferP90Ms": 72.1,
+            "prepMedianMs": 15.5,
+            "decodeMedianMs": 15.1,
+            "totalMedianMs": 85.2,
+            "totalSeconds": 9.5
+        },
+        "eventLoopDelayMs": {
+            "p50": 5.3,
+            "p99": 108.1,
+            "max": 236.2
+        },
+        "host": {
+            "cpus": 16,
+            "cpu": "AMD Ryzen 7 6800H with Radeon Graphics         ",
+            "runtime": "node v22.17.1"
+        }
+    }
+]
