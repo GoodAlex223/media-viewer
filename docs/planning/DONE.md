@@ -2,7 +2,8 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-11-03 <!-- Group G3: Rating data that can't go wrong (🟤 🏆, Cleanup Week #5, run Nov 2–3). MERGED 2026-11-03 via PR #95 (merge b9c76c0) after three review rounds (21 + 29 held back → 7 + 8 → 1 + 6); the manual scenarios stay with the user. -->
+**Last Updated**: 2026-11-05 <!-- G3 post-merge checks passed; reload roles removed, PR #96, merge 59218f3. -->
+<!-- Previous: Group G3: Rating data that can't go wrong (🟤 🏆, Cleanup Week #5, run Nov 2–3). MERGED 2026-11-03 via PR #95 (merge b9c76c0) after three review rounds (21 + 29 held back → 7 + 8 → 1 + 6); the manual scenarios stay with the user. -->
 <!-- Previous: Group G2: Pre-push gate (🟤, Cleanup Week #5, Oct 26–30, run Oct 30). MERGED 2026-10-30 via PR #94 (merge a80cc37) after three review rounds (15 + 10 held back → 3 + 1 → 0, then a close-out with two small re-raised answers): the blocking renderer line ratchet, the single read of git's ref lines, and the flaky tournament test. -->
 <!-- Previous: Group G1: Repo chores (🔵, Cleanup Week #5, Oct 26–30, run Oct 28–30). MERGED 2026-10-30 via PR #93 (merge 4894a13) after three review rounds (15 + 7 held back → 2 + 5 → 0) and a close-out: the pre-push SKIP list, --no-renames, the hook fail-safe, Context7 retired, MIT LICENSE. -->
 <!-- Previous: Group G6: Weekly Reviews (2026-10-27 run, ⚪ Overhead, Oct 19–23, run 2026-10-27). MERGED 2026-10-27 via PR #92 (merge c5ac35f) after two review rounds: 6 findings and 2 nits (one finding fixed differently), then 1 optional nit; a round-3 close-out found no issue. -->
@@ -37,11 +38,14 @@ Completed tasks with implementation details and learnings.
 
 ## 2026-10 (October)
 
-### 2026-11-05 — G3 post-merge checks passed; the reload roles removed
+### 2026-11-05 — G3 post-merge checks passed; the reload roles removed — **MERGED `59218f3`** (PR #96)
+
+Merged at the user's request with no separate review round. Pre-push E2E: 255 passed, 7 skipped. Unit: 2,636 passed, 1 skipped.
 
 - **Manual scenarios**: the user ran all of `docs/MANUAL_TESTING.md` § Rating Data Safety on `main`, the close during extraction and the quit on a very large cache included: 9/9 passed.
 - **Reload**: Ctrl+R and Ctrl+Shift+R reloaded the page with no `close` event, skipping the save at quit (PR #95 review 13). `app-menu.js` is Electron's default menu without those two roles, and without Help, which only linked to Electron's website. The default menu was dumped from a bare Electron window first. Developer tools stay. The new E2Es failed before the change.
 - **Docs**: the manual steps said a bulk label could be seen on screen; it can only be read in `.bulk_rated.json`.
+- **G1 I1 post-merge check**: done. The user confirmed the settings, the migration record exists, and the profile copy was already gone.
 
 ### 2026-11-03 — Group G3: Rating data that can't go wrong 🟤 🏆 (Cleanup Week #5, Oct 26–30, run Nov 2–3) — **7/7, MERGED `b9c76c0`** (PR #95)
 

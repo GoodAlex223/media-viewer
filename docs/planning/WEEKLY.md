@@ -16,7 +16,7 @@
   - **G1 (Wed)**: the LICENSE copyright line, whose year and holder name are yours to choose (the BACKLOG entry); and the delete of the untracked local `.mcp.json`, which is your file, so it is confirmed before it goes. ✅ Both settled 2026-10-28: `Copyright (c) 2025 GoodAlex223`, and the delete was approved, then done after a masked re-read showed the file unchanged.
   - **G4 (Sat)**: name the like and dislike folders for the harness run, and rule on deleting the parked local branch `g3-departed-clips-parked`.
   - **G6 (Sun)**: the run's rulings, as every week.
-  - **Any time**: TODO 🔴 "G1 I1 post-merge check (user)". The first `npm start` on `main` moves your settings to the app origin once; check them, then delete the pre-merge profile copy. If it is already done, tell the G1 session, which checks it off.
+  - **Any time**: TODO 🔴 "G1 I1 post-merge check (user)". ✅ Done 2026-11-05. The first `npm start` on `main` moves your settings to the app origin once; check them, then delete the pre-merge profile copy. If it is already done, tell the G1 session, which checks it off.
 - **User-side 24k smokes (optional, not gates)**: PR #66 re-smoke round 2, still never run.
 - **Next week (Nov 2–6)**: its planning pass schedules **v2 P1a** (~11 SP, spec § 14) under the new share (Notes → v2's weekly share), with G2's ratchet in place. Still owed before P3b's plan, not this week: 🟤 [2026-10-25] "Run or recover the downloader research before P3b's plan", whose first step is to ask you whether that session ran and where its output went.
 
