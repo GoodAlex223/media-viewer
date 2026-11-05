@@ -95,15 +95,16 @@ and the output outside it (the script refuses otherwise, through a junction or l
 numbers and context letters only, never a file or folder name. It only reads the folders. The number flags take
 integers (folds at least 2, repeats at least 1, trials at least 2), and any other flag stops the run before it starts.
 A folder whose cache has another version than the app's is reported as `unreadable: CACHE_VERSION`, as the app would
-re-extract it, and an evaluation that throws fails the run rather than dropping that context from the verdict.
+re-extract it. Any unreadable context makes the outcome `no verdict`, named in the outcome line, since its labels are
+unknown and the others cannot decide for it. An evaluation that throws fails the run.
 
 Measured on the report's laptop: 55 minutes on one thread for two measured contexts of 31,049 and 14,961 labels,
 most of it in the converged fits on the larger one (about 50 s per fit). Keep the machine awake: a first background
 run was stopped for low memory just after the laptop woke from hibernation. The script saves each finished context to
 `real-folders.partial.json` but does not resume from it. The result is the report's section 10. Its numbers come from
-the script at `c61843b`. The PR #97 review changed only the flag checks, the repo refusal, the cache-version check
-and the handling of a throwing evaluation, none of which that run reached: it used the default flags, all six caches
-were version 4, no folder was unreadable and no evaluation threw.
+the script at `c61843b`. The PR #97 review changed only the flag checks, the repo refusal, the cache-version check,
+the handling of a throwing evaluation and of an unreadable context, none of which that run reached: it used the
+default flags, all six caches were version 4, no folder was unreadable and no evaluation threw.
 
 ## What it measures
 

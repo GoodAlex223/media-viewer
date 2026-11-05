@@ -559,8 +559,10 @@ Rows in italics are for context only, not candidates under the pass mark:
 | *converged + z-scoring, CLIP only* | 0.764 | +0.040 (+0.035 to +0.046) | 0.764 | 0.702 | -0.006 (-0.051 to +0.040) | 0.702 |
 | *kNN-3 on CLIP, 500 held-out files per fold* | 0.712 | | | 0.700 | | |
 
-Likes among the first 60 shown, in A: 53.0 for today's learner, 40.2 with z-scoring, 55.2 with the converged fit
-(+2.2, +0.8 to +3.6) and 57.2 with the metadata left out. In B any order shows almost only likes (59.6 of 60), so
+Likes among the first 60 shown, in A: 53.0 for today's learner, 40.2 with z-scoring (51.3 in its margin order: most
+of that drop is ties at the sigmoid's clamp, see below), 55.2 with the converged fit
+(+2.2, +0.8 to +3.6; -0.4 to +4.8 once corrected for overlapping folds, see below) and 57.2 with the metadata left
+out. In B any order shows almost only likes (59.6 of 60), so
 that clause does not apply. In the learning curve (n likes + n dislikes), neither fix step gains at 3, 10 or 30
 per side in either taste (every CI spans zero, or the gain is below it), and both lose at 100 and 300 per side in
 A (converged -0.033 and -0.058, z-scoring -0.069 and -0.094).
@@ -573,14 +575,24 @@ result in every one of its 345 values apart from timings; a planted change of 1e
 **Checks added after review (PR #97).**
 - The intervals above are plain paired t-intervals over 10 correlated fold results (5 folds x 2 repeats). The
   Nadeau-Bengio correction for overlapping training sets widens each about 1.9 times. Taste A's converged gain then
-  spans +0.001 to +0.010 and the metadata-free lead +0.047 to +0.068. Every interval that excluded zero still does,
-  and every one that spanned it still does.
-- Today's learner is scored through the app's sigmoid, which returns exactly 1 or 0 past |z| > 20, while the
-  converged learners are ranked by raw margin, so ties could flatter the converged gains. Re-scored by raw margin on
-  the same folds, today's learner gave the same AUC to four decimals in both tastes: no held-out score reached the
-  clamp. Every gain above stands as measured.
-- The script was hardened after this run (flag checks, the repo refusal through junctions, a cache-version check, and
-  a throwing evaluation now fails the run). This run reached none of those paths.
+  spans +0.001 to +0.010 and the metadata-free lead +0.047 to +0.068. Every AUC interval that excluded zero still
+  does, and every one that spanned it still does. Not so for likes and dislikes at the ends of the order: 6 of those
+  20 intervals change side. One is printed above: the converged fit's +2.2 more likes in A's first 60 becomes -0.4 to
+  +4.8, so that gain is not established.
+- The app's learners are scored through its sigmoid, which returns exactly 1 or 0 past |z| > 20, while the
+  converged learners are ranked by raw margin. A probe re-scored the app's learners by raw margin on the same folds,
+  after reproducing every saved mean exactly:
+  - Today's learner, with and without the 64 features: no held-out score reached the clamp (largest margin 7.5), so
+    its numbers, and every gain measured against it, stand.
+  - Z-scoring: 47% of A's held-out scores and 30% of B's sat at exactly 0 or 1 (margins up to 79). By margin it
+    ranks at 0.666 in A (-0.058 against today's learner, not -0.078) and 0.325 in B (-0.383), and puts 51.3 likes in
+    A's first 60, not 40.2. So most of that first-60 drop is ties, while its AUC loss stands, and B's below-chance
+    ranking is not a tie effect.
+  - The pass mark scored z-scoring as the app would ship it, through `predict()`, so the outcome is unchanged. A
+    z-scored model behind today's `predict()` would tie about half its scores.
+- The script was hardened after this run (flag checks, the repo refusal through junctions, a cache-version check; a
+  throwing evaluation now fails the run, and an unreadable context makes the outcome no verdict). This run reached
+  none of those paths.
 
 **Outcome by the pass mark: wait.** Neither fix step passes in either taste. The step is not dropped. The plan
 sent it to a re-check after the switch to fp32 CLIP, the only setting in which section 6 found it helping a
@@ -594,7 +606,8 @@ should carry that fix as a candidate fixed in advance.
   sees them. In these folders the metadata carries much of the class signal (as trained, 0.918 and 1.000, against
   0.738 and 0.734 for today's learner on CLIP alone), and a sort never sees it.
 - Z-scoring makes the mismatch worse, likely because it scales the metadata dims up to the size of every other
-  feature, so the model leans on exactly what scoring takes away. In B its ranking falls below chance (0.352).
+  feature, so the model leans on exactly what scoring takes away. In B its ranking falls below chance (0.352, and
+  0.325 by margin). Its margins also run past the app's sigmoid clamp, tying about half its scores (see *Checks*).
 - Leaving the metadata out of training is the one variant that clearly helps in A (+0.058, every fold won) and
   does no harm in B (+0.007, CI spanning zero). It was not a pre-registered candidate, so it is a lead for a new
   check, not a result. The other way to close the gap is to give background extraction the metadata, so that the

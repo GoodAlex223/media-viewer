@@ -693,8 +693,9 @@ function evaluateContext(ctx, options = {}) {
  */
 function verdict(contexts) {
     const usable = contexts.filter((c) => c.usable);
+    const unread = contexts.filter((c) => c.unread).map((c) => c.label);
     if (usable.length === 0) {
-        return { outcome: 'no verdict', perContext: [] };
+        return { outcome: 'no verdict', perContext: [], unread };
     }
     const perContext = usable.map((c) => {
         const names = Object.keys(c.candidates);
@@ -721,6 +722,9 @@ function verdict(contexts) {
     let outcome;
     if (usable.some((c) => !c.shuffledOk)) {
         outcome = 'void';
+    } else if (unread.length > 0) {
+        // An unread context may be usable, and the others cannot decide for it (review round 2, #3).
+        outcome = 'no verdict';
     } else if (perContext.every((c) => c.passes)) {
         outcome = perContext.every((c) => c.zAloneEnough) ? 'go, z-scoring only' : 'go';
     } else if (perContext.some((c) => c.passes)) {
@@ -728,12 +732,14 @@ function verdict(contexts) {
     } else {
         outcome = 'wait';
     }
-    return { outcome, perContext };
+    return { outcome, perContext, unread };
 }
 
 function verdictInput(context) {
     if (!context.result) {
-        return { label: context.label, usable: false };
+        // Unread (review round 2, #3): a folder that could not be read leaves the labels unknown, unlike a context
+        // under the floor, whose counts are known.
+        return { label: context.label, usable: false, unread: context.status.startsWith('unreadable') };
     }
     const take = (name) => ({
         auc: context.result.main[name].deltaVsToday.auc,
@@ -760,6 +766,9 @@ const interval = (s, digits = 3) => `${signed(s.mean, digits)} (${signed(s.low, 
 function renderMarkdown(contexts, outcome) {
     const lines = ['# Real-folder check of the like-model learner', ''];
     lines.push(`**Outcome by the pass mark: ${outcome.outcome}.**`, '');
+    for (const label of outcome.unread || []) {
+        lines.push(`Context ${label} could not be read, so its labels are unknown and the others cannot decide.`, '');
+    }
     lines.push('| context | likes | dislikes | status | best candidate | AUC gain | passes |');
     lines.push('|---|---:|---:|---|---|---:|---|');
     for (const c of contexts) {
@@ -996,4 +1005,5 @@ module.exports = {
     FEATURE_CACHE_VERSION,
     measurePair,
     parseArgs,
+    verdictInput,
 };

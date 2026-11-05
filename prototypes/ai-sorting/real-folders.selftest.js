@@ -585,6 +585,23 @@ describe('verdict', () => {
         assert.equal(RF.verdict([context(0.05, 0.08), { label: 'C', usable: false }]).outcome, 'go');
         assert.equal(RF.verdict([{ label: 'C', usable: false }]).outcome, 'no verdict');
     });
+    test('an unread context makes it no verdict, even when every other context passes (review round 2, #3)', () => {
+        const unread = { label: 'C', usable: false, unread: true };
+        const result = RF.verdict([context(0.05, 0.08), unread]);
+        assert.equal(result.outcome, 'no verdict');
+        assert.deepEqual(result.unread, ['C']);
+        assert.equal(result.perContext.length, 1, 'the readable contexts are still judged, for the report');
+        // A failed shuffled-label control still outranks it: those numbers are not used at all.
+        assert.equal(RF.verdict([context(0.05, 0.08, { shuffledOk: false }), unread]).outcome, 'void');
+    });
+    test('verdictInput: an unreadable context is unread, and one under the floor is not', () => {
+        assert.equal(RF.verdictInput({ label: 'C', status: 'unreadable: CACHE_VERSION' }).unread, true);
+        assert.equal(
+            RF.verdictInput({ label: 'C', status: 'too small (under 30 labels in a class)', likes: 4, dislikes: 22 })
+                .unread,
+            false
+        );
+    });
     test('void: a failed shuffled-label control outranks every number', () => {
         assert.equal(RF.verdict([context(0.05, 0.08, { shuffledOk: false })]).outcome, 'void');
     });
@@ -652,6 +669,30 @@ describe('the command line', () => {
 
         assert.equal(r.status, 0, r.stderr);
         assert.ok(r.stdout.includes('ENOENT'), r.stdout);
+        assert.ok(r.stdout.includes('Context A could not be read'), r.stdout);
+        assert.ok(!(r.stdout + r.stderr).includes(SENTINEL));
+    });
+
+    test('an unreadable pair beside a measured one gives no verdict, and says which (review round 2, #3)', () => {
+        const root = tempDir();
+        const out = tempDir('rf-out-');
+        const { like, dislike } = fixtureFolders(root);
+        const missing = path.join(root, `${SENTINEL}-missing`);
+        const pairs = path.join(root, 'pairs.json');
+        fs.writeFileSync(
+            pairs,
+            JSON.stringify([
+                { like, dislike },
+                { like: missing, dislike: missing },
+            ])
+        );
+
+        const r = run(['--pairs', pairs, '--out', out, ...FAST]);
+
+        assert.equal(r.status, 0, r.stderr);
+        assert.ok(r.stdout.includes('**Outcome by the pass mark: no verdict.**'), r.stdout);
+        assert.ok(r.stdout.includes('Context B could not be read'), r.stdout);
+        assert.ok(r.stdout.includes('## Context A'), 'the readable context is still reported');
         assert.ok(!(r.stdout + r.stderr).includes(SENTINEL));
     });
 
