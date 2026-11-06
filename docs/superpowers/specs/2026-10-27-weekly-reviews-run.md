@@ -280,6 +280,12 @@ authorized, after the checkpoint.
 2. **The hand-off channel stalled.** Ten days after the 10-17 note, none of the 14 rows it returned has moved at the origin, and its two G5 items
    are still absent.
    Appendix A item 1 says so, and asks whether the note arrived.
+   _**Corrected 2026-11-06** (the next run, [run-card](2026-11-06-weekly-reviews-run.md) D5): the channel was
+   lagging, not stalled. The measurement was right for `227a337`: none of the items had been filed there. The
+   user files each hand-off note into the sibling's own TODO or BACKLOG as future work (user, 2026-11-06), and
+   both this note and the 10-17 one were filed in the sibling's 2026-10-28 intake batch, after `227a337`. At
+   `59ffd0d` all three items are open 🟠 TODO rows, and the 14-row status correction is applied. "Absent from live
+   `~/.claude`" measured application, not intake._
 3. **This repo's tool set changed from outside it** (D7). The sibling's G1 turned Context7 off in this repo's local
    settings, and at user scope seven plugins are off, Playwright among them (by the row's own account; D7 lists
    all seven). REVIEW-QUEUE's

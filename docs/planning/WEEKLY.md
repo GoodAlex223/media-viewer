@@ -82,10 +82,10 @@
 > Read [REVIEW-QUEUE.md](REVIEW-QUEUE.md) first. **Window ≈ 5 days** (last run 2026-10-27). **Order**: § 5's queue is at 0, so there is no trial read-out. The **recurring plugin context-cost read-out** runs first: it belongs to this Cleanup Week's run (§ 5 stocktake 2026-10-27), with the `session-report` usage step added on 2026-10-27 and the enabled-set changes that stocktake lists. Then §§1–4. §1 diffs plugin names from the pinned baselines (official `a29a80b`, community `06ec7b6`). Through a PR, as the last two runs were.
 > **Model:** Opus · `medium`, named directly because ⚪ overhead fits no row of the § 1.0 table: research and verdicts, with each claim checked against its primary source; Sonnet · `medium` is enough for the routine sourcing searches.
 
-- [ ] **Plugins (2 SP)** — two independent tops: official catalog + wider internet, each with `source:`.
-- [ ] **Claude best-practices (1 SP)** — a fresh check against the parked list.
-- [ ] **Non-Claude AI best-practices (1 SP)** — the same, for AI models and tools other than Claude.
-- [ ] **Cross-project propagation (1 SP)** — outbound: this week's shipped work (G1–G5) and the memory files changed since 2026-10-27, at the high bar; inbound: new sibling rows naming this repo; and the status of the three TODO § Spawned Tasks rows still handed over (two from 2026-10-17, re-handed 2026-10-27, and one from 2026-10-27).
+- [x] **Plugins (2 SP)** — two independent tops: official catalog + wider internet, each with `source:`. ✅ 2026-11-06 run ([run-card](../superpowers/specs/2026-11-06-weekly-reviews-run.md)): the context-cost read-out first (`claude-security` disabled between scans, user ruling); 1a `modern-web-guidance` **pass**, its guides parked for v2's redesign; 1b a Codex CLI review **adopt** as a trial (the plugin itself `defer`).
+- [x] **Claude best-practices (1 SP)** — a fresh check against the parked list. ✅ 2026-11-06: idle compaction vs the keep-warm timer **defer**, both parked premises updated.
+- [x] **Non-Claude AI best-practices (1 SP)** — the same, for AI models and tools other than Claude. ✅ 2026-11-06: Codex's review of subagents' state-changing calls **pass**, already tracked by a 🟤 entry.
+- [x] **Cross-project propagation (1 SP)** — outbound: this week's shipped work (G1–G5) and the memory files changed since 2026-10-27, at the high bar; inbound: new sibling rows naming this repo; and the status of the three TODO § Spawned Tasks rows still handed over (two from 2026-10-17, re-handed 2026-10-27, and one from 2026-10-27). ✅ 2026-11-06: the three rows were found filed at the sibling and closed here (`filed at origin`, user ruling); three new propagations handed over; inbound, the "minimum 2" README lines fixed and the guard-timeout row measured and noted.
 
 ---
 
@@ -123,7 +123,7 @@
 ### Friday, October 30 (run Sunday, November 1) — The trigger; reviews
 
 - **[G5](#g5-claudemd-byte-trigger-re-set-solo---pre-commit-size-warning--1-sp)** 🟡 — measure; re-set; review; merge. ✅ PR #98 (merge `1cfbcd4`, 2026-11-06; reviewed in a subagent, one round and a close-out).
-- **[G6](#g6-weekly-reviews-batch--overhead--research--process--5-sp)** ⚪ — the context-cost read-out, then §§1–4.
+- **[G6](#g6-weekly-reviews-batch--overhead--research--process--5-sp)** ⚪ — the context-cost read-out, then §§1–4. ◐ Run 2026-11-06 on branch `g6-weekly-reviews`, unmerged.
 - Buffer for review rounds. Closeout per group, **after its merge**: Summary-Table Status → `✅ PR #N`, the group's Daily-Schedule rows, and every BACKLOG/TODO entry it closed — in the closeout commit.
 
 **Daily total**: ~1 SP + 5 overhead + buffer
@@ -139,7 +139,7 @@
 | G3  | Rating data that can't go wrong `[batch]` 🏆 | File and rating safety  | 🟤 Auto     | 7      | 8        | Tue–Thu | ✅ PR #95  |
 | G4  | AI research loose ends `[batch]`              | AI sorting research     | 🟤 Auto     | 3      | 3        | Thu     | ✅ PR #97  |
 | G5  | `CLAUDE.md` byte-trigger re-set `[solo]`      | Pre-commit size warning | 🟡 Ops      | 1      | 1        | Fri     | ✅ PR #98  |
-| G6  | Weekly Reviews `[batch]`                      | Research / process      | ⚪ Overhead | 4      | 5        | Fri     | ☐ Planned  |
+| G6  | Weekly Reviews `[batch]`                      | Research / process      | ⚪ Overhead | 4      | 5        | Fri     | ◐ Branch complete, unmerged |
 |     | **Total (quota-counted)**                     |                         |             | **16** | **19**   |         |            |
 |     | **Total (incl. ⚪ overhead)**                 |                         |             | **20** | **24**   |         |            |
 

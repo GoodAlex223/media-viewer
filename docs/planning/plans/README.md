@@ -35,7 +35,7 @@ Move to archive when ALL are true:
 - [ ] **All in-plan checkboxes flipped to `[x]`; plan header `Status: Complete`**
 - [ ] Tests passing
 - [ ] "Key Discoveries" filled in
-- [ ] "Future Improvements" has 2+ items
+- [ ] "Future Improvements" lists every item noticed outside the task's scope, or says "None found"
 - [ ] **Improvements extracted to BACKLOG.md** (categorized appropriately)
 - [ ] **Cited commit SHAs verified as ancestors of `main`** (`git merge-base --is-ancestor <sha> main`)
 - [ ] Summary added to `../DONE.md`
@@ -54,7 +54,7 @@ explicit N/A is auditable, an omission is not.
 
 | Artifact                                                                                                                                 | Done / N/A + reason |
 | ---------------------------------------------------------------------------------------------------------------------------------------- | ------------------- |
-| `BACKLOG.md` — improvements extracted (min 2, routed by source: 🔵 user / 🟤 Claude / 🟡 ops)                                              |                     |
+| `BACKLOG.md` — improvements extracted, or "None found" (routed by source: 🔵 user / 🟤 Claude / 🟡 ops)                                   |                     |
 | `TODO.md` — actionable items, plus any § Spawned Tasks rows for out-of-tree work                                                          |                     |
 | `DONE.md` — entry with plan link, summary, key changes                                                                                   |                     |
 | `WEEKLY.md` — Summary-Table Status **and** the Daily-Schedule entry, each an identifier (`✅ <merge-SHA>`), never a bare ✅                 |                     |

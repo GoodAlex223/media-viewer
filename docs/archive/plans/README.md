@@ -11,7 +11,7 @@ Plans are archived when:
 1. All implementation steps are marked `[x]` complete
 2. All tests are passing
 3. "Key Discoveries" section is filled in
-4. "Future Improvements" section has minimum 2 items
+4. "Future Improvements" section lists every item noticed outside the task's scope, or says "None found"
 5. Improvements extracted to BACKLOG.md
 
 ---
@@ -41,7 +41,7 @@ Before archiving, confirm ALL criteria above are met:
 - [ ] **Set the plan header `Status:` to `Complete`**
 - [ ] All tests passing
 - [ ] "Key Discoveries" section is filled in
-- [ ] "Future Improvements" section has **minimum 2 items**
+- [ ] "Future Improvements" section lists every item noticed outside the task's scope, or says **"None found"**
 - [ ] Execution log contains "Sub-Item Complete" entries for all sub-items
 - [ ] **Verify every commit SHA cited in the plan / DONE.md / CLAUDE.md is an ancestor of `main`** — `git merge-base --is-ancestor <sha> main` (catches dead-branch citations like the recurring PR #37 stale-SHA trap)
 

@@ -164,3 +164,8 @@ Decisions block above. It consolidates every methodology fix surfaced across the
    the brainstorming design-gate is satisfied by approving the run-card. Recurring ⚪-overhead tasks
    whose method is already codified do **not** need a fresh `writing-plans` cycle each time.
    *([2026-07-06])*
+7. **A probe that runs a downloaded package is authorized at the checkpoint.** A probe that installs
+   and runs a third-party package, even into the scratchpad, is named in the run's checkpoint as an
+   action the user authorizes, before it runs. Unasked, the auto-mode classifier refuses it, and the
+   2026-10-27 `eslint-plugin-sonarjs` probe lost a round trip that way (that run-card's D5). A probe
+   that downloads nothing needs no such ask. *([2026-11-06], closing 🟤 `[2026-10-27]` G6 closeout)*

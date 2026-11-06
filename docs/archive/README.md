@@ -41,7 +41,7 @@ Before archiving a plan, verify:
 
 - All steps marked complete
 - "Key Discoveries" section filled
-- "Future Improvements" has 2+ items
+- "Future Improvements" lists every item noticed outside the task's scope, or says "None found"
 - Improvements extracted to BACKLOG.md (categorized appropriately)
 - Summary added to docs/planning/DONE.md
 - .claude/plans/ copy deleted (if exists)
