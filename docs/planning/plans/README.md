@@ -78,7 +78,7 @@ mv docs/planning/plans/YYYY-MM-DD_task.md docs/archive/plans/
 
 | Plan | Group | Status |
 | --- | --- | --- |
-| _None currently active_ | — | — |
+| [2026-11-06_g5-claude-md-byte-trigger.md](2026-11-06_g5-claude-md-byte-trigger.md) | G5 (Cleanup Week #5) | In Progress |
 
 <!-- 2026-10-30 (Group G2 closeout, Cleanup Week #5): 2026-10-30_g2-pre-push-gate.md left this table on archive.
      Merged `a80cc37` via PR #94, moved to docs/archive/plans/ with `git mv`, and indexed in

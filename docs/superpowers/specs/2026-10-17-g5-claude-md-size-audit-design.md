@@ -10,7 +10,7 @@
 > - **The landing missed § 5's estimate.** `CLAUDE.md` went from 236 to 216 lines and from 64,203 to 58,582 bytes (−8.8%), against an estimated 38–44 KB. § 2.3's premise that "most of the bulk is not rules" overstated what could go. History came to about 5 KB, walk-throughs and detail readable from the code to about 2.5 KB more, and the rest is contract an editor needs before acting (plan Key Discovery 1). § 1 set no size target, and no rule was cut to get closer to the estimate.
 > - **Detected Patterns got a second pass (T7b)**, out of D3's per-section order. Measuring against the estimate after T9 showed the first pass had kept more than the plan's keep-lists named. It is logged as a deviation, and the rule-loss check covered it like every other cut.
 > - **The rule-loss check corrected the trim.** Its planted control fired. It restored 15 rules and showed that three disposition rows were wrong.
-> - **`BYTE_TRIGGER` is 69,000**, not 25% of the landing (§ 6.2 amendment). The growth-rate re-measure is 🟡 [2026-10-17] in BACKLOG.
+> - **`BYTE_TRIGGER` is 69,000**, not 25% of the landing (§ 6.2 amendment). The growth-rate re-measure is 🟡 [2026-10-17] in BACKLOG. **Superseded 2026-11-06 (PR #98)**: re-set to 85,000 from the measured growth. The file had already passed 69,000 on 2026-11-02, so that re-set was not the audit § 6.2 expected; the audit is still owed.
 > - **The global trigger still says ~200 lines.** The user-level `CLAUDE.md`, and the sibling repo's synced copy, content policy and runbook, still name ~200 lines as the audit trigger. Changing them is out of this repo's reach (§ 10): it is a TODO § Spawned Tasks row, routed to the weekly propagation pass.
 
 ---
