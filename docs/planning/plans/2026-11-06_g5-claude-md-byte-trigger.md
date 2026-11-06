@@ -122,8 +122,8 @@ The trigger fired before it was re-set. `CLAUDE.md` passed 69,000 on 2026-11-02 
 3. [x] Set `BYTE_TRIGGER` to 85,000 and rewrite its comment.
 4. [x] The same staged growth prints the growth line only; restore the index and working tree, and check that `git diff --cached` names nothing.
 5. [x] `npm test`, ESLint and `npx prettier --check` on the script.
-6. [ ] Commit through the hooks; stop for the user's approval to push (WORKFLOW § 3.4).
-7. [ ] After approval: push, PR, review in a separate chat, merge, closeout.
+6. [x] Commit through the hooks; stop for the user's approval to push (WORKFLOW § 3.4).
+7. [ ] After approval: push, PR, review in a separate chat, merge, closeout. Push and PR done: PR #98.
 
 ---
 
@@ -136,6 +136,10 @@ The trigger fired before it was re-set. `CLAUDE.md` passed 69,000 on 2026-11-02 
 ### 2026-11-06 07:38 — PHASE: Implementation
 - Steps 2–5 done; no deviation. The comment now says the re-measure was not an audit and the audit is still owed, so the old rule "change it only at an audit" keeps its meaning instead of being quietly broken.
 - The probe was a 600-byte HTML comment appended to the worktree's `CLAUDE.md` and staged; afterwards `git restore --staged` and `git restore` put both back (index empty, 71,287 bytes).
+- Committed `085a94d` through the hooks (Vitest 2,636 passed, 1 skipped).
+
+### 2026-11-06 — PHASE: Review
+- The user approved the push. The ratchet passed (`media-viewer.js` 11,597 lines, at its ceiling) and the E2E gate skipped. PR #98 opened, not a draft. Review: light (`medium`), in a separate chat.
 
 ---
 
