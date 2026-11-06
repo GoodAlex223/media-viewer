@@ -1,0 +1,1206 @@
+{
+    "source": "Wikimedia Commons",
+    "rule": "P275=CC0, file License cc0|pd; liked = in Category:Quality images",
+    "items": [
+        {
+            "file": "quality/cat/qi-50575660.jpg",
+            "subject": "cat",
+            "qualityImage": true,
+            "title": "File:Chat domestique dormant sur un banc.jpg",
+            "licence": "cc0",
+            "artist": "GrandCelinien",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/ef/Chat_domestique_dormant_sur_un_banc.jpg/500px-Chat_domestique_dormant_sur_un_banc.jpg",
+            "sha256": "f8cf3930cbc96ef511110242936dd04a7306494a58334146cdd9cd8ad1931e37"
+        },
+        {
+            "file": "quality/cat/qi-76097663.jpg",
+            "subject": "cat",
+            "qualityImage": true,
+            "title": "File:Young tabby cat keeping watch.jpg",
+            "licence": "cc0",
+            "artist": "W.carter",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/95/Young_tabby_cat_keeping_watch.jpg/500px-Young_tabby_cat_keeping_watch.jpg",
+            "sha256": "846ac31291b54fc26b34a8500b131c05654cc5d10b4191324affe3d51887be3f"
+        },
+        {
+            "file": "quality/cat/qi-81513944.jpg",
+            "subject": "cat",
+            "qualityImage": true,
+            "title": "File:Chat dans les herbes, Lotissement Chante Pie (Beynost) août 2019.jpg",
+            "licence": "cc0",
+            "artist": "Benoît Prieur",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/16/Chat_dans_les_herbes%2C_Lotissement_Chante_Pie_%28Beynost%29_ao%C3%BBt_2019.jpg/500px-Chat_dans_les_herbes%2C_Lotissement_Chante_Pie_%28Beynost%29_ao%C3%BBt_2019.jpg",
+            "sha256": "39718db8d0cb9e3906c249ab89ee7bc6ed319f84ba00737104a6993d7d0bbd39"
+        },
+        {
+            "file": "quality/cat/qi-192661816.jpg",
+            "subject": "cat",
+            "qualityImage": true,
+            "title": "File:Hauskatze (April 2026).jpg",
+            "licence": "cc0",
+            "artist": "Romzig",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/84/Hauskatze_%28April_2026%29.jpg/500px-Hauskatze_%28April_2026%29.jpg",
+            "sha256": "905a903af05fd487d0b1a7e0b7912e31fc607471ede384cb45066c014a0054ca"
+        },
+        {
+            "file": "quality/cat/qi-193588365.jpg",
+            "subject": "cat",
+            "qualityImage": true,
+            "title": "File:Hauskatze (Mai 2023).jpg",
+            "licence": "cc0",
+            "artist": "Romzig",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/70/Hauskatze_%28Mai_2023%29.jpg/500px-Hauskatze_%28Mai_2023%29.jpg",
+            "sha256": "ec3dacff1bdd89011a4170b15251e448b592dcbd09a061c17e72aa9e9435832c"
+        },
+        {
+            "file": "quality/cat/ord-14608309.jpg",
+            "subject": "cat",
+            "qualityImage": false,
+            "title": "File:Macskám2.jpg",
+            "licence": "cc0",
+            "artist": "Orosz Márk",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/7a/Macsk%C3%A1m2.jpg/500px-Macsk%C3%A1m2.jpg",
+            "sha256": "29fd27a24465b9e7e93cbeff33b89c6bff60b4e40f19cd0d4d095ba0cee75622"
+        },
+        {
+            "file": "quality/cat/ord-14893649.jpg",
+            "subject": "cat",
+            "qualityImage": false,
+            "title": "File:Hauskatze langhaar.jpg",
+            "licence": "cc0",
+            "artist": "Chatennoir",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/8e/Hauskatze_langhaar.jpg/500px-Hauskatze_langhaar.jpg",
+            "sha256": "d8ce10e35eb0e14358cd009219a7390d76f51a0a2861bed752881712a54cd965"
+        },
+        {
+            "file": "quality/cat/ord-18152048.jpg",
+            "subject": "cat",
+            "qualityImage": false,
+            "title": "File:Unitarian Church Cat Therapy 4.JPG",
+            "licence": "cc0",
+            "artist": "Tomwsulcer",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/24/Unitarian_Church_Cat_Therapy_4.JPG/500px-Unitarian_Church_Cat_Therapy_4.JPG",
+            "sha256": "293a32e831608ce1f733ff32c3bda0d72a6a412db8b428885f5232fe32af4d61"
+        },
+        {
+            "file": "quality/cat/ord-18471287.jpg",
+            "subject": "cat",
+            "qualityImage": false,
+            "title": "File:A cay nap.JPG",
+            "licence": "cc0",
+            "artist": "Rudolph.A.furtado",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/1a/A_cay_nap.JPG/500px-A_cay_nap.JPG",
+            "sha256": "a83af6dc3980480cdbd7d8272235c6b298885065e0e3037c6a42b1009ac786ae"
+        },
+        {
+            "file": "quality/cat/ord-26074504.jpg",
+            "subject": "cat",
+            "qualityImage": false,
+            "title": "File:Katzenminze-02.JPG",
+            "licence": "cc0",
+            "artist": "Grey Geezer",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/85/Katzenminze-02.JPG/500px-Katzenminze-02.JPG",
+            "sha256": "5dde9dc265dce8c75ac8944e10b5434e33e8123267cd792abd87a3fad6b4cc65"
+        },
+        {
+            "file": "quality/dog/qi-26592914.jpg",
+            "subject": "dog",
+            "qualityImage": true,
+            "title": "File:Dog in Chacachacare.jpg",
+            "licence": "cc0",
+            "artist": "Wilfredor",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/2b/Dog_in_Chacachacare.jpg/500px-Dog_in_Chacachacare.jpg",
+            "sha256": "c252491108b54b94f05e37ebe17e3f971b6979f67b744c1271d21c734ebb3214"
+        },
+        {
+            "file": "quality/dog/qi-32751730.jpg",
+            "subject": "dog",
+            "qualityImage": true,
+            "title": "File:Mutt in San Juan Bautista.jpg",
+            "licence": "cc0",
+            "artist": "Wilfredor",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/92/Mutt_in_San_Juan_Bautista.jpg/500px-Mutt_in_San_Juan_Bautista.jpg",
+            "sha256": "ec147e746a6244b5217f16150ef63f9738aa8ec7a72cc10f3b018b0405513f39"
+        },
+        {
+            "file": "quality/dog/qi-61338017.jpg",
+            "subject": "dog",
+            "qualityImage": true,
+            "title": "File:Small boats and observation deck at Nørre Vorupør.jpg",
+            "licence": "cc0",
+            "artist": "W.carter",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/91/Small_boats_and_observation_deck_at_N%C3%B8rre_Vorup%C3%B8r.jpg/500px-Small_boats_and_observation_deck_at_N%C3%B8rre_Vorup%C3%B8r.jpg",
+            "sha256": "f899ccd9e99a657dd5c8cf67d061db0c646d6cf14668bb6c17d3bbe756b0b915"
+        },
+        {
+            "file": "quality/dog/qi-61369169.jpg",
+            "subject": "dog",
+            "qualityImage": true,
+            "title": "File:Dog at Nørre Vorupør Strand.jpg",
+            "licence": "cc0",
+            "artist": "W.carter",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/0d/Dog_at_N%C3%B8rre_Vorup%C3%B8r_Strand.jpg/500px-Dog_at_N%C3%B8rre_Vorup%C3%B8r_Strand.jpg",
+            "sha256": "f99b4c7763e79a75b5a994007bbd84e34bb5c471755a6a8baa3ff4b2dca51159"
+        },
+        {
+            "file": "quality/dog/qi-80653964.jpg",
+            "subject": "dog",
+            "qualityImage": true,
+            "title": "File:Portrait of a labrador retriever.jpg",
+            "licence": "cc0",
+            "artist": "Dktue",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/35/Portrait_of_a_labrador_retriever.jpg/500px-Portrait_of_a_labrador_retriever.jpg",
+            "sha256": "70f927559976ba6b59a47cbd69363f4977e0731ce6f168f971f87a3508b3a37c"
+        },
+        {
+            "file": "quality/dog/ord-24886314.jpg",
+            "subject": "dog",
+            "qualityImage": false,
+            "title": "File:Dog guarding the door of his house.jpg",
+            "licence": "cc0",
+            "artist": "Wilfredor",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/04/Dog_guarding_the_door_of_his_house.jpg/500px-Dog_guarding_the_door_of_his_house.jpg",
+            "sha256": "a75cd23a316a9cf9a7f1ec404124a910346e9816cac82109fb9cd8723fbad421"
+        },
+        {
+            "file": "quality/dog/ord-33759319.jpg",
+            "subject": "dog",
+            "qualityImage": false,
+            "title": "File:Dog behind glass.JPG",
+            "licence": "cc0",
+            "artist": "Daiima",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/e2/Dog_behind_glass.JPG/500px-Dog_behind_glass.JPG",
+            "sha256": "730f7942ddfd097645beafc1ef52de270e3839b39f25523c4b56d97e7c815f8b"
+        },
+        {
+            "file": "quality/dog/ord-55827314.jpg",
+            "subject": "dog",
+            "qualityImage": false,
+            "title": "File:0842jfCopulating dogs in the Philippinesfvf 03.jpg",
+            "licence": "cc0",
+            "artist": "Judgefloro",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/8a/0842jfCopulating_dogs_in_the_Philippinesfvf_03.jpg/500px-0842jfCopulating_dogs_in_the_Philippinesfvf_03.jpg",
+            "sha256": "eda1fa1e2b304e3ebfcb49d8a4c7590db1324bfad65c2c587cc51da57d1f6144"
+        },
+        {
+            "file": "quality/dog/ord-55827347.jpg",
+            "subject": "dog",
+            "qualityImage": false,
+            "title": "File:0842jfCopulating dogs in the Philippinesfvf 21.jpg",
+            "licence": "cc0",
+            "artist": "Judgefloro",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/02/0842jfCopulating_dogs_in_the_Philippinesfvf_21.jpg/500px-0842jfCopulating_dogs_in_the_Philippinesfvf_21.jpg",
+            "sha256": "5438547f0a028d1aaa72e71c277a7dbbbd59f47d970859b0c4576ae779cd7b46"
+        },
+        {
+            "file": "quality/dog/ord-57020640.jpg",
+            "subject": "dog",
+            "qualityImage": false,
+            "title": "File:How can you resist Toby's face! Jeff has 4 of these (2822079334).jpg",
+            "licence": "cc0",
+            "artist": "cogdogblog",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/ff/How_can_you_resist_Toby%27s_face%21_Jeff_has_4_of_these_%282822079334%29.jpg/500px-How_can_you_resist_Toby%27s_face%21_Jeff_has_4_of_these_%282822079334%29.jpg",
+            "sha256": "616e8e73fb2c3d8ce4618aa517cb1f0ada84db0dad9f7aa20ac50199de6d6013"
+        },
+        {
+            "file": "quality/horse/qi-12718246.jpg",
+            "subject": "horse",
+            "qualityImage": true,
+            "title": "File:Écorché cavalier Fragonard Alfort 1.jpg",
+            "licence": "cc0",
+            "artist": "Jebulon .",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/87/%C3%89corch%C3%A9_cavalier_Fragonard_Alfort_1.jpg/500px-%C3%89corch%C3%A9_cavalier_Fragonard_Alfort_1.jpg",
+            "sha256": "39dcbabf665f42d95cdcc67551c5a32144defcc0fea80a8620363f2eb6b32088"
+        },
+        {
+            "file": "quality/horse/qi-12777829.jpg",
+            "subject": "horse",
+            "qualityImage": true,
+            "title": "File:Tête cheval bai Narval Alfort.jpg",
+            "licence": "cc0",
+            "artist": "Jebulon",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/ae/T%C3%AAte_cheval_bai_Narval_Alfort.jpg/500px-T%C3%AAte_cheval_bai_Narval_Alfort.jpg",
+            "sha256": "2338d23bfc4f36d38fd3a541eaa754c309b9da680522ea8d5443b448bb4e6fea"
+        },
+        {
+            "file": "quality/horse/qi-20837821.jpg",
+            "subject": "horse",
+            "qualityImage": true,
+            "title": "File:Garde et Officier Régiment cavalerie garde républicaine.jpg",
+            "licence": "cc0",
+            "artist": "Jebulon",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/f4/Garde_et_Officier_R%C3%A9giment_cavalerie_garde_r%C3%A9publicaine.jpg/500px-Garde_et_Officier_R%C3%A9giment_cavalerie_garde_r%C3%A9publicaine.jpg",
+            "sha256": "92b97a97e31aa0914a7acdd602a483d130911f96dc22732d2a256ba4c05ddab9"
+        },
+        {
+            "file": "quality/horse/qi-142980836.jpg",
+            "subject": "horse",
+            "qualityImage": true,
+            "title": "File:Horses in Jeti-Ögüz Rocks.jpg",
+            "licence": "cc0",
+            "artist": "Bgag",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/da/Horses_in_Jeti-%C3%96g%C3%BCz_Rocks.jpg/500px-Horses_in_Jeti-%C3%96g%C3%BCz_Rocks.jpg",
+            "sha256": "0704fe1772b6a1449cb65ddd681a4d0978e51c41d59da04ad03fba756b55128c"
+        },
+        {
+            "file": "quality/horse/qi-143073387.jpg",
+            "subject": "horse",
+            "qualityImage": true,
+            "title": "File:Petroglyph Museum of Cholpon-Ata 03.jpg",
+            "licence": "cc0",
+            "artist": "Bgag",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/70/Petroglyph_Museum_of_Cholpon-Ata_03.jpg/500px-Petroglyph_Museum_of_Cholpon-Ata_03.jpg",
+            "sha256": "594705e79666ec01cb92dc7a0bd75bc59aff6441a5149e285541b005d9dcbc1a"
+        },
+        {
+            "file": "quality/horse/qi-146129084.jpg",
+            "subject": "horse",
+            "qualityImage": true,
+            "title": "File:Transport of horses in Mongolia.jpg",
+            "licence": "cc0",
+            "artist": "Bernard Gagnon",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/06/Transport_of_horses_in_Mongolia.jpg/500px-Transport_of_horses_in_Mongolia.jpg",
+            "sha256": "8bb09632447776a714303d70e5ce0838aac55cd25ae4ff76ff83adacd7d7289f"
+        },
+        {
+            "file": "quality/horse/qi-146572048.jpg",
+            "subject": "horse",
+            "qualityImage": true,
+            "title": "File:Naadam 2023, Ulan Bator 01.jpg",
+            "licence": "cc0",
+            "artist": "Bernard Gagnon",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/a0/Naadam_2023%2C_Ulan_Bator_01.jpg/500px-Naadam_2023%2C_Ulan_Bator_01.jpg",
+            "sha256": "7c6f724d3dbe81eba1cf8951bb1f052e14c50c06e625c7ecec245118b16babf4"
+        },
+        {
+            "file": "quality/horse/ord-8738705.jpg",
+            "subject": "horse",
+            "qualityImage": false,
+            "title": "File:CastillonnaisSISQA1.jpg",
+            "licence": "cc0",
+            "artist": "PANDA 81",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/16/CastillonnaisSISQA1.jpg/500px-CastillonnaisSISQA1.jpg",
+            "sha256": "2e8f161a3db40250ce6388e2d926f825054938dd4532ecf489f5da2b56e2f8b8"
+        },
+        {
+            "file": "quality/horse/ord-58808834.jpg",
+            "subject": "horse",
+            "qualityImage": false,
+            "title": "File:Top view of grazing horses (Unsplash).jpg",
+            "licence": "cc0",
+            "artist": "Matt Benson mattgyver",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/42/Top_view_of_grazing_horses_%28Unsplash%29.jpg/500px-Top_view_of_grazing_horses_%28Unsplash%29.jpg",
+            "sha256": "350484d60091562e6605cf02279afa2d3e5722df0113f4eb270852fadb719e8d"
+        },
+        {
+            "file": "quality/horse/ord-60962756.jpg",
+            "subject": "horse",
+            "qualityImage": false,
+            "title": "File:05559jfNative horses in grasslands Baliuag Bulacanfvf 14.jpg",
+            "licence": "cc0",
+            "artist": "Judgefloro",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c9/05559jfNative_horses_in_grasslands_Baliuag_Bulacanfvf_14.jpg/500px-05559jfNative_horses_in_grasslands_Baliuag_Bulacanfvf_14.jpg",
+            "sha256": "96379f7bc58278e233b9f24442d4128c2b53035abbad5122e917a7da9f1682b0"
+        },
+        {
+            "file": "quality/horse/ord-60962770.jpg",
+            "subject": "horse",
+            "qualityImage": false,
+            "title": "File:05559jfNative horses in grasslands Baliuag Bulacanfvf 28.jpg",
+            "licence": "cc0",
+            "artist": "Judgefloro",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/1f/05559jfNative_horses_in_grasslands_Baliuag_Bulacanfvf_28.jpg/500px-05559jfNative_horses_in_grasslands_Baliuag_Bulacanfvf_28.jpg",
+            "sha256": "9f1e2e9700cccf4fb2f28444500bf94efa1a27db0e5e6e9828068fafd1eb80fa"
+        },
+        {
+            "file": "quality/horse/ord-61647465.jpg",
+            "subject": "horse",
+            "qualityImage": false,
+            "title": "File:Black horse on branches (Unsplash).jpg",
+            "licence": "cc0",
+            "artist": "Gabriela Kucerova gabrielakucerova",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/a3/Black_horse_on_branches_%28Unsplash%29.jpg/500px-Black_horse_on_branches_%28Unsplash%29.jpg",
+            "sha256": "80ef8145c52275be6b42b0bc55b7f7ee418868b9b04454387bf16cf73b1af6f2"
+        },
+        {
+            "file": "quality/horse/ord-61655007.jpg",
+            "subject": "horse",
+            "qualityImage": false,
+            "title": "File:Horse under a roof at twilight (Unsplash).jpg",
+            "licence": "cc0",
+            "artist": "doron rosenblum doronr",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/32/Horse_under_a_roof_at_twilight_%28Unsplash%29.jpg/500px-Horse_under_a_roof_at_twilight_%28Unsplash%29.jpg",
+            "sha256": "53ea76e152bfd916a8c8a3c742174dca4efc0017a76bb2ade0204d622743fccf"
+        },
+        {
+            "file": "quality/horse/ord-61881836.jpg",
+            "subject": "horse",
+            "qualityImage": false,
+            "title": "File:Horse grazing in the shade of conifers (Unsplash).jpg",
+            "licence": "cc0",
+            "artist": "Annie Spratt anniespratt",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/1f/Horse_grazing_in_the_shade_of_conifers_%28Unsplash%29.jpg/500px-Horse_grazing_in_the_shade_of_conifers_%28Unsplash%29.jpg",
+            "sha256": "9454a793aad780689c9760b2a4940780a4e1c761e90231bff2fe66de655aad4f"
+        },
+        {
+            "file": "quality/insect/qi-148806830.jpg",
+            "subject": "insect",
+            "qualityImage": true,
+            "title": "File:Hoplia.jpg",
+            "licence": "cc0",
+            "artist": "Smailtn",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/e8/Hoplia.jpg/500px-Hoplia.jpg",
+            "sha256": "118e1dc5386f25c43b8fabd641c044194030397ae88e8b3641d5d8249f00ac74"
+        },
+        {
+            "file": "quality/insect/qi-150072171.jpg",
+            "subject": "insect",
+            "qualityImage": true,
+            "title": "File:Brauner Grashüpfer Larve (Juli 2024) 1.jpg",
+            "licence": "cc0",
+            "artist": "Romzig",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/fa/Brauner_Grash%C3%BCpfer_Larve_%28Juli_2024%29_1.jpg/500px-Brauner_Grash%C3%BCpfer_Larve_%28Juli_2024%29_1.jpg",
+            "sha256": "fb75a9a17a3bc89882f5662e5db48c260a2ba68d6825165a2d77879a0aa7d185"
+        },
+        {
+            "file": "quality/insect/qi-150075438.jpg",
+            "subject": "insect",
+            "qualityImage": true,
+            "title": "File:Gemeine Wiesenwanze, Weibchen (Juli 2024).jpg",
+            "licence": "cc0",
+            "artist": "Romzig",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/1e/Gemeine_Wiesenwanze%2C_Weibchen_%28Juli_2024%29.jpg/500px-Gemeine_Wiesenwanze%2C_Weibchen_%28Juli_2024%29.jpg",
+            "sha256": "c328e5b2abbcff7293c68347b4097ee768b3c912072f475086f85489c05b83e1"
+        },
+        {
+            "file": "quality/insect/ord-62057020.jpg",
+            "subject": "insect",
+            "qualityImage": false,
+            "title": "File:Ophonus-puncticeps-01-fws.jpg",
+            "licence": "cc0",
+            "artist": "Francisco Welter-Schultes",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/b8/Ophonus-puncticeps-01-fws.jpg/500px-Ophonus-puncticeps-01-fws.jpg",
+            "sha256": "25df33276d52b682b99a9690027d1e35a83ca578fcba51e2582ef9d23b36f1f1"
+        },
+        {
+            "file": "quality/insect/ord-69681343.jpg",
+            "subject": "insect",
+            "qualityImage": false,
+            "title": "File:Sauterelle 2.jpg",
+            "licence": "cc0",
+            "artist": "Ciriol",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/d7/Sauterelle_2.jpg/500px-Sauterelle_2.jpg",
+            "sha256": "b3eca55a4efac1da5bf13b5da2830f768becd554baf471ac9fd517d42757fdcb"
+        },
+        {
+            "file": "quality/insect/ord-71591725.jpg",
+            "subject": "insect",
+            "qualityImage": false,
+            "title": "File:Biene In Rose (187181263).jpeg",
+            "licence": "cc0",
+            "artist": "Hajovn",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/35/Biene_In_Rose_%28187181263%29.jpeg/500px-Biene_In_Rose_%28187181263%29.jpeg",
+            "sha256": "fb2ed4156f984c9625cf3ef1f0928667b7f45fe3131350f66b940327e86e56c1"
+        },
+        {
+            "file": "quality/flower/qi-14867828.jpg",
+            "subject": "flower",
+            "qualityImage": true,
+            "title": "File:Laburnum anagyroides Medik. Cytise - Aubour JdP.jpg",
+            "licence": "cc0",
+            "artist": "Jebulon",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/3f/Laburnum_anagyroides_Medik._Cytise_-_Aubour_JdP.jpg/500px-Laburnum_anagyroides_Medik._Cytise_-_Aubour_JdP.jpg",
+            "sha256": "3a15a4f4ed3dad9713607480cd4d16eb442e9b4eae456f10a45ee999dfd9bce9"
+        },
+        {
+            "file": "quality/flower/qi-22032541.jpg",
+            "subject": "flower",
+            "qualityImage": true,
+            "title": "File:Common Jezebel Delias eucharis by kadavoor 3.jpg",
+            "licence": "cc0",
+            "artist": "Jeevan Jose, Kerala, India",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/96/Common_Jezebel_Delias_eucharis_by_kadavoor_3.jpg/500px-Common_Jezebel_Delias_eucharis_by_kadavoor_3.jpg",
+            "sha256": "5cdc8881e5c2daa202a8aa422d906d02472f5e71eced39729eab5cea020cadb9"
+        },
+        {
+            "file": "quality/flower/qi-22945323.jpg",
+            "subject": "flower",
+            "qualityImage": true,
+            "title": "File:Agave Flower.jpg",
+            "licence": "cc0",
+            "artist": "Wilfredor",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/85/Agave_Flower.jpg/500px-Agave_Flower.jpg",
+            "sha256": "fec58aa0784f02fb049a40020d07718eb51e801d52f2f346b435fc869a93e141"
+        },
+        {
+            "file": "quality/flower/qi-35535437.jpg",
+            "subject": "flower",
+            "qualityImage": true,
+            "title": "File:Part of the city walls, from Alcazaba, Almeria, Spain.jpg",
+            "licence": "cc0",
+            "artist": "Jebulon",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/55/Part_of_the_city_walls%2C_from_Alcazaba%2C_Almeria%2C_Spain.jpg/500px-Part_of_the_city_walls%2C_from_Alcazaba%2C_Almeria%2C_Spain.jpg",
+            "sha256": "dfaa9b616009436c2b5aa0180eaa2f7a6eb2ae689c46eab158d72e8feb9deded"
+        },
+        {
+            "file": "quality/flower/qi-81148889.jpg",
+            "subject": "flower",
+            "qualityImage": true,
+            "title": "File:Coreopsis P8022391.jpg",
+            "licence": "cc0",
+            "artist": "Kaldari",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/42/Coreopsis_P8022391.jpg/500px-Coreopsis_P8022391.jpg",
+            "sha256": "4170563fbbd0d5bf79a0a8f86f6e28e3bee1814221c8a8041830dd65e2ace584"
+        },
+        {
+            "file": "quality/flower/qi-99806029.jpg",
+            "subject": "flower",
+            "qualityImage": true,
+            "title": "File:Photographs of Église Saint-Thomas-d'Aquin, Québec, Canada 001.jpg",
+            "licence": "cc0",
+            "artist": "Wilfredor",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/5f/Photographs_of_%C3%89glise_Saint-Thomas-d%27Aquin%2C_Qu%C3%A9bec%2C_Canada_001.jpg/500px-Photographs_of_%C3%89glise_Saint-Thomas-d%27Aquin%2C_Qu%C3%A9bec%2C_Canada_001.jpg",
+            "sha256": "f1b3b5d3397f24f9028c09ca6e3f96161c2f05be4c24b0e4cc6d1aadc865c665"
+        },
+        {
+            "file": "quality/flower/qi-123138317.jpg",
+            "subject": "flower",
+            "qualityImage": true,
+            "title": "File:Tagetes2.jpg",
+            "licence": "cc0",
+            "artist": "The People's Internet",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/36/Tagetes2.jpg/500px-Tagetes2.jpg",
+            "sha256": "f4db4a75cff7401095a75b5d05d1adea003dddd39b8807ad15773aa7b24e40c7"
+        },
+        {
+            "file": "quality/flower/qi-140764549.jpg",
+            "subject": "flower",
+            "qualityImage": true,
+            "title": "File:Bloem van een Plumbago auriculata. 10-10-2023. (d.j.b).jpg 02.jpg",
+            "licence": "cc0",
+            "artist": "Dominicus Johannes Bergsma",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/55/Bloem_van_een_Plumbago_auriculata._10-10-2023._%28d.j.b%29.jpg_02.jpg/500px-Bloem_van_een_Plumbago_auriculata._10-10-2023._%28d.j.b%29.jpg_02.jpg",
+            "sha256": "36196df5247ea135530899f535e6b8fd1218647dddc399df803ff12af69e2c60"
+        },
+        {
+            "file": "quality/flower/ord-16285888.jpg",
+            "subject": "flower",
+            "qualityImage": false,
+            "title": "File:Prádanos flores.jpg",
+            "licence": "cc0",
+            "artist": "Yolanda Calvo Gómez",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c4/Pr%C3%A1danos_flores.jpg/500px-Pr%C3%A1danos_flores.jpg",
+            "sha256": "c4725a64ce8cc9b5798176bbb6a89276bcd9dbe8c7bb4f4b15cbd75d645ddfd3"
+        },
+        {
+            "file": "quality/flower/ord-25566743.jpg",
+            "subject": "flower",
+            "qualityImage": false,
+            "title": "File:20130412Muscari armeniacum2.jpg",
+            "licence": "cc0",
+            "artist": "AnRo0002",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/83/20130412Muscari_armeniacum2.jpg/500px-20130412Muscari_armeniacum2.jpg",
+            "sha256": "e6d05814571c7846bf5d2b7120c0717b10fc599e9dd50a6aea58fdf8b3585e33"
+        },
+        {
+            "file": "quality/flower/ord-25919799.jpg",
+            "subject": "flower",
+            "qualityImage": false,
+            "title": "File:20130504Fragaria vesca1.jpg",
+            "licence": "cc0",
+            "artist": "AnRo0002",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/33/20130504Fragaria_vesca1.jpg/500px-20130504Fragaria_vesca1.jpg",
+            "sha256": "3d3e73ba3c3b656b88c53d41c1261504caf550a32eddfa97921a994c60cfbf61"
+        },
+        {
+            "file": "quality/flower/ord-27841180.jpg",
+            "subject": "flower",
+            "qualityImage": false,
+            "title": "File:Volytsya (Fastiv) field.JPG",
+            "licence": "cc0",
+            "artist": "Аимаина хикари",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/de/Volytsya_%28Fastiv%29_field.JPG/500px-Volytsya_%28Fastiv%29_field.JPG",
+            "sha256": "0f2e4b8f69cafc533f26c2338cd007b0cc3fb51a65fe9130874dc5baa1db6947"
+        },
+        {
+            "file": "quality/flower/ord-61728365.jpg",
+            "subject": "flower",
+            "qualityImage": false,
+            "title": "File:Patch of closed tulips (Unsplash).jpg",
+            "licence": "cc0",
+            "artist": "Victoria Heath vheath",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/03/Patch_of_closed_tulips_%28Unsplash%29.jpg/500px-Patch_of_closed_tulips_%28Unsplash%29.jpg",
+            "sha256": "8e0c03fb7608c99333a91b0c3a77249d933b6f2362952d3ca4828f8339fc9cc8"
+        },
+        {
+            "file": "quality/flower/ord-81542579.jpg",
+            "subject": "flower",
+            "qualityImage": false,
+            "title": "File:Firefighter memorial in Pittston, Pennsylvania.jpg",
+            "licence": "cc0",
+            "artist": "JohnDziak",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/32/Firefighter_memorial_in_Pittston%2C_Pennsylvania.jpg/500px-Firefighter_memorial_in_Pittston%2C_Pennsylvania.jpg",
+            "sha256": "203ed00727b0923217e0fb3b5deb9e6d6c42aee2fde1deba0261e90b93ad5b91"
+        },
+        {
+            "file": "quality/flower/ord-87235317.jpg",
+            "subject": "flower",
+            "qualityImage": false,
+            "title": "File:Bees out again. (49439527637).jpg",
+            "licence": "cc0",
+            "artist": "DAVID S. FERRY III from PLANT CITY,FL., U.S.A.",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/4f/Bees_out_again._%2849439527637%29.jpg/500px-Bees_out_again._%2849439527637%29.jpg",
+            "sha256": "a80ebddbbe698225dde5d45a5f7474d8f085faafdf69e4b777513c7058618663"
+        },
+        {
+            "file": "quality/flower/ord-96722745.jpg",
+            "subject": "flower",
+            "qualityImage": false,
+            "title": "File:0180Sanitation workers cleaning Town of Baliuag Glorietta Park 53.jpg",
+            "licence": "cc0",
+            "artist": "Judgefloro",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/b5/0180Sanitation_workers_cleaning_Town_of_Baliuag_Glorietta_Park_53.jpg/500px-0180Sanitation_workers_cleaning_Town_of_Baliuag_Glorietta_Park_53.jpg",
+            "sha256": "b7f23120f2a7742db508bede9f30505912afa7fb515ab74ccfd9e35ff6de70f9"
+        },
+        {
+            "file": "quality/food/qi-59410813.jpg",
+            "subject": "food",
+            "qualityImage": true,
+            "title": "File:Menu du jour d'un restaurant asiatique lyonnais en 2017.jpg",
+            "licence": "cc0",
+            "artist": "Benoît Prieur",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/e0/Menu_du_jour_d%27un_restaurant_asiatique_lyonnais_en_2017.jpg/500px-Menu_du_jour_d%27un_restaurant_asiatique_lyonnais_en_2017.jpg",
+            "sha256": "a0a3b8ece23d7989625a66427f786c7c8d7063e453167ee5881114e3115b9374"
+        },
+        {
+            "file": "quality/food/ord-77589066.jpg",
+            "subject": "food",
+            "qualityImage": false,
+            "title": "File:SalmonFillet.jpg",
+            "licence": "cc0",
+            "artist": "NjoyHarmony",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/00/SalmonFillet.jpg/500px-SalmonFillet.jpg",
+            "sha256": "195aa3156eb38a49e1b811e08fc1eef8351b075b5a6bcccfb8c112da7c686b56"
+        },
+        {
+            "file": "quality/car/qi-25211371.jpg",
+            "subject": "car",
+            "qualityImage": true,
+            "title": "File:Public transport share taxi in Maracaibo city, Zulia, Venezuela.jpg",
+            "licence": "cc0",
+            "artist": "Wilfredor",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/7f/Public_transport_share_taxi_in_Maracaibo_city%2C_Zulia%2C_Venezuela.jpg/500px-Public_transport_share_taxi_in_Maracaibo_city%2C_Zulia%2C_Venezuela.jpg",
+            "sha256": "95585b1f157dacdfad1d27e68b12b135fe09091bb0d23e7e660592d2d6b81862"
+        },
+        {
+            "file": "quality/car/qi-81981042.jpg",
+            "subject": "car",
+            "qualityImage": true,
+            "title": "File:Avenue Roosevelt à Bruxelles, Zen Car en recharge.jpg",
+            "licence": "cc0",
+            "artist": "Benoît Prieur",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/91/Avenue_Roosevelt_%C3%A0_Bruxelles%2C_Zen_Car_en_recharge.jpg/500px-Avenue_Roosevelt_%C3%A0_Bruxelles%2C_Zen_Car_en_recharge.jpg",
+            "sha256": "ed2c5d278659ce0d3c5d6bbe1d832bd7fab56ea4cca75d2c01250dbe755125a6"
+        },
+        {
+            "file": "quality/car/qi-111454750.jpg",
+            "subject": "car",
+            "qualityImage": true,
+            "title": "File:Πύργος Μπαρότσι στο Φιλότι 7063.jpg",
+            "licence": "cc0",
+            "artist": "C messier",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/2a/%CE%A0%CF%8D%CF%81%CE%B3%CE%BF%CF%82_%CE%9C%CF%80%CE%B1%CF%81%CF%8C%CF%84%CF%83%CE%B9_%CF%83%CF%84%CE%BF_%CE%A6%CE%B9%CE%BB%CF%8C%CF%84%CE%B9_7063.jpg/500px-%CE%A0%CF%8D%CF%81%CE%B3%CE%BF%CF%82_%CE%9C%CF%80%CE%B1%CF%81%CF%8C%CF%84%CF%83%CE%B9_%CF%83%CF%84%CE%BF_%CE%A6%CE%B9%CE%BB%CF%8C%CF%84%CE%B9_7063.jpg",
+            "sha256": "ad9c0ff4b52054762dd6bb8d320224ed0168298b3c95dd4a392e8c2bb37d4777"
+        },
+        {
+            "file": "quality/car/qi-162929587.jpg",
+            "subject": "car",
+            "qualityImage": true,
+            "title": "File:Suzuki Wagon R Stingray MH23S rear.jpg",
+            "licence": "cc0",
+            "artist": "TTTNIS",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/6e/Suzuki_Wagon_R_Stingray_MH23S_rear.jpg/500px-Suzuki_Wagon_R_Stingray_MH23S_rear.jpg",
+            "sha256": "26bebe396dae987043536c5e1e3c0018c7db399a114e05822f1ef3d01b94e0dd"
+        },
+        {
+            "file": "quality/car/qi-162929588.jpg",
+            "subject": "car",
+            "qualityImage": true,
+            "title": "File:Suzuki Wagon R Stingray MH23S.jpg",
+            "licence": "cc0",
+            "artist": "TTTNIS",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/e7/Suzuki_Wagon_R_Stingray_MH23S.jpg/500px-Suzuki_Wagon_R_Stingray_MH23S.jpg",
+            "sha256": "a2c4b1aea69a7c10f8447dd4c7ab5a31b0b54673b0f51bff34431b7898fd2d11"
+        },
+        {
+            "file": "quality/car/ord-13704815.jpg",
+            "subject": "car",
+            "qualityImage": false,
+            "title": "File:Isuzu D-Max crash 1.jpg",
+            "licence": "cc0",
+            "artist": "love krittaya",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/48/Isuzu_D-Max_crash_1.jpg/500px-Isuzu_D-Max_crash_1.jpg",
+            "sha256": "a30ed6c75cd944a1162f7ec18465dff8d6d841ff0bfa12847d23703cd497c296"
+        },
+        {
+            "file": "quality/car/ord-16629692.jpg",
+            "subject": "car",
+            "qualityImage": false,
+            "title": "File:Nissan Skyline Sports-Sedan R34 02 rear.jpg",
+            "licence": "cc0",
+            "artist": "TTTNIS",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/49/Nissan_Skyline_Sports-Sedan_R34_02_rear.jpg/500px-Nissan_Skyline_Sports-Sedan_R34_02_rear.jpg",
+            "sha256": "ba5318f119964e725d74d0d34872f9d38a0ca84bb64fb68c8335a292a14467a9"
+        },
+        {
+            "file": "quality/car/ord-16757198.jpg",
+            "subject": "car",
+            "qualityImage": false,
+            "title": "File:1952 Fiat 500C photo-3.JPG",
+            "licence": "cc0",
+            "artist": "Alf van Beem",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/62/1952_Fiat_500C_photo-3.JPG/500px-1952_Fiat_500C_photo-3.JPG",
+            "sha256": "543540c17a45985c4998f04f0217bffe42f87f34905122a06b96647bb546eb02"
+        },
+        {
+            "file": "quality/car/ord-22029173.jpg",
+            "subject": "car",
+            "qualityImage": false,
+            "title": "File:Fiat Abarth 1000 TC Grey pic2.JPG",
+            "licence": "cc0",
+            "artist": "Alf van Beem",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/bd/Fiat_Abarth_1000_TC_Grey_pic2.JPG/500px-Fiat_Abarth_1000_TC_Grey_pic2.JPG",
+            "sha256": "d643dc16e7e1688a2373cc787810d6dd8922e5d8e9ef8c2552fb0faadce2cf5c"
+        },
+        {
+            "file": "quality/car/ord-23557956.jpg",
+            "subject": "car",
+            "qualityImage": false,
+            "title": "File:1951 Hudson maroon convertible Hershey 2012 b.jpg",
+            "licence": "cc0",
+            "artist": "CZmarlin — Christopher Ziemnowicz, releases all rights but a photo credit would be appreciated if this image is used anywhere other than Wikipedia. Please leave a note at Wikipedia here . Thank you!",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/9a/1951_Hudson_maroon_convertible_Hershey_2012_b.jpg/500px-1951_Hudson_maroon_convertible_Hershey_2012_b.jpg",
+            "sha256": "8e71cbafec1aa9100e28c1135bc258762da89400752fb3779ca4136fd612dace"
+        },
+        {
+            "file": "quality/train/qi-21554740.jpg",
+            "subject": "train",
+            "qualityImage": true,
+            "title": "File:JA1271 crossing the Otaki River.jpg",
+            "licence": "pd",
+            "artist": "Karora",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/1f/JA1271_crossing_the_Otaki_River.jpg/500px-JA1271_crossing_the_Otaki_River.jpg",
+            "sha256": "332110abdcc796f89f6b9b68149829e09637a2c163edf10353e0d865d0fc9f67"
+        },
+        {
+            "file": "quality/train/qi-80151142.jpg",
+            "subject": "train",
+            "qualityImage": true,
+            "title": "File:Un TER entrant en gare de Saint-Maurice-de-Beynost (juillet 2019).jpg",
+            "licence": "cc0",
+            "artist": "Benoît Prieur",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/a8/Un_TER_entrant_en_gare_de_Saint-Maurice-de-Beynost_%28juillet_2019%29.jpg/500px-Un_TER_entrant_en_gare_de_Saint-Maurice-de-Beynost_%28juillet_2019%29.jpg",
+            "sha256": "d79dfb1d3f6045fa8e764e778124fe6ba2fb90d88c0a77f3cc49a8fe79f9c83a"
+        },
+        {
+            "file": "quality/train/qi-93866539.jpg",
+            "subject": "train",
+            "qualityImage": true,
+            "title": "File:Train of Quebec city.jpg",
+            "licence": "cc0",
+            "artist": "Wilfredor",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/41/Train_of_Quebec_city.jpg/500px-Train_of_Quebec_city.jpg",
+            "sha256": "563b3a8cbbcae16a28713eb60f3510b099f634f9d998c67cffbb050cfe8bae7f"
+        },
+        {
+            "file": "quality/train/qi-95591420.jpg",
+            "subject": "train",
+            "qualityImage": true,
+            "title": "File:長野電鉄3500系N6編成(2020-10-25 0728).jpg",
+            "licence": "cc0",
+            "artist": "Kznrhsd",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/15/%E9%95%B7%E9%87%8E%E9%9B%BB%E9%89%843500%E7%B3%BBN6%E7%B7%A8%E6%88%90%282020-10-25_0728%29.jpg/500px-%E9%95%B7%E9%87%8E%E9%9B%BB%E9%89%843500%E7%B3%BBN6%E7%B7%A8%E6%88%90%282020-10-25_0728%29.jpg",
+            "sha256": "7d0fb721d2c3a3a02d92a443a7c66dae62c30c565278776714af3cf3108a077a"
+        },
+        {
+            "file": "quality/train/ord-12157648.jpg",
+            "subject": "train",
+            "qualityImage": false,
+            "title": "File:Keiyo line.jpg",
+            "licence": "cc0",
+            "artist": "京葉快速 (Keiyo Kaisoku)",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/44/Keiyo_line.jpg/500px-Keiyo_line.jpg",
+            "sha256": "ad556c3559efb575c3ee16302383ca12e248c47ef909972be7caef0c6591a777"
+        },
+        {
+            "file": "quality/train/ord-12746775.jpg",
+            "subject": "train",
+            "qualityImage": false,
+            "title": "File:Touhoku main line EF65PF.JPG",
+            "licence": "cc0",
+            "artist": "toshinori baba",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/b0/Touhoku_main_line_EF65PF.JPG/500px-Touhoku_main_line_EF65PF.JPG",
+            "sha256": "01a5c5ad69f18892ec97b9637ddb6240bb8b04bc5306fdbc3c477aa77ce3c841"
+        },
+        {
+            "file": "quality/train/ord-15094718.jpg",
+            "subject": "train",
+            "qualityImage": false,
+            "title": "File:JR-East E231 Series at Oyama Station.jpg",
+            "licence": "cc0",
+            "artist": "Breakover",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/6f/JR-East_E231_Series_at_Oyama_Station.jpg/500px-JR-East_E231_Series_at_Oyama_Station.jpg",
+            "sha256": "0afdd9bbb07c02555e938de333e872c1e2e2fef88de639d71e0bbefe76d69f77"
+        },
+        {
+            "file": "quality/train/ord-17928753.jpg",
+            "subject": "train",
+            "qualityImage": false,
+            "title": "File:Hengelo platform.JPG",
+            "licence": "cc0",
+            "artist": "My another account ( talk )",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/46/Hengelo_platform.JPG/500px-Hengelo_platform.JPG",
+            "sha256": "b5253388150e62da24e32f187f867fc8281e903e7c92575b2fa18265f09bab45"
+        },
+        {
+            "file": "quality/ship/qi-87575091.jpg",
+            "subject": "ship",
+            "qualityImage": true,
+            "title": "File:Le Costa Mediterranea dans la rade de Port Louis (Maurice) le 29 février 2020.jpg",
+            "licence": "cc0",
+            "artist": "Benoît Prieur",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/f8/Le_Costa_Mediterranea_dans_la_rade_de_Port_Louis_%28Maurice%29_le_29_f%C3%A9vrier_2020.jpg/500px-Le_Costa_Mediterranea_dans_la_rade_de_Port_Louis_%28Maurice%29_le_29_f%C3%A9vrier_2020.jpg",
+            "sha256": "4696614354e192a77c917d57f33e329e559f0bd7b542c5713822231a013e9366"
+        },
+        {
+            "file": "quality/ship/qi-146909848.jpg",
+            "subject": "ship",
+            "qualityImage": true,
+            "title": "File:OSV Lightning.jpg",
+            "licence": "cc0",
+            "artist": "GuavaTrain",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/5a/OSV_Lightning.jpg/500px-OSV_Lightning.jpg",
+            "sha256": "d2491fdfb20deb0bc21a410d15294965608777730dee88516cabac5093753fe4"
+        },
+        {
+            "file": "quality/ship/qi-146909961.jpg",
+            "subject": "ship",
+            "qualityImage": true,
+            "title": "File:OSV Pecan Island.jpg",
+            "licence": "cc0",
+            "artist": "GuavaTrain",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/8f/OSV_Pecan_Island.jpg/500px-OSV_Pecan_Island.jpg",
+            "sha256": "5bf2a695b96ee9b74ed47804e460c8547aa74c2622a7af9c911e11d8cbf618b4"
+        },
+        {
+            "file": "quality/ship/ord-17462242.jpg",
+            "subject": "ship",
+            "qualityImage": false,
+            "title": "File:Great Challenger - IMO 9301067 Mississippi pic6.jpg",
+            "licence": "cc0",
+            "artist": "Alf van Beem",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/e5/Great_Challenger_-_IMO_9301067_Mississippi_pic6.jpg/500px-Great_Challenger_-_IMO_9301067_Mississippi_pic6.jpg",
+            "sha256": "925f8e340df649df3b38d3adc672d35aac1ec91a7e65c20d46ab9c64631cbb6b"
+        },
+        {
+            "file": "quality/ship/ord-17662707.jpg",
+            "subject": "ship",
+            "qualityImage": false,
+            "title": "File:Pleiades IMO 9172533 approaching Port of Rotterdam, Holland 03Jun2007 photo-4.jpg",
+            "licence": "cc0",
+            "artist": "Alf van Beem",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/93/Pleiades_IMO_9172533_approaching_Port_of_Rotterdam%2C_Holland_03Jun2007_photo-4.jpg/500px-Pleiades_IMO_9172533_approaching_Port_of_Rotterdam%2C_Holland_03Jun2007_photo-4.jpg",
+            "sha256": "35b8e669ff694b16a68aba87056a9d81fc31e0d44a13d11551ed23de41fce483"
+        },
+        {
+            "file": "quality/ship/ord-23144758.jpg",
+            "subject": "ship",
+            "qualityImage": false,
+            "title": "File:Kraanschip Neptune 3.JPG",
+            "licence": "cc0",
+            "artist": "Torsade de Pointes",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/70/Kraanschip_Neptune_3.JPG/500px-Kraanschip_Neptune_3.JPG",
+            "sha256": "d368b6f588c3ff1ea7150130d3d2280919afdc25a60c8fea5c0320249e5f0afd"
+        },
+        {
+            "file": "quality/church/qi-14975131.jpg",
+            "subject": "church",
+            "qualityImage": true,
+            "title": "File:Church of the virgin of the burgh Rhodes 14th century night.jpg",
+            "licence": "cc0",
+            "artist": "Jebulon",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/4c/Church_of_the_virgin_of_the_burgh_Rhodes_14th_century_night.jpg/500px-Church_of_the_virgin_of_the_burgh_Rhodes_14th_century_night.jpg",
+            "sha256": "ffa2e0db09a58976081737de8e46355d03365fecb00a407a1585f7bcd1639a1c"
+        },
+        {
+            "file": "quality/church/qi-21757529.jpg",
+            "subject": "church",
+            "qualityImage": true,
+            "title": "File:Chaire cour cathédrale Séville Espagne.jpg",
+            "licence": "cc0",
+            "artist": "Jebulon",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/8c/Chaire_cour_cath%C3%A9drale_S%C3%A9ville_Espagne.jpg/500px-Chaire_cour_cath%C3%A9drale_S%C3%A9ville_Espagne.jpg",
+            "sha256": "2c3fb1cfd6e67e2b342725056bb6ee4fa2573b2ed5a7d6f257363bc660c40c1d"
+        },
+        {
+            "file": "quality/church/qi-67379176.jpg",
+            "subject": "church",
+            "qualityImage": true,
+            "title": "File:Bruges City Hall Interior.jpg",
+            "licence": "cc0",
+            "artist": "Michael D Beckwith",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/7c/Bruges_City_Hall_Interior.jpg/500px-Bruges_City_Hall_Interior.jpg",
+            "sha256": "059e2f7b13bb67126fdf072e5fd026416acc1984b8f48e6629bae1f1ed41f1a0"
+        },
+        {
+            "file": "quality/church/qi-89968513.jpg",
+            "subject": "church",
+            "qualityImage": true,
+            "title": "File:Sankt Antonius Herrenwies-Forbach 2020-03-15 01.jpg",
+            "licence": "cc0",
+            "artist": "Leonhard Lenz",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/68/Sankt_Antonius_Herrenwies-Forbach_2020-03-15_01.jpg/500px-Sankt_Antonius_Herrenwies-Forbach_2020-03-15_01.jpg",
+            "sha256": "18746a1c9074f9b6f449f78146ba186bb9466cbe5726be3283aa0cafe8abd1f6"
+        },
+        {
+            "file": "quality/church/qi-99998124.jpg",
+            "subject": "church",
+            "qualityImage": true,
+            "title": "File:Photographs of Église Saint-Ignace-de-Loyola 003.jpg",
+            "licence": "cc0",
+            "artist": "Wilfredor",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/09/Photographs_of_%C3%89glise_Saint-Ignace-de-Loyola_003.jpg/500px-Photographs_of_%C3%89glise_Saint-Ignace-de-Loyola_003.jpg",
+            "sha256": "fa231a40eb34c719220edee6c3de4b96a7b0b0880ea0ab125de0ee58f82efe4c"
+        },
+        {
+            "file": "quality/church/qi-140201957.jpg",
+            "subject": "church",
+            "qualityImage": true,
+            "title": "File:Reformierte Kirche Scuol. 15-09-2023. (actm.) 01.jpg",
+            "licence": "cc0",
+            "artist": "Agnes Monkelbaan",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/37/Reformierte_Kirche_Scuol._15-09-2023._%28actm.%29_01.jpg/500px-Reformierte_Kirche_Scuol._15-09-2023._%28actm.%29_01.jpg",
+            "sha256": "d3cba3011555b023ee96c164095caf54454ec524446e53bed732754e85316867"
+        },
+        {
+            "file": "quality/church/qi-140766852.jpg",
+            "subject": "church",
+            "qualityImage": true,
+            "title": "File:Reformierte Kirche Scuol. 15-09-2023. (actm.) 03.jpg",
+            "licence": "cc0",
+            "artist": "Agnes Monkelbaan",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/48/Reformierte_Kirche_Scuol._15-09-2023._%28actm.%29_03.jpg/500px-Reformierte_Kirche_Scuol._15-09-2023._%28actm.%29_03.jpg",
+            "sha256": "db596397e3f4462533c44ad82621425b2434a3e419edd619556d519681182fb5"
+        },
+        {
+            "file": "quality/church/qi-145562107.jpg",
+            "subject": "church",
+            "qualityImage": true,
+            "title": "File:Triumph of St. Ignatius of Loyola, ceiling fresco by Andrea Pozzo.jpg",
+            "licence": "cc0",
+            "artist": "Wilfredor",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/57/Triumph_of_St._Ignatius_of_Loyola%2C_ceiling_fresco_by_Andrea_Pozzo.jpg/500px-Triumph_of_St._Ignatius_of_Loyola%2C_ceiling_fresco_by_Andrea_Pozzo.jpg",
+            "sha256": "c5f6359c8f9604b528c964d565665d7d104773dbf566abf9a5efd31ddddbd4d5"
+        },
+        {
+            "file": "quality/church/ord-15206247.jpg",
+            "subject": "church",
+            "qualityImage": false,
+            "title": "File:Arcis-le-Ponsart (51) Église 5.jpg",
+            "licence": "cc0",
+            "artist": "GO69",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/f2/Arcis-le-Ponsart_%2851%29_%C3%89glise_5.jpg/500px-Arcis-le-Ponsart_%2851%29_%C3%89glise_5.jpg",
+            "sha256": "60ef9fbf700ad50bbd27abd8f6fc70bc93642c22ed7fc717274927d85252b71b"
+        },
+        {
+            "file": "quality/church/ord-15530916.jpg",
+            "subject": "church",
+            "qualityImage": false,
+            "title": "File:Arkadžio vienuolynas1.JPG",
+            "licence": "cc0",
+            "artist": "Aldona O.",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/d4/Arkad%C5%BEio_vienuolynas1.JPG/500px-Arkad%C5%BEio_vienuolynas1.JPG",
+            "sha256": "c08ca61321249df211aaca60bafdb3596b970351ecb87d9eb478aef8aed21b33"
+        },
+        {
+            "file": "quality/church/ord-28847099.jpg",
+            "subject": "church",
+            "qualityImage": false,
+            "title": "File:Haukipudas Church Window Oulu 20131004 02.JPG",
+            "licence": "cc0",
+            "artist": "Estormiz",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/d4/Haukipudas_Church_Window_Oulu_20131004_02.JPG/500px-Haukipudas_Church_Window_Oulu_20131004_02.JPG",
+            "sha256": "94a96c9e9707ffae69774cb7241ab7e04ab5f4ef90cfda1fe0abb0c00db27b90"
+        },
+        {
+            "file": "quality/church/ord-54373935.jpg",
+            "subject": "church",
+            "qualityImage": false,
+            "title": "File:0449jfImmaculate Conception Chapel Sapang Pahalang, San Rafael, Bulacanfvf 15.jpg",
+            "licence": "cc0",
+            "artist": "Judgefloro",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/80/0449jfImmaculate_Conception_Chapel_Sapang_Pahalang%2C_San_Rafael%2C_Bulacanfvf_15.jpg/500px-0449jfImmaculate_Conception_Chapel_Sapang_Pahalang%2C_San_Rafael%2C_Bulacanfvf_15.jpg",
+            "sha256": "db726ed08cd3573d4b75f05f4f894718c6687710a19c36456b952c1c09aff411"
+        },
+        {
+            "file": "quality/church/ord-60649707.jpg",
+            "subject": "church",
+            "qualityImage": false,
+            "title": "File:02509 jfMexico Pampanga Landmarks Roadsfvf 37.jpg",
+            "licence": "cc0",
+            "artist": "Judgefloro",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/ff/02509_jfMexico_Pampanga_Landmarks_Roadsfvf_37.jpg/500px-02509_jfMexico_Pampanga_Landmarks_Roadsfvf_37.jpg",
+            "sha256": "8c925ae534a4d4c553d8c616cb742b36878ec793c39a773dcffc76eda4ea135f"
+        },
+        {
+            "file": "quality/church/ord-78675663.jpg",
+            "subject": "church",
+            "qualityImage": false,
+            "title": "File:Church Pohlen 06.jpg",
+            "licence": "cc0",
+            "artist": "Aschroet",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/70/Church_Pohlen_06.jpg/500px-Church_Pohlen_06.jpg",
+            "sha256": "1593151e2fc51f4fb4ba4f135465df55ef03734a1e14e397e404fea769d284a0"
+        },
+        {
+            "file": "quality/church/ord-78966037.jpg",
+            "subject": "church",
+            "qualityImage": false,
+            "title": "File:Holy Trinity Anglican Church, Launceston 20190425-001.jpg",
+            "licence": "cc0",
+            "artist": "Gary Houston",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/34/Holy_Trinity_Anglican_Church%2C_Launceston_20190425-001.jpg/500px-Holy_Trinity_Anglican_Church%2C_Launceston_20190425-001.jpg",
+            "sha256": "9ce5ffb5b5618bc5a61fdfacf5b6537416561c4b1a6a0f974c35dd1b3e4dc06a"
+        },
+        {
+            "file": "quality/church/ord-79210308.jpg",
+            "subject": "church",
+            "qualityImage": false,
+            "title": "File:St Nicholas, Iford, looking east.jpg",
+            "licence": "cc0",
+            "artist": "Poliphilo",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c6/St_Nicholas%2C_Iford%2C_looking_east.jpg/500px-St_Nicholas%2C_Iford%2C_looking_east.jpg",
+            "sha256": "ecd887632e4fec03e4885b124a62c458aabd6cbe5d987221b1dc2b01c3ee8fa4"
+        },
+        {
+            "file": "quality/bridge/qi-29236260.jpg",
+            "subject": "bridge",
+            "qualityImage": true,
+            "title": "File:General Rafael Urdaneta Bridge view from the lake to Cabimas side.jpg",
+            "licence": "cc0",
+            "artist": "Wilfredor",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/ce/General_Rafael_Urdaneta_Bridge_view_from_the_lake_to_Cabimas_side.jpg/500px-General_Rafael_Urdaneta_Bridge_view_from_the_lake_to_Cabimas_side.jpg",
+            "sha256": "b09b7a73d4d5565fed7d3ddc7db2868c5e2575e2ae998b53e0add18ac78d4e86"
+        },
+        {
+            "file": "quality/bridge/qi-149174644.jpg",
+            "subject": "bridge",
+            "qualityImage": true,
+            "title": "File:2024 Most Forteczny w Kłodzku (7).jpg",
+            "licence": "cc0",
+            "artist": "Jacek Halicki",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/f8/2024_Most_Forteczny_w_K%C5%82odzku_%287%29.jpg/500px-2024_Most_Forteczny_w_K%C5%82odzku_%287%29.jpg",
+            "sha256": "442c528a1502c9419773e140b6aca2b4496efab42ddc9b70832d2a221000468a"
+        },
+        {
+            "file": "quality/bridge/qi-149174645.jpg",
+            "subject": "bridge",
+            "qualityImage": true,
+            "title": "File:2024 Most Forteczny w Kłodzku (5).jpg",
+            "licence": "cc0",
+            "artist": "Jacek Halicki",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/d0/2024_Most_Forteczny_w_K%C5%82odzku_%285%29.jpg/500px-2024_Most_Forteczny_w_K%C5%82odzku_%285%29.jpg",
+            "sha256": "b753dffa72f38952620a6703e0808651a35642fb0b6f4cbba94c4a06f7d7751d"
+        },
+        {
+            "file": "quality/bridge/qi-178616695.jpg",
+            "subject": "bridge",
+            "qualityImage": true,
+            "title": "File:Pont ferroviaire de Tamera Nefza.jpg",
+            "licence": "cc0",
+            "artist": "Smailtn",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/74/Pont_ferroviaire_de_Tamera_Nefza.jpg/500px-Pont_ferroviaire_de_Tamera_Nefza.jpg",
+            "sha256": "da9100d4eec77339e75e64af6c6e3420996b29ebc94a41e98aed4ffc921d4193"
+        },
+        {
+            "file": "quality/bridge/ord-53692711.jpg",
+            "subject": "bridge",
+            "qualityImage": false,
+            "title": "File:0276jfTigpalas Bridge San Miguel River Bulacan Slope Protection Stability Retaining wallsfvf 11.jpg",
+            "licence": "cc0",
+            "artist": "Judgefloro",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/a1/0276jfTigpalas_Bridge_San_Miguel_River_Bulacan_Slope_Protection_Stability_Retaining_wallsfvf_11.jpg/500px-0276jfTigpalas_Bridge_San_Miguel_River_Bulacan_Slope_Protection_Stability_Retaining_wallsfvf_11.jpg",
+            "sha256": "f55f95a0360dcf4b33d36e039da7c46fb44f2c9ab952e599bf90b4ea4c872b6a"
+        },
+        {
+            "file": "quality/bridge/ord-63282513.jpg",
+            "subject": "bridge",
+            "qualityImage": false,
+            "title": "File:Sumiyoshi-taisha, Sorihashi-2.jpg",
+            "licence": "cc0",
+            "artist": "Saigen Jiro",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/23/Sumiyoshi-taisha%2C_Sorihashi-2.jpg/500px-Sumiyoshi-taisha%2C_Sorihashi-2.jpg",
+            "sha256": "9c8fe15f04a467903d247842b700143426c668d5fe62753c050ad5325239f30d"
+        },
+        {
+            "file": "quality/bridge/ord-70547941.jpg",
+            "subject": "bridge",
+            "qualityImage": false,
+            "title": "File:Sanzu River bridge at Lake Usori - Mount Osore - Mutsu, Aomori - DSC00236.jpg",
+            "licence": "cc0",
+            "artist": "Daderot",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/dc/Sanzu_River_bridge_at_Lake_Usori_-_Mount_Osore_-_Mutsu%2C_Aomori_-_DSC00236.jpg/500px-Sanzu_River_bridge_at_Lake_Usori_-_Mount_Osore_-_Mutsu%2C_Aomori_-_DSC00236.jpg",
+            "sha256": "90c19c7c8136e4b9b3acf3ab835931927952922340e7e4d8c4e7470a0d3fd9d3"
+        },
+        {
+            "file": "quality/bridge/ord-74963793.jpg",
+            "subject": "bridge",
+            "qualityImage": false,
+            "title": "File:7877Floridablanca Pampanga Road Barangays 04.jpg",
+            "licence": "cc0",
+            "artist": "Judgefloro",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/f9/7877Floridablanca_Pampanga_Road_Barangays_04.jpg/500px-7877Floridablanca_Pampanga_Road_Barangays_04.jpg",
+            "sha256": "0e379e3b5919e70ac346f8fa3849b8e6d989637009478b23020dca19b69d7698"
+        },
+        {
+            "file": "quality/mountain/qi-20577734.jpg",
+            "subject": "mountain",
+            "qualityImage": true,
+            "title": "File:Kuhmöser von Süden.jpg",
+            "licence": "cc0",
+            "artist": "Hermann Hammer ( User:Haneburger )",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/48/Kuhm%C3%B6ser_von_S%C3%BCden.jpg/500px-Kuhm%C3%B6ser_von_S%C3%BCden.jpg",
+            "sha256": "22728729ecc0e9a6ec9bd593bc0262d64f7a3460d49a41d0ea630df8586f5f9c"
+        },
+        {
+            "file": "quality/mountain/qi-27252388.jpg",
+            "subject": "mountain",
+            "qualityImage": true,
+            "title": "File:Tramo de Gmunden, vagono 100.jpg",
+            "licence": "cc0",
+            "artist": "Tokfo",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/52/Tramo_de_Gmunden%2C_vagono_100.jpg/500px-Tramo_de_Gmunden%2C_vagono_100.jpg",
+            "sha256": "cf1c5bbcbf12d9fe02a098f16ba484ade0d71a39b23b32370d5c385ac5132a7b"
+        },
+        {
+            "file": "quality/mountain/qi-35906396.jpg",
+            "subject": "mountain",
+            "qualityImage": true,
+            "title": "File:Watch tower of the dam, Embalse de los Bermejales, Andalusia, Spain.jpg",
+            "licence": "cc0",
+            "artist": "Jebulon",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/d3/Watch_tower_of_the_dam%2C_Embalse_de_los_Bermejales%2C_Andalusia%2C_Spain.jpg/500px-Watch_tower_of_the_dam%2C_Embalse_de_los_Bermejales%2C_Andalusia%2C_Spain.jpg",
+            "sha256": "5e7cf85576ad54b39317558d71f19052e01ded2776f5d9d840d6ab8357d59bb6"
+        },
+        {
+            "file": "quality/mountain/qi-160384288.jpg",
+            "subject": "mountain",
+            "qualityImage": true,
+            "title": "File:Ochsenberg in Halle (Saale)-Kröllwitz (Februar 2025).jpg",
+            "licence": "cc0",
+            "artist": "Romzig",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/68/Ochsenberg_in_Halle_%28Saale%29-Kr%C3%B6llwitz_%28Februar_2025%29.jpg/500px-Ochsenberg_in_Halle_%28Saale%29-Kr%C3%B6llwitz_%28Februar_2025%29.jpg",
+            "sha256": "177b8440ee5e6f8c9cc53ed5a6292fc33a6476ef482efb35ae7e417ce8d76d81"
+        },
+        {
+            "file": "quality/mountain/ord-20769290.jpg",
+            "subject": "mountain",
+            "qualityImage": false,
+            "title": "File:Olperer, Fußstein und Schrammacher.jpg",
+            "licence": "cc0",
+            "artist": "Hermann Hammer ( User:Haneburger )",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/b2/Olperer%2C_Fu%C3%9Fstein_und_Schrammacher.jpg/500px-Olperer%2C_Fu%C3%9Fstein_und_Schrammacher.jpg",
+            "sha256": "b10eb5612cb003880203ba63fa15aa5f43f527f4670cce34fcbfe6d38d5d6616"
+        },
+        {
+            "file": "quality/mountain/ord-59479902.jpg",
+            "subject": "mountain",
+            "qualityImage": false,
+            "title": "File:Abandoned bus in San Pedro de Atacama (Unsplash).jpg",
+            "licence": "cc0",
+            "artist": "Pablo Garcia Saldaña pagsa_",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/f5/Abandoned_bus_in_San_Pedro_de_Atacama_%28Unsplash%29.jpg/500px-Abandoned_bus_in_San_Pedro_de_Atacama_%28Unsplash%29.jpg",
+            "sha256": "a3c6cd9bfc2384d7d79ebc51da0b2eb0c3d80b12e51ff653a2cd40e578b56232"
+        },
+        {
+            "file": "quality/mountain/ord-61854717.jpg",
+            "subject": "mountain",
+            "qualityImage": false,
+            "title": "File:Hot air balloon in mountains (Unsplash).jpg",
+            "licence": "cc0",
+            "artist": "Thomas Kelley thkelley",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/5c/Hot_air_balloon_in_mountains_%28Unsplash%29.jpg/500px-Hot_air_balloon_in_mountains_%28Unsplash%29.jpg",
+            "sha256": "25deec862a3551a215710655a23e0f8e645fdb478521e53e1ba261473a077b20"
+        },
+        {
+            "file": "quality/mountain/ord-66873333.jpg",
+            "subject": "mountain",
+            "qualityImage": false,
+            "title": "File:Collectie Fotocollectie Dienst voor Legercontacten Indonesië, fotonummer 5760, Bestanddeelnr 5760.jpg",
+            "licence": "cc0",
+            "artist": "Nationaal Archief",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/00/Collectie_Fotocollectie_Dienst_voor_Legercontacten_Indonesi%C3%AB%2C_fotonummer_5760%2C_Bestanddeelnr_5760.jpg/500px-Collectie_Fotocollectie_Dienst_voor_Legercontacten_Indonesi%C3%AB%2C_fotonummer_5760%2C_Bestanddeelnr_5760.jpg",
+            "sha256": "b68231dbbedaa7ba573e274b6aa94c59228979d59608c443845bf425e8ac606c"
+        },
+        {
+            "file": "quality/waterfall/qi-104225780.jpg",
+            "subject": "waterfall",
+            "qualityImage": true,
+            "title": "File:Parc de la Chute-Montmorency 001.jpg",
+            "licence": "cc0",
+            "artist": "Wilfredor",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/ff/Parc_de_la_Chute-Montmorency_001.jpg/500px-Parc_de_la_Chute-Montmorency_001.jpg",
+            "sha256": "62b4d8e2909c2460d1835803e9d140e39857258182f82c9de353a45261f7b90c"
+        },
+        {
+            "file": "quality/waterfall/qi-174924580.jpg",
+            "subject": "waterfall",
+            "qualityImage": true,
+            "title": "File:Zorge (September 2025) 2.jpg",
+            "licence": "cc0",
+            "artist": "Romzig",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/8e/Zorge_%28September_2025%29_2.jpg/500px-Zorge_%28September_2025%29_2.jpg",
+            "sha256": "e0096d80054feaac528fb6e918410782c60632b0f8f9888537aaf944b2162163"
+        },
+        {
+            "file": "quality/waterfall/qi-174924581.jpg",
+            "subject": "waterfall",
+            "qualityImage": true,
+            "title": "File:Zorge (September 2025) 1.jpg",
+            "licence": "cc0",
+            "artist": "Romzig",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/0d/Zorge_%28September_2025%29_1.jpg/500px-Zorge_%28September_2025%29_1.jpg",
+            "sha256": "928520511b0b9bb645d386be89cd2df9b7403f2dfaa74f0847434f8cd81f87a5"
+        },
+        {
+            "file": "quality/waterfall/ord-61824298.jpg",
+            "subject": "waterfall",
+            "qualityImage": false,
+            "title": "File:Peaceful waterfall (Unsplash).jpg",
+            "licence": "cc0",
+            "artist": "Jeffrey Workman jeffreyp",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/b1/Peaceful_waterfall_%28Unsplash%29.jpg/500px-Peaceful_waterfall_%28Unsplash%29.jpg",
+            "sha256": "355b0cb5d790c2b1e3d55c76c24b18320d0fc594efbb3bc1ccc455d5a92e029c"
+        },
+        {
+            "file": "quality/waterfall/ord-61897941.jpg",
+            "subject": "waterfall",
+            "qualityImage": false,
+            "title": "File:Mossy rock mountain and waterfall (Unsplash).jpg",
+            "licence": "cc0",
+            "artist": "Jacek Smoter jack070",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c2/Mossy_rock_mountain_and_waterfall_%28Unsplash%29.jpg/500px-Mossy_rock_mountain_and_waterfall_%28Unsplash%29.jpg",
+            "sha256": "3886b303ead467ad2b32a895be69e205db7fe2f66a0d16ee0ac7b6a0ea74fc77"
+        },
+        {
+            "file": "quality/waterfall/ord-62212526.jpg",
+            "subject": "waterfall",
+            "qualityImage": false,
+            "title": "File:Adrian 2017-04-05 (Unsplash JP5llKjxj7A).jpg",
+            "licence": "cc0",
+            "artist": "adrian aows",
+            "thumbUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/62/Adrian_2017-04-05_%28Unsplash_JP5llKjxj7A%29.jpg/500px-Adrian_2017-04-05_%28Unsplash_JP5llKjxj7A%29.jpg",
+            "sha256": "96d8a36683fe54badc7c3641f751cebbfdaf94bc46b7389e07eed1e39681c6ca"
+        }
+    ]
+}

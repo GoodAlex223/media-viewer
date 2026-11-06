@@ -1,0 +1,554 @@
+feat(ml): keep departed source-folder CLIP vectors, read-only lookup (G3 Task 2) — PARKED
+
+Parked, unmerged and unreviewed: the G3 before run (2026-10-13) measured
+CLIP on the moved files at <= 1.2 s of a 119.8 s sort, so the user
+re-scoped G3 to the 71 videos that make every sort retrain. Kept here
+in case source-CLIP reuse is picked up again (it needs Task 3 and a
+task review first).
+
+Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>
+
+
+diff --git a/media-viewer.js b/media-viewer.js
+index 1e88510..951c517 100644
+--- a/media-viewer.js
++++ b/media-viewer.js
+@@ -170,6 +170,10 @@ class MediaViewer {
+         this.mlWorker = null;
+         this.featureCache = new Map(); // Map<filePath, Float32Array>
+         this.clipCache = new Map(); // Map<filePath, Float32Array(512)>
++        // CLIP vectors whose file left this folder this session (G3): Map<filename, {clip, size, mtimeMs}>.
++        // Read-only to MlTrainingManager, through _lookupSourceClip; never saved. See _rememberDepartedClip.
++        this.departedClips = new Map();
++        this._departedClipEvictionLogged = false;
+         this.featureMetadata = new Map(); // Map<filePath, {size: number, mtime: number}>
+         this.predictionScores = new Map(); // Map<filePath, number (0-1)>
+         this.mlModelState = null; // Persisted model weights
+@@ -1414,6 +1418,7 @@ class MediaViewer {
+      * Centralized file removal from the media list.
+      * Handles array splice, cache cleanup (predictionScores, featureCache, clipCache, featureMetadata, perceptualHashes,
+      * bulkRated (save deferrable), bulkRatedPairs keys, the like-or-skip set), and currentIndex adjustment.
++     * The file's CLIP half is first kept in departedClips (G3), so the purge does not lose it for the training rebuild.
+      * @param {string} filePath - Absolute path of the file to remove
+      * @param {{deferBulkSave?: boolean}} [options] - skip the bulk-rated save; the caller saves once
+      * @returns {number} The index the file was at before removal, or -1 if not found
+@@ -1426,6 +1431,18 @@ class MediaViewer {
+         this.mediaFiles.splice(index, 1);
+         this._mediaPathIndex = null; // invalidate cached path→index map
+ 
++        // G3: keep the CLIP half of a file leaving the folder, under the stat this folder's cache would save
++        // it with, so the training rebuild after the move can reuse it (spec § 4.1). Before the purge below.
++        const departingClip = this.clipCache.get(filePath);
++        const departingMeta = this.featureMetadata.get(filePath);
++        if (departingClip && departingMeta) {
++            this._rememberDepartedClip(removedName, {
++                clip: departingClip,
++                size: departingMeta.size,
++                mtimeMs: departingMeta.mtime,
++            });
++        }
++
+         this.predictionScores.delete(filePath);
+         this.featureCache.delete(filePath);
+         this.clipCache.delete(filePath);
+@@ -1449,6 +1466,57 @@ class MediaViewer {
+         return index;
+     }
+ 
++    // The one way into departedClips (G3 spec § 4.1). It holds the CLIP half of files that left this folder
++    // this session — moved in Explorer (the cache load's prune) or by the app (removeFileFromList) — so a
++    // training-cache miss on the same bytes can reuse it instead of running CLIP again. A zero stat never
++    // matches a real one, so it is refused, as the cache writers do. Newest last; past the cap the oldest go.
++    _rememberDepartedClip(name, entry) {
++        const DEPARTED_CLIP_LIMIT = 5000; // spec D4: ~10 MB of CLIP vectors at most
++        const { clip, size, mtimeMs } = entry || {};
++        if (!clip || clip.length !== 512 || !size || !mtimeMs) return;
++        this.departedClips.delete(name);
++        this.departedClips.set(name, { clip, size, mtimeMs });
++        while (this.departedClips.size > DEPARTED_CLIP_LIMIT) {
++            this.departedClips.delete(this.departedClips.keys().next().value);
++            if (!this._departedClipEvictionLogged) {
++                this._departedClipEvictionLogged = true;
++                window.electronAPI?.logPerf?.(`Departed CLIP vectors over ${DEPARTED_CLIP_LIMIT}: evicting the oldest`);
++            }
++        }
++    }
++
++    // The CLIP half the SOURCE folder holds for a training-folder file (G3 spec § 4.2), injected into
++    // MlTrainingManager as lookupSourceClip. Reads departedClips, then the live clipCache at the source path
++    // of the same name (a file moved in Explorer while the app is open, or a copy). Name, size and mtime
++    // must all match; the first match is returned as a COPY, so the manager never holds a host array. Writes
++    // nothing. Only the CLIP half: source-folder 64-dim vectors lack file metadata (spec § 2.2).
++    _lookupSourceClip(file) {
++        const candidates = [];
++        const departed = this.departedClips.get(file.name);
++        if (departed) candidates.push(departed);
++        if (this.baseFolderPath) {
++            // Built as _loadFeatureCacheLocked's makePath builds it, so it is the key load-folder gave the file.
++            const sep = this.baseFolderPath.includes('\\') ? '\\' : '/';
++            const sourcePath = this.baseFolderPath.replace(/[\\/]+$/, '') + sep + file.name;
++            const liveClip = this.clipCache.get(sourcePath);
++            const liveMeta = this.featureMetadata.get(sourcePath);
++            if (liveClip && liveMeta) candidates.push({ clip: liveClip, size: liveMeta.size, mtimeMs: liveMeta.mtime });
++        }
++        for (const c of candidates) {
++            if (c.clip.length === 512 && c.size === file.size && c.mtimeMs === file.mtimeMs) {
++                return Float32Array.from(c.clip);
++            }
++        }
++        if (candidates.length > 0) {
++            const c = candidates[0];
++            window.electronAPI?.logPerf?.(
++                `Source CLIP not reused for ${file.name}: source size/mtime ${c.size}/${c.mtimeMs} ` +
++                    `vs training ${file.size}/${file.mtimeMs}`
++            );
++        }
++        return null;
++    }
++
+     // Every rated-pair key that names `fileName` on either side. removeFileFromList prunes these;
+     // the move sites capture them onto the history entry FIRST (as `prunedPairKeys`) so undo can
+     // reinstate them via restoreFeatureCachesFromHistory — otherwise a pair rated before a
+@@ -3163,6 +3231,7 @@ class MediaViewer {
+             this.featureCache.clear();
+             this.clipCache.clear();
+             this.featureMetadata.clear();
++            this.departedClips.clear();
+             this.predictionScores.clear();
+             // Hydrate corrective-training records for this folder (prunes stale filenames)
+             await this.loadBulkRatedFile();
+@@ -8293,9 +8362,18 @@ class MediaViewer {
+         const freshFeatureCache = new Map();
+         const freshFeatureMetadata = new Map();
+         const freshClip = new Map();
++        const freshDeparted = new Map(); // G3: CLIP halves of files that left the folder since the last save
+         const ingest = (filename, vector, clipVector, size, mtime) => {
+             const currentFile = currentFiles.get(filename);
+-            if (!currentFile) return; // pruned — file no longer in folder
++            if (!currentFile) {
++                // Pruned — the file is no longer in the folder (moved in Explorer, most likely into a training
++                // folder). Its CLIP half is staged for departedClips (spec § 4.1); the folder's own maps never
++                // see it, so this folder's next save cannot write it back.
++                if (clipVector && clipVector.length === 512 && size && mtime) {
++                    freshDeparted.set(filename, { clip: clipVector, size, mtimeMs: mtime });
++                }
++                return;
++            }
+             if (vector.length !== expectedDim) return; // wrong dimension
+             if (size !== currentFile.size || mtime !== currentFile.mtimeMs) return; // stale
+             const fullPath = makePath(filename);
+@@ -8308,11 +8386,15 @@ class MediaViewer {
+ 
+         // Commit a fully-loaded set into the live caches. featureCache/featureMetadata are
+         // REPLACED (prunes removed/stale files); clip vectors are MERGED (additive — matches the
+-        // pre-incremental behavior and preserves in-memory-only vectors added by extraction).
++        // pre-incremental behavior and preserves in-memory-only vectors added by extraction). The CLIP
++        // halves of pruned files are merged into departedClips (G3), a map no save ever reads.
+         const commitFresh = () => {
+             this.featureCache = freshFeatureCache;
+             this.featureMetadata = freshFeatureMetadata;
+             for (const [k, v] of freshClip) this.clipCache.set(k, v);
++            // Merged, not replaced: an in-app move earlier this session may already have remembered a file
++            // whose entry this folder's last save dropped.
++            for (const [name, entry] of freshDeparted) this._rememberDepartedClip(name, entry);
+             return this.featureCache.size;
+         };
+ 
+@@ -8414,6 +8496,7 @@ class MediaViewer {
+                 freshFeatureCache.clear();
+                 freshFeatureMetadata.clear();
+                 freshClip.clear();
++                freshDeparted.clear();
+                 for (const [filename, entry] of Object.entries(parsed.features || {})) {
+                     ingest(
+                         filename,
+diff --git a/tests/like-or-skip-glue.test.js b/tests/like-or-skip-glue.test.js
+index 0e6e610..8a54649 100644
+--- a/tests/like-or-skip-glue.test.js
++++ b/tests/like-or-skip-glue.test.js
+@@ -166,6 +166,8 @@ describe('removeFileFromList forgets the skip and can defer the bulk-rated save'
+             predictionScores: new Map(),
+             featureCache: new Map(),
+             clipCache: new Map(),
++            departedClips: new Map(),
++            _rememberDepartedClip: extract('_rememberDepartedClip'),
+             jxlFrameCache: new Map(),
+             featureMetadata: new Map(),
+             perceptualHashes: new Map(),
+@@ -354,6 +356,8 @@ describe('dislikeSkippedFiles — one guarded batch (spec § 6)', () => {
+             predictionScores: new Map([['/f/a', 0.9]]),
+             featureCache: new Map(),
+             clipCache: new Map(),
++            departedClips: new Map(),
++            _rememberDepartedClip: extract('_rememberDepartedClip'),
+             jxlFrameCache: new Map(),
+             featureMetadata: new Map(),
+             perceptualHashes: new Map(),
+@@ -1732,6 +1736,8 @@ describe('a batch and its undo round-trip the per-file caches (G2 final review F
+             predictionScores: new Map(),
+             featureCache: new Map([['/f/a', vector.slice(0, 64)]]),
+             clipCache: new Map(),
++            departedClips: new Map(),
++            _rememberDepartedClip: extract('_rememberDepartedClip'),
+             jxlFrameCache: new Map(),
+             featureMetadata: new Map([['/f/a', { size: 10, mtime: 99 }]]),
+             perceptualHashes: new Map(),
+@@ -1830,6 +1836,8 @@ describe('the batch releases an on-screen video BEFORE the first rename (G2 fina
+             predictionScores: new Map(),
+             featureCache: new Map(),
+             clipCache: new Map(),
++            departedClips: new Map(),
++            _rememberDepartedClip: extract('_rememberDepartedClip'),
+             jxlFrameCache: new Map(),
+             featureMetadata: new Map(),
+             perceptualHashes: new Map(),
+diff --git a/tests/media-viewer-utils.test.js b/tests/media-viewer-utils.test.js
+index 07f0486..9fcedf3 100644
+--- a/tests/media-viewer-utils.test.js
++++ b/tests/media-viewer-utils.test.js
+@@ -329,6 +329,8 @@ describe('removeFileFromList', () => {
+             predictionScores: new Map(),
+             featureCache: new Map(),
+             clipCache: new Map(),
++            departedClips: new Map(),
++            _rememberDepartedClip: extractMethod('_rememberDepartedClip'),
+             featureMetadata: new Map(),
+             perceptualHashes: new Map(),
+             jxlFrameCache: new Map(),
+@@ -2652,6 +2654,8 @@ describe('removeFileFromList bulk-rated purge', () => {
+             predictionScores: new Map(),
+             featureCache: new Map(),
+             clipCache: new Map(),
++            departedClips: new Map(),
++            _rememberDepartedClip: extractMethod('_rememberDepartedClip'),
+             featureMetadata: new Map(),
+             perceptualHashes: new Map(),
+             jxlFrameCache: new Map(),
+@@ -2796,6 +2800,8 @@ describe('valid-pairs bounds (G3 Task 3)', () => {
+             predictionScores: new Map(),
+             featureCache: new Map(),
+             clipCache: new Map(),
++            departedClips: new Map(),
++            _rememberDepartedClip: extractMethod('_rememberDepartedClip'),
+             jxlFrameCache: new Map(),
+             featureMetadata: new Map(),
+             perceptualHashes: new Map(),
+@@ -2823,6 +2829,8 @@ describe('bulkRatedPairs key capture + restore across undo (G1 T3)', () => {
+             predictionScores: new Map(),
+             featureCache: new Map(),
+             clipCache: new Map(),
++            departedClips: new Map(),
++            _rememberDepartedClip: extractMethod('_rememberDepartedClip'),
+             jxlFrameCache: new Map(),
+             featureMetadata: new Map(),
+             perceptualHashes: new Map(),
+diff --git a/tests/source-clip-reuse.test.js b/tests/source-clip-reuse.test.js
+new file mode 100644
+index 0000000..84b43a3
+--- /dev/null
++++ b/tests/source-clip-reuse.test.js
+@@ -0,0 +1,304 @@
++// G3 source-folder CLIP reuse (spec docs/superpowers/specs/2026-10-13-g3-source-clip-reuse-design.md): the
++// MediaViewer half — departedClips, its two feeds (the source-cache load and removeFileFromList) and the
++// read-only _lookupSourceClip; Task 3 adds the composition with a real MlTrainingManager.
++import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
++import { createRequire } from 'module';
++import * as LikeOrSkip from '../like-or-skip.js';
++
++const require = createRequire(import.meta.url);
++const fs = require('fs');
++const path = require('path');
++const { packFeatureChunk } = require('../feature-cache-transport.js');
++const source = fs.readFileSync(path.join(__dirname, '..', 'media-viewer.js'), 'utf-8');
++
++const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
++
++/** A MediaViewer method's source text, found by brace counting (the technique of media-viewer-utils.test.js). */
++function methodSource(name) {
++    const match = source.match(new RegExp(`^ {4}(async\\s+)?${name}\\(([^)]*)\\)\\s*\\{`, 'm'));
++    if (!match) {
++        throw new Error(`Could not find method: ${name}`);
++    }
++    const open = match.index + match[0].length - 1;
++    let depth = 0;
++    for (let i = open; i < source.length; i++) {
++        if (source[i] === '{') {
++            depth++;
++        } else if (source[i] === '}' && --depth === 0) {
++            return { isAsync: Boolean(match[1]), params: match[2], body: source.slice(open + 1, i) };
++        }
++    }
++    throw new Error(`Unbalanced braces in: ${name}`);
++}
++
++/** A MediaViewer method as a callable, invoked with `.call(mockCtx, …)`. */
++function extract(name) {
++    const { isAsync, params, body } = methodSource(name);
++    return new (isAsync ? AsyncFunction : Function)(params, body);
++}
++
++const clipOf = (v) => new Float32Array(512).fill(v);
++
++const savedWindow = globalThis.window;
++const savedMediaViewer = globalThis.MediaViewer;
++let logPerf;
++beforeEach(() => {
++    logPerf = vi.fn();
++    globalThis.window = { electronAPI: { logPerf } };
++    // _loadFeatureCacheLocked reads the static MediaViewer.FEATURE_CACHE_VERSION, which an extracted body
++    // resolves through the global object. Keep in sync with media-viewer.js.
++    globalThis.MediaViewer = { FEATURE_CACHE_VERSION: 4 };
++});
++afterEach(() => {
++    globalThis.window = savedWindow;
++    globalThis.MediaViewer = savedMediaViewer;
++});
++
++/** The `this` the G3 host methods touch: removeFileFromList's full list plus departedClips. */
++function hostCtx(overrides = {}) {
++    return {
++        baseFolderPath: '/src',
++        mediaFiles: [],
++        currentIndex: 0,
++        predictionScores: new Map(),
++        featureCache: new Map(),
++        clipCache: new Map(),
++        featureMetadata: new Map(),
++        perceptualHashes: new Map(),
++        jxlFrameCache: new Map(),
++        bulkRated: new Map(),
++        bulkRatedPairs: new Set(),
++        likeOrSkip: new LikeOrSkip.SkipTracker(),
++        departedClips: new Map(),
++        _departedClipEvictionLogged: false,
++        _bulkPairKeysReferencing: () => [],
++        saveBulkRatedFile: vi.fn(),
++        _rememberDepartedClip: extract('_rememberDepartedClip'),
++        ...overrides,
++    };
++}
++
++describe('_rememberDepartedClip — the one way into departedClips', () => {
++    const remember = extract('_rememberDepartedClip');
++
++    it('keeps a valid entry', () => {
++        const ctx = hostCtx();
++        const clip = clipOf(0.5);
++        remember.call(ctx, 'a.jpg', { clip, size: 10, mtimeMs: 99 });
++        expect(ctx.departedClips.get('a.jpg')).toEqual({ clip, size: 10, mtimeMs: 99 });
++    });
++
++    it('ignores a wrong-length vector and a zero stat', () => {
++        const ctx = hostCtx();
++        remember.call(ctx, 'short.jpg', { clip: new Float32Array(64), size: 10, mtimeMs: 99 });
++        remember.call(ctx, 'nosize.jpg', { clip: clipOf(0.5), size: 0, mtimeMs: 99 });
++        remember.call(ctx, 'nomtime.jpg', { clip: clipOf(0.5), size: 10, mtimeMs: 0 });
++        expect(ctx.departedClips.size).toBe(0);
++    });
++
++    it('re-remembering a name replaces the older entry and moves it last (Review Focus 5)', () => {
++        const ctx = hostCtx();
++        remember.call(ctx, 'a.jpg', { clip: clipOf(0.1), size: 10, mtimeMs: 1 });
++        remember.call(ctx, 'b.jpg', { clip: clipOf(0.2), size: 20, mtimeMs: 2 });
++        remember.call(ctx, 'a.jpg', { clip: clipOf(0.3), size: 11, mtimeMs: 3 });
++        expect([...ctx.departedClips.keys()]).toEqual(['b.jpg', 'a.jpg']);
++        expect(ctx.departedClips.get('a.jpg').mtimeMs).toBe(3);
++    });
++
++    it('evicts the oldest entry past 5000 and logs only the first eviction', () => {
++        const ctx = hostCtx();
++        const clip = clipOf(0.5); // shared: the cap counts entries, not vectors
++        for (let i = 0; i < 5002; i++) {
++            remember.call(ctx, `f${i}.jpg`, { clip, size: 10, mtimeMs: 1 });
++        }
++        expect(ctx.departedClips.size).toBe(5000);
++        expect(ctx.departedClips.has('f0.jpg')).toBe(false);
++        expect(ctx.departedClips.has('f1.jpg')).toBe(false);
++        expect(ctx.departedClips.has('f2.jpg')).toBe(true);
++        expect(logPerf.mock.calls).toEqual([['Departed CLIP vectors over 5000: evicting the oldest']]);
++    });
++});
++
++describe.each([
++    ['binary', true],
++    ['legacy JSON', false],
++])('_loadFeatureCacheLocked keeps departed CLIP vectors (%s chunks)', (_label, binary) => {
++    const load = extract('_loadFeatureCacheLocked');
++    const cacheEntry = (name, size, mtime, clip = 0.25) => [
++        name,
++        {
++            vector: Array.from({ length: 64 }, () => 0.5),
++            clipVector: clip === null ? null : Array.from({ length: 512 }, () => clip),
++            size,
++            mtime,
++        },
++    ];
++    function installCache(pairs) {
++        Object.assign(globalThis.window.electronAPI, {
++            featureCacheOpen: vi.fn(async () => ({ success: true, version: 4, count: pairs.length })),
++            featureCacheChunk: vi.fn(async (offset, limit) => {
++                const slice = pairs.slice(offset, offset + limit);
++                return binary ? packFeatureChunk(slice) : { entries: slice };
++            }),
++            featureCacheClose: vi.fn(async () => ({ success: true })),
++        });
++    }
++    const present = { name: 'here.jpg', path: '/src/here.jpg', size: 10, mtimeMs: 100 };
++
++    it('keeps the CLIP half of an entry whose file left the folder, and nothing else of it', async () => {
++        installCache([cacheEntry('here.jpg', 10, 100), cacheEntry('gone.jpg', 20, 200, 0.75)]);
++        const ctx = hostCtx({ mediaFiles: [present] });
++        await load.call(ctx, {});
++        expect([...ctx.departedClips.keys()]).toEqual(['gone.jpg']);
++        const kept = ctx.departedClips.get('gone.jpg');
++        expect(kept.size).toBe(20);
++        expect(kept.mtimeMs).toBe(200);
++        expect(kept.clip).toHaveLength(512);
++        expect(kept.clip[0]).toBeCloseTo(0.75);
++        // The folder's own maps never see it, so its next save cannot write it back.
++        expect(ctx.featureCache.has('/src/gone.jpg')).toBe(false);
++        expect(ctx.clipCache.has('/src/gone.jpg')).toBe(false);
++        expect(ctx.featureMetadata.has('/src/gone.jpg')).toBe(false);
++        expect(ctx.featureCache.has('/src/here.jpg')).toBe(true);
++    });
++
++    it('does not keep a stale entry of a file still in the folder', async () => {
++        installCache([cacheEntry('here.jpg', 10, 99)]); // mtime changed since the save
++        const ctx = hostCtx({ mediaFiles: [present] });
++        await load.call(ctx, {});
++        expect(ctx.departedClips.size).toBe(0);
++    });
++
++    it('does not keep a departed entry without a CLIP half', async () => {
++        // Passes before the change by construction (nothing is kept yet). Pins the `clipVector` check:
++        // mutation-check by dropping it from the departed branch of ingest and watching this fail.
++        installCache([cacheEntry('here.jpg', 10, 100), cacheEntry('gone.jpg', 20, 200, null)]);
++        const ctx = hostCtx({ mediaFiles: [present] });
++        // The count matters: without the check, `null.length` throws inside the load, which swallows it
++        // (the streaming path falls back, the fallback fails too) and returns 0 — departedClips would still
++        // read empty, so the size assertion alone could not tell the check from the swallowed throw.
++        expect(await load.call(ctx, {})).toBe(1);
++        expect(ctx.departedClips.size).toBe(0);
++    });
++
++    it('keeps nothing from a load cancelled after the departed entry was read', async () => {
++        // Passes before the change by construction (nothing is kept yet). Pins that the merge happens in
++        // commitFresh, not in ingest: mutation-check by calling _rememberDepartedClip from ingest and
++        // watching this fail. 1,001 entries make two CHUNK=1000 reads; the cancel lands between them.
++        const pairs = [cacheEntry('gone.jpg', 20, 200)];
++        for (let i = 0; i < 1000; i++) {
++            pairs.push(cacheEntry(`f${i}.jpg`, 1, 1));
++        }
++        installCache(pairs);
++        const controller = new AbortController();
++        const ctx = hostCtx({ mediaFiles: [present] });
++        await load.call(ctx, { signal: controller.signal, onProgress: () => controller.abort() });
++        expect(ctx.departedClips.size).toBe(0);
++    });
++});
++
++describe('removeFileFromList keeps the departing CLIP half', () => {
++    const removeFileFromList = extract('removeFileFromList');
++    const file = { name: 'a.jpg', path: '/src/a.jpg', size: 10, mtimeMs: 99 };
++
++    it('remembers it under the stat this folder would have saved it with', () => {
++        const clip = clipOf(0.75);
++        const ctx = hostCtx({
++            mediaFiles: [file],
++            clipCache: new Map([[file.path, clip]]),
++            featureMetadata: new Map([[file.path, { size: 10, mtime: 99 }]]),
++        });
++        removeFileFromList.call(ctx, file.path);
++        expect(ctx.departedClips.get('a.jpg')).toEqual({ clip, size: 10, mtimeMs: 99 });
++        expect(ctx.clipCache.has(file.path)).toBe(false); // the purge itself is unchanged
++    });
++
++    it('remembers nothing without a recorded stat', () => {
++        // Passes before the change by construction. Mutation-check: drop `&& departingMeta` → TypeError.
++        const ctx = hostCtx({ mediaFiles: [file], clipCache: new Map([[file.path, clipOf(0.75)]]) });
++        removeFileFromList.call(ctx, file.path);
++        expect(ctx.departedClips.size).toBe(0);
++    });
++
++    it('remembers nothing without a CLIP half', () => {
++        // Passes before the change by construction. Mutation-check: drop `departingClip &&` → an entry
++        // with clip undefined reaches _rememberDepartedClip, which must still refuse it (keep the test).
++        const ctx = hostCtx({ mediaFiles: [file], featureMetadata: new Map([[file.path, { size: 10, mtime: 99 }]]) });
++        removeFileFromList.call(ctx, file.path);
++        expect(ctx.departedClips.size).toBe(0);
++    });
++});
++
++describe('_lookupSourceClip — the read-only lookup the manager is given', () => {
++    const lookup = extract('_lookupSourceClip');
++    const training = { name: 'a.jpg', path: '/likes/a.jpg', size: 10, mtimeMs: 99 };
++
++    it('returns a copy of a departed vector whose name, size and mtime match', () => {
++        const clip = clipOf(0.75);
++        const ctx = hostCtx({ departedClips: new Map([['a.jpg', { clip, size: 10, mtimeMs: 99 }]]) });
++        const got = lookup.call(ctx, training);
++        expect(got).not.toBe(clip);
++        expect(Array.from(got)).toEqual(Array.from(clip));
++    });
++
++    it('finds a file still in the source folder through the live clipCache', () => {
++        const clip = clipOf(0.6);
++        const ctx = hostCtx({
++            clipCache: new Map([['/src/a.jpg', clip]]),
++            featureMetadata: new Map([['/src/a.jpg', { size: 10, mtime: 99 }]]),
++        });
++        const got = lookup.call(ctx, training);
++        expect(got).not.toBe(clip);
++        expect(Array.from(got)).toEqual(Array.from(clip));
++    });
++
++    it('builds the source path correctly for a Windows folder and a drive root (Review Focus 1)', () => {
++        const clip = clipOf(0.6);
++        for (const [base, key] of [
++            ['C:\\Users\\x\\likes', 'C:\\Users\\x\\likes\\a.jpg'],
++            ['D:\\', 'D:\\a.jpg'],
++        ]) {
++            const ctx = hostCtx({
++                baseFolderPath: base,
++                clipCache: new Map([[key, clip]]),
++                featureMetadata: new Map([[key, { size: 10, mtime: 99 }]]),
++            });
++            expect(lookup.call(ctx, training), base).not.toBeNull();
++        }
++    });
++
++    it('returns null and logs one near miss when the name matches but the stat does not', () => {
++        const ctx = hostCtx({ departedClips: new Map([['a.jpg', { clip: clipOf(0.75), size: 10, mtimeMs: 50 }]]) });
++        expect(lookup.call(ctx, training)).toBeNull();
++        expect(logPerf.mock.calls).toEqual([
++            ['Source CLIP not reused for a.jpg: source size/mtime 10/50 vs training 10/99'],
++        ]);
++    });
++
++    it('returns null and logs nothing when the source has no entry by that name', () => {
++        expect(lookup.call(hostCtx(), training)).toBeNull();
++        expect(logPerf).not.toHaveBeenCalled();
++    });
++
++    it('a stale departed entry gives way to a fresh live one, with no near-miss line (Review Focus 4)', () => {
++        const live = clipOf(0.6);
++        const ctx = hostCtx({
++            departedClips: new Map([['a.jpg', { clip: clipOf(0.75), size: 10, mtimeMs: 50 }]]),
++            clipCache: new Map([['/src/a.jpg', live]]),
++            featureMetadata: new Map([['/src/a.jpg', { size: 10, mtime: 99 }]]),
++        });
++        expect(Array.from(lookup.call(ctx, training))).toEqual(Array.from(live));
++        expect(logPerf).not.toHaveBeenCalled();
++    });
++});
++
++describe('loadFolder', () => {
++    it('empties departedClips with the other per-folder caches', () => {
++        const { body } = methodSource('loadFolder');
++        const clipClear = body.indexOf('this.clipCache.clear();');
++        const departedClear = body.indexOf('this.departedClips.clear();');
++        expect(clipClear).toBeGreaterThan(-1);
++        expect(departedClear).toBeGreaterThan(clipClear);
++        expect(departedClear).toBeLessThan(body.indexOf('await this.loadBulkRatedFile();'));
++    });
++});
