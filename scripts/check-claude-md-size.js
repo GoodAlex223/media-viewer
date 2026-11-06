@@ -27,7 +27,7 @@ const GROWTH_WARN_BYTES = 500;
 // growth measured under the authoring rule (+12,705 bytes in the 20 days after the G5 audit, so
 // ~13.3 KB a cycle), rounded up to the next 1,000. That re-measure was not an audit: the file had
 // already passed the previous trigger (69,000), and the audit it called for is still owed. Change
-// it only at an audit, from the size after its trim (CLAUDE.md § Maintenance).
+// it next only at that owed audit, from the size after its trim (CLAUDE.md § Maintenance).
 const BYTE_TRIGGER = 85000;
 
 /**

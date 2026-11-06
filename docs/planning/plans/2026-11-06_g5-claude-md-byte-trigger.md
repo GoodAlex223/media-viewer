@@ -32,7 +32,7 @@ The trigger fired before it was re-set. `CLAUDE.md` passed 69,000 on 2026-11-02 
 ### Measurements (2026-11-06, `wc -c`-equivalent UTF-8 bytes of each commit's `CLAUDE.md`)
 
 - **Base**: `3fb797e` (2026-10-17) 58,582 bytes / 216 lines. **Now**: `2e5afc9` 71,287 bytes / 247 lines. **Growth**: +12,705 bytes (+21.7%), +31 lines (+14.4%), in 20 calendar days, about two plan-weeks (Oct 19–23 and Oct 26–30, both spilled).
-- **Rate against the week before the audit**: 14.7 KB in one week then (spec § 2.1, old style), ~6.4 KB a plan-week now. The authoring rule slowed growth to a bit under half; it did not stop it.
+- **Rate against the week before the audit**, both per calendar week: 14,659 bytes then (49,544 → 64,203, 2026-10-09 → 10-16, in the old style; spec § 2.1 gives the sizes, § 6.2 the 14.7 KB), ~4.4 KB now (12,705 ÷ 20 × 7). The authoring rule slowed growth to about 30% of that pace; it did not stop it. (Per plan-week the figure is ~6.4 KB, but plan-weeks now spill to ~10 days, so it does not compare with a 7-day week.)
 - **Per commit, against its own parent** (non-merge commits touching `CLAUDE.md`): 41 commits; 37 grew it, 3 shrank it; 9 added more than 500 bytes (the growth warning's threshold), 4 of them review-round answers (`de04008` PR #85 +1,488, `bdfc8e0` G2 PR 1 final review +827, `e3c2fae` PR #87 r1 +900, `1014cf9` PR #95 r1 +1,014). The largest: `233a672` G3 +1,960, `22f0a98` G2 PR 1 +1,908, `7cb1930` G1 I1 +1,334.
 - **Per landing on `main`** (first-parent):
 
@@ -99,6 +99,7 @@ The trigger fired before it was re-set. `CLAUDE.md` passed 69,000 on 2026-11-02 
 | `scripts/check-claude-md-size.js` | Modify | `BYTE_TRIGGER` 69000 → 85000, and its comment |
 | `docs/planning/plans/2026-11-06_g5-claude-md-byte-trigger.md` | Create | This plan |
 | `docs/planning/plans/README.md` | Modify | The Current Plans row |
+| `docs/superpowers/specs/2026-10-17-g5-claude-md-size-audit-design.md` | Modify | A superseded note on the post-implementation note's "`BYTE_TRIGGER` is 69,000" (review #3) |
 
 **Live-surface preflight:** the figure 69,000 appears, outside `docs/archive/`, in the script (live, changed here), the BACKLOG entry this closes (checked off at closeout), and dated records: DONE.md, WEEKLY.md, `docs/README.md`'s spec row, the size-audit spec, the 2026-10-17 Weekly Reviews run, the G2 pre-push spec (§ "measured 2026-10-30") and the v2 modules spec (§ 19 step 4, "66,578 bytes at `308d43c`, 2.4 KB below its 69,000-byte trigger, so v2's rules cannot land there"). The records are dated measurements and stay. `CLAUDE.md` § Maintenance states no figure, by design. The v2 line's conclusion now rests on the owed audit rather than on the trigger (§ 6).
 
@@ -140,6 +141,11 @@ The trigger fired before it was re-set. `CLAUDE.md` passed 69,000 on 2026-11-02 
 
 ### 2026-11-06 — PHASE: Review
 - The user approved the push. The ratchet passed (`media-viewer.js` 11,597 lines, at its ceiling) and the E2E gate skipped. PR #98 opened, not a draft. Review: light (`medium`), in a separate chat.
+- By user request, the review ran instead in a fresh read-only subagent (`medium`), at head `96721fa`, given the sources and not my reasoning. No blocking findings; it re-derived every figure from git (the 12 landing rows, the 41/37/3/9 commit counts, 85,000 and the 91,000 alternative) and ran the size-warning tests (25 passed). Its four findings, each checked first-hand and accepted:
+  1. **should-fix**: § 2's rate compared a plan-week (6.4 KB) with a calendar week (14.7 KB), so "a bit under half" was wrong; per calendar week it is ~4.4 KB, about 30% (12,705 ÷ 20 × 7 = 4,447; ÷ 14,659 = 0.303). Fixed here and in the PR body.
+  2. **nit**: the comment ended "Change it only at an audit" right above a change made outside one; now "Change it next only at that owed audit".
+  3. **nit**: the size-audit spec's post-implementation note still read "`BYTE_TRIGGER` is 69,000" as current; it gets a superseded note (the closeout rule for a frozen spec), in this PR rather than at closeout.
+  4. **nit**: the 14.7 KB was cited to spec § 2.1, which gives the sizes; § 6.2 states the figure. Both are cited now.
 
 ---
 
