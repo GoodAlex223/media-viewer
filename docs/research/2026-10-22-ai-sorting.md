@@ -605,7 +605,8 @@ should carry that fix as a candidate fixed in advance.
 - The largest loss on real folders is the mismatch between training and scoring, not the learner. Today's model
   ranks held-out files at 0.918 (A) and 1.000 (B) while they carry their metadata, and at 0.724 and 0.707 as a sort
   sees them. In these folders the metadata carries much of the class signal (as trained, 0.918 and 1.000, against
-  0.738 and 0.734 for today's learner on CLIP alone), and a sort never sees it.
+  0.738 and 0.734 for today's learner on CLIP alone), and a sort never sees it. (2026-11-06: that signal is mostly
+  how each vector was cached, not the files themselves; see the follow-up below.)
 - Z-scoring makes the mismatch worse, likely because it scales the metadata dims up to the size of every other
   feature, so the model leans on exactly what scoring takes away. In B its ranking falls below chance (0.352, and
   0.325 by margin). Its margins also run past the app's sigmoid clamp, tying 30% (B) to 47% (A) of its scores (see
@@ -616,10 +617,27 @@ should carry that fix as a candidate fixed in advance.
   vectors a sort scores match the ones the model trained on. The as-trained column already estimates that option:
   held-out files scored with their metadata reach 0.918 in A with today's learner, against 0.782 with the metadata
   left out. It was a control, not a candidate, so it is a lead too. This check also cannot show whether metadata
-  that separates a like folder from a dislike folder ranks a main folder's unrated files as well.
+  that separates a like folder from a dislike folder ranks a main folder's unrated files as well. (2026-11-06: the
+  follow-up below shows the as-trained column is not an estimate of that option.)
 - A converged fit took about 50 s at about 25,000 labels (1,052 L-BFGS iterations on one thread) where today's SGD
   takes 0.3 s; the recommendation's estimate of "well under a second for a few thousand labels" does not reach
   folders of this size.
+
+**Follow-up, 2026-11-06: the file details mostly mark how a vector was cached.** Checked after a side agent asked
+whether the as-trained numbers learn how the folders were filled rather than the user's taste.
+- A real file always has a size, so a zero file-size feature means the vector was computed without file details.
+  That is true of 60% of taste A's like vectors and 99.9% of B's, and of none of either taste's dislikes.
+- File details alone (a converged fit on the 14 file-detail dims, on the run's folds, which the check re-derived
+  exactly) rank held-out likes above dislikes at 0.791 in A and 0.995 in B, above CLIP alone (0.764, 0.702).
+- The likely cause, by reading the code: every folder's cache is the same `.feature_cache.json`. A folder browsed as
+  the main folder is filled by background extraction, which passes no file details, and training reuses those
+  entries when the folder is a like folder.
+- So the as-trained column measures mostly that marker, and it is not an estimate of giving the sort file details.
+  That option's value cannot be measured from these caches. Leaving the details out of training (0.782 in A) does
+  not touch them and stands as measured.
+- The folder listings show the real differences. In A, formats and sizes barely differ (jpg 73% against 69%, png
+  24% against 28%; median 0.57 against 0.66 MB). In B, the dislikes hold more videos (16% against under 1%) and
+  PNGs (39% against 24%) and are larger (median 1.02 against 0.60 MB).
 
 Not modelled: bulk-rated corrections, which train from the source folder's metadata-free vectors, and fp32 CLIP,
 which needs a re-extraction. The run took 55 minutes on one thread on the laptop described under *How this was
