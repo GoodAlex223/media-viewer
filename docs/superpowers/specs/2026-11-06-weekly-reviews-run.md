@@ -187,10 +187,10 @@ from it below keeps its qualifiers.
 | --- | --- | --- | --- |
 | 5 | Plugin context-cost read-out | ran; `claude-security` **disabled between scans** (user ruling) | ~778 always-on tokens, above the ~500 threshold; its 10-08 exception rested on trial leg 2, closed 10-11. Enabled total ~1,803 → ~1,025. *Not used recently* (user's reading): `claude-md-management` only. |
 | 1a | `modern-web-guidance` (Google Chrome) | pass; its guides parked | Every use runs `npx -y modern-web-guidance@latest`, outside the catalog's SHA pin, and it makes itself mandatory on every HTML/CSS/JS task. The catalog grew 315 → 317 with two non-fits. |
-| 1b | Codex as a second-opinion reviewer (`openai/codex-plugin-cc`) | **adopt**, a trial through the CLI; the plugin `defer` | Free plan per OpenAI's own README and pricing page (allowance unstated). The plugin is hook-bearing and would track OpenAI's `main`. Incumbent: `/code-review` on the same commit. |
+| 1b | Codex as a second-opinion reviewer (`openai/codex-plugin-cc`) | **adopt**, a trial through the CLI; the plugin `defer` | Free plan per OpenAI's own README and pricing page (allowance unstated). The plugin is hook-bearing and would track OpenAI's `main`. Incumbent: the posted review of the same commit, at its recorded `/code-review` level, plus first-hand checks; Codex runs in a fresh worktree outside the main checkout (both from PR #99's review). |
 | 2 | Idle compaction vs the keep-warm timer | defer | Both parked premises moved (VS Code has it since 2.1.314; the user skipped keep-warm on 11-06). What a summary loses is unmeasured. |
 | 3 | Codex routes subagents' state-changing calls through review | pass | Already tracked: 🟤 "A `Bash(*preload.js*)` ask rule and `guard-preload-bash.js` did not gate Workflow-tool subagents", with its probe. |
-| 4 out | 6 merges, 34 memory files | 3 propagate by hand-off; 3 rows closed `filed at origin` | Same 50 files on both sides, content-identical; each promoted item absent with a control and backed by four or more incidents. |
+| 4 out | 6 merges, 34 memory files | 3 propagate by hand-off; 3 rows closed `filed at origin` | Same 50 Markdown files on both sides, content-identical; each promoted item absent with a control and backed by more than one incident (the guard item by seven, the checkout item by nine, the escapes item by two, plus one that fits either cause; corrected in PR #99's review from "four or more"). |
 | 4 in | 37 new sibling lines | noted, plus 2 rows ruled | The sibling applied what media_viewer sent. Guard timeouts: 4, all before fail-closed, 0 after 10-17 → noted. "Minimum 2" lines → fixed in this PR. |
 
 **Checkpoint rulings (user)**: all six as recommended. `claude-security` disabled at project scope; the Codex CLI
@@ -250,6 +250,31 @@ user's screenshot of `/plugin` → Installed.
    against this run's own sources before applying: the pricing page names a lighter model for Free, and no OpenAI
    page states the Free allowance.
 
+### PR #99 review, round 1 (2026-11-06)
+
+Eight findings at head `91fdd04`, plus one remark from the reviewer's session (its own backslash test narrows a
+mechanism this card called "never pinned down"). Each was checked first-hand before it was fixed; none was refuted.
+
+1. **Fixed.** The Codex trial now runs in a fresh worktree outside the main checkout, which holds five git-ignored
+   `CLAUDE-SECURITY-*` folders, `.claude/settings.local.json` and a brainstorm token (listed by name here, not
+   opened). The disclosure says Codex sends whatever it reads, under a free-tier account, not only the diff.
+2. **Fixed.** "A quoted heredoc" is out of the backslash remedy (TODO row, outbound row, Appendix A item 4).
+   Reproduced here: two backslashes in a `<<'EOF'` heredoc came out as one (`od -c`), and a lone one survived; a
+   `String.fromCharCode(92, 92)` control kept both.
+3. **Fixed.** The trial's incumbent is the posted review at its recorded `/code-review` level plus its first-hand
+   checks, and Codex's candidates get the same check.
+4. **Fixed.** G2's backtick incident is dropped, G6's is marked as fitting either cause, and "four or more incidents"
+   now reads more than one, per item (7, 9 and 2 plus one).
+5. **Fixed differently.** The 50 is right for Markdown files, the filter every count used, but the row never said
+   so. It now does, and records the 53 files of any kind and `Windows` 10 over all of them. The third non-Markdown
+   file the reviewer could not name is `TEMPLATES/mcp.json.example`.
+6. **Fixed.** "Five built-in plugins the settings files do not name" now reads four.
+7. **Fixed.** The three TODO closure lines carry `59ffd0d:<line>`, as D5 asks.
+8. **Fixed.** The blank line under BACKLOG's **Last Updated** is back; the header hunk against `main` is now the one
+   changed line.
+- **Transcript remark, fixed**: "the mechanism was never pinned down" is replaced, wherever it stood, by the measured
+  collapse (two backslashes become one before bash parses the command).
+
 ## Improvements (extracted at closeout)
 
 1. **A §1 review reads a candidate's skills and hooks for run-time downloads.** Add a line to REVIEW-QUEUE §1: a
@@ -272,8 +297,8 @@ user's screenshot of `/plugin` → Installed.
 >    closes its three rows as `filed at origin` and stops re-sending them. Two additions:
 >    - _"Let a project's own `CLAUDE.md` size trigger stand in for the ~200-line audit trigger"_: the same trigger
 >      also sits at `POLICIES/context-management.md:22` and `:163` (live `~/.claude`, content-identical to your
->      `home-claude/` over the 50 files of `CLAUDE.md`, `WORKFLOW.md`, `POLICIES/`, `rules/`, `TEMPLATES/` and
->      `LANGUAGES/`). The hand-back never named those two. Live `CLAUDE.md` has the trigger at `:104` now.
+>      `home-claude/` over the 50 Markdown files of `CLAUDE.md`, `WORKFLOW.md`, `POLICIES/`, `rules/`, `TEMPLATES/`
+>      and `LANGUAGES/`). The hand-back never named those two. Live `CLAUDE.md` has the trigger at `:104` now.
 >    - _"Check a reviewer's suggested fix the way the finding was checked"_: one more media_viewer incident, PR #97.
 > 2. **New: a guard can be partial or over-broad.** Check a guard after every `await`; name the hazard its rationale
 >    leaves out; run its exclusion rationale over every class it covers. Incidents in media_viewer: PR #68 (two), its
@@ -288,13 +313,20 @@ user's screenshot of `/plugin` → Installed.
 >    Absent: `shared checkout`, `same checkout`, `parallel session`, `local HEAD`, `git rev-parse HEAD` and `mutant` 0
 >    (control `worktree` 5). Target: a new § in `POLICIES/git.md` after § Throwaway Worktrees, plus a clause at
 >    `critical-thinking.md:155`.
-> 4. **New: on this Windows host, tool text can lose or alter escapes.** Build backslashes and escapes from a script
->    (`chr(92)`, `String.fromCharCode(92)`, a quoted heredoc), then check the bytes after writing (`od -c`, or a
->    `grep -c` of the literal character). The Write tool alone is not the remedy: an editor tool once wrote a typed
->    escape as the literal character. Incidents: media_viewer's G1 (2026-10-11), G6 (10-18), G2 (10-30) and PR #94.
->    The mechanism was never pinned down. Absent: `backslash`, `heredoc`, `chr(92)`, `BOM`, `U+FEFF` and
->    `fromCharCode` 0 (control `Windows` 8 occurrences). Target: yours to choose; `LANGUAGES/powershell.md`
->    § Windows-Specific Considerations or a tool-use note in `WORKFLOW.md`.
+> 4. **New: on this Windows host, tool text can lose or alter escapes.** Build backslashes and escapes from
+>    character codes (`chr(92)`, `String.fromCharCode(92)`), then check the bytes after writing (`od -c`, or a
+>    `grep -c` of the literal character). No shell quoting is a remedy: two consecutive backslashes in a tool-call
+>    command reach bash as one, inside a quoted heredoc (`<<'EOF'`) or single quotes too, while a lone backslash
+>    survives (`od -c`, measured twice on 2026-11-06). The collapse happens before bash parses the text. The Write
+>    tool alone is not the remedy either: an editor tool once wrote a typed escape as the literal character.
+>    Incidents: media_viewer's G1 (2026-10-11) and PR #94, plus G6 (10-18), which fits either cause. Absent:
+>    `backslash`, `heredoc`, `chr(92)`, `BOM`, `U+FEFF` and `fromCharCode` 0 (control `Windows` 8 occurrences over
+>    the 50 Markdown files). Target: yours to choose; `LANGUAGES/powershell.md` § Windows-Specific Considerations or
+>    a tool-use note in `WORKFLOW.md`.
+>
+> _Item 4 was corrected in PR #99's review, after the user had saved this note: the first version listed "a quoted
+> heredoc" among the remedies, counted G2's 2026-10-30 backticks (ordinary command substitution) as an incident, and
+> said the mechanism was never pinned down._
 > 5. **Your row "Hand media_viewer its `guard-preload-bash.js` timeouts" can close: noted.** In media_viewer's
 >    transcripts still on disk (main folder, subagents and worktree folders): 4 guard timeouts (2026-10-07, 10-09,
 >    10-16 and 10-17), all before `onFailure: "block"` took effect on 2026-10-19, and none after 10-17. The 10 s limit
