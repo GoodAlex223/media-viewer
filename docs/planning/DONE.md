@@ -2,7 +2,8 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-11-06 <!-- Group G4: AI research loose ends (🟤, Cleanup Week #5, run Nov 5–6). MERGED 2026-11-06 via PR #97 (merge 9a8ffb9) after three review rounds (8 + 3 held back → 3 + 3 → 1 + 1), then a clean round 4 and close-out. Real-folder outcome: wait. -->
+**Last Updated**: 2026-11-06 <!-- Group G5: CLAUDE.md byte-trigger re-set (🟡, Cleanup Week #5, run Nov 6). MERGED 2026-11-06 via PR #98 (merge 1cfbcd4) after one subagent review round (0 blocking, 4 fixed) and a close-out. BYTE_TRIGGER 69,000 → 85,000; the owed audit filed 🟡. -->
+<!-- Previous: Group G4: AI research loose ends (🟤, Cleanup Week #5, run Nov 5–6). MERGED 2026-11-06 via PR #97 (merge 9a8ffb9) after three review rounds (8 + 3 held back → 3 + 3 → 1 + 1), then a clean round 4 and close-out. Real-folder outcome: wait. -->
 <!-- Previous: G3 post-merge checks passed; reload roles removed, PR #96, merge 59218f3. -->
 <!-- Previous: Group G3: Rating data that can't go wrong (🟤 🏆, Cleanup Week #5, run Nov 2–3). MERGED 2026-11-03 via PR #95 (merge b9c76c0) after three review rounds (21 + 29 held back → 7 + 8 → 1 + 6); the manual scenarios stay with the user. -->
 <!-- Previous: Group G2: Pre-push gate (🟤, Cleanup Week #5, Oct 26–30, run Oct 30). MERGED 2026-10-30 via PR #94 (merge a80cc37) after three review rounds (15 + 10 held back → 3 + 1 → 0, then a close-out with two small re-raised answers): the blocking renderer line ratchet, the single read of git's ref lines, and the flaky tournament test. -->
@@ -38,6 +39,29 @@ Completed tasks with implementation details and learnings.
 <!-- Organize by month, newest first. -->
 
 ## 2026-11 (November)
+
+### 2026-11-06 — Group G5: `CLAUDE.md` byte-trigger re-set 🟡 (Cleanup Week #5, Oct 26–30, run Nov 6) — **1/1, MERGED `1cfbcd4`** (PR #98)
+
+**Plan**: [2026-11-06_g5-claude-md-byte-trigger.md](../archive/plans/2026-11-06_g5-claude-md-byte-trigger.md). No spec: the user skipped the brainstorming questions, so the approach and the cycle basis are my calls, named in the plan's § 2.
+**Branch**: `g5-claude-md-byte-trigger`, cut from `main` at `2e5afc9`. It was deleted on the remote and locally after the merge.
+
+✅ **Status: 1/1 item, the 🟡 [2026-10-17] entry closed. MERGED 2026-11-06 via PR #98** (merge `1cfbcd4`, with `--merge`). At the user's request the review ran in a fresh read-only subagent at `medium`, not a separate chat:
+- **Round 1** (head `96721fa`): no blocking findings; 1 should-fix and 3 nits, all fixed in `0dd9706`. The rate comparison had set a plan-week against a calendar week. The comment ended "change it only at an audit" above a change made outside one. The size-audit spec still read "`BYTE_TRIGGER` is 69,000" as current. One citation was loose.
+- **A sweep** for the old comment wording fixed two more quotes (`62414c0`).
+- **Close-out** ([comment 6678571609](https://github.com/GoodAlex223/media-viewer/pull/98#issuecomment-6678571609), carrying round 1, which had not been posted): every response Confirmed, the two deferrals Accepted.
+
+**Summary**:
+- **`BYTE_TRIGGER` 69,000 → 85,000** (`scripts/check-claude-md-size.js`). `CLAUDE.md` was 71,287 bytes at the measurement. It grew +12,705 bytes in the 20 days since the G5 audit (`3fb797e`), 13,340 bytes for the ~3-week Cleanup-Week cadence, rounded up. Three plan-weeks would have given 91,000.
+- **The trigger had already fired.** The file passed 69,000 on 2026-11-02 (G3's `233a672`), after WEEKLY had measured it at 66,944 on 10-28. So the re-set is not the audit the trigger called for: the comment says so, the size-audit spec carries a superseded note, and the audit is filed 🟡 [2026-11-06].
+- **Growth under the authoring rule**: ~4.4 KB a calendar week, about 30% of the week before the audit. Three feature PRs (#85, #87, #95) carry 8.7 KB of the 12.7 KB; 9 of 41 commits added more than 500 bytes, 4 of them answers to review rounds.
+
+**Key changes**: `scripts/check-claude-md-size.js` (the constant and its comment), the size-audit spec (a superseded note), the plan. `CLAUDE.md` unchanged.
+
+**Tests**: a live run with a positive control (a staged +599 bytes printed the trigger line under 69,000 and not under 85,000) and the boundary through `evaluate`. Unit 2,636 passed, 1 skipped, on every commit; the pre-push gate skipped E2E, since no path the app loads changed.
+
+**Sizing**: planned 1 SP; the review added two small commits. No actual SP was measured.
+
+**Follow-ups**: 🟡 [2026-11-06] "Audit `CLAUDE.md`: it passed its 69,000-byte trigger on 2026-11-02, and the re-set to 85,000 was not an audit"; 🟤 [2026-11-06] "Note at v2 P1a's planning that the v2 spec's 'v2's rules cannot land there' rested on the old 69,000 trigger".
 
 ### 2026-11-06 — Group G4: AI research loose ends 🟤 (Cleanup Week #5, Oct 26–30, run Nov 5–6) — **3/3, MERGED `9a8ffb9`** (PR #97)
 

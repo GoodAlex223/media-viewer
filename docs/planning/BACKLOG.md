@@ -2,7 +2,7 @@
 
 Ideas and tasks not yet prioritized for active development.
 
-**Last Updated**: 2026-11-06 — a follow-up note on 🟤 "Close the train/score metadata gap…": the file details mostly mark how a training vector was cached. Earlier the same day, **G4 closeout (PR #97, merge `9a8ffb9`)**: 4 new 🟤 entries under `### [2026-11-06] From: G4 closeout`. Closed the three entries G4 shipped; a gate note on A1; dated notes on the metadata-dims, folder-names and "Group copies" entries. Before that, 2026-11-05 — reload decision resolved (PR #96). Before that, 2026-11-03 — **G3 closeout (PR #95, merge `b9c76c0`)**: 32 new 🟤 entries under `### [2026-11-03] From: G3 closeout`. Closed the ten entries G3 shipped; a note on "Refuse shortcut dispatch while a modal is open".
+**Last Updated**: 2026-11-06 — **G5 closeout (PR #98, merge `1cfbcd4`)**: 1 new 🟡 entry (the owed `CLAUDE.md` audit) and 1 new 🟤 entry (the v2-spec note for P1a's planning), each under `### [2026-11-06] From: G5 closeout`; the 🟡 [2026-10-17] re-set entry checked off. Earlier the same day, a follow-up note on 🟤 "Close the train/score metadata gap…": the file details mostly mark how a training vector was cached. Earlier the same day, **G4 closeout (PR #97, merge `9a8ffb9`)**: 4 new 🟤 entries under `### [2026-11-06] From: G4 closeout`. Closed the three entries G4 shipped; a gate note on A1; dated notes on the metadata-dims, folder-names and "Group copies" entries. Before that, 2026-11-05 — reload decision resolved (PR #96). Before that, 2026-11-03 — **G3 closeout (PR #95, merge `b9c76c0`)**: 32 new 🟤 entries under `### [2026-11-03] From: G3 closeout`. Closed the ten entries G3 shipped; a note on "Refuse shortcut dispatch while a modal is open".
 
 **Purpose**: Holding area for unprioritized ideas and future work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -361,6 +361,12 @@ two tasks because they have different shapes (architectural vs. visual).
 
 ## 🟡 Operational & Observation Items
 
+### [2026-11-06] From: G5 closeout (PR #98, merge `1cfbcd4` — `CLAUDE.md` byte-trigger re-set)
+
+**Origin**: the Future Improvements of the [G5 plan](../archive/plans/2026-11-06_g5-claude-md-byte-trigger.md) § 6, row 1, accepted as deferred by PR #98's close-out. An audit, so 🟡, like its [2026-09-21] predecessor below.
+
+- [ ] **Audit `CLAUDE.md`: it passed its 69,000-byte trigger on 2026-11-02, and the re-set to 85,000 was not an audit** — `CLAUDE.md` § Maintenance makes a crossed trigger an audit. The file passed 69,000 at G3's `233a672` (2026-11-02) and was 71,287 bytes / 247 lines at the G5 re-measure (2026-11-06). G5 (PR #98) re-set `BYTE_TRIGGER` to 85,000 from the measured growth without a trim, so no warning shows this audit now. Run it at the next Cleanup Week (#6), or fold it into v2 P1a's move of rules into `.claude/rules/` (v2 spec § 19 step 4; 🟤 [2026-08-27] "Migrate path-conditional CLAUDE.md content to path-scoped rules (`.claude/rules/`)"), whichever comes first: a trim of bullets P1a is about to move would edit them twice. Use the size-audit spec's passes and its rule-loss check with a planted control, then re-set `BYTE_TRIGGER` from the size after the trim, with the measured rate (~4.4 KB a calendar week, ~13.3 KB a ~3-week cycle; G5 plan § 2). Effort: M (~2–3 SP). Affected: [CLAUDE.md](../../CLAUDE.md), [scripts/check-claude-md-size.js](../../scripts/check-claude-md-size.js) (`BYTE_TRIGGER` and its comment).
+
 ### [2026-10-18] Strategic-doc refresh (staleness check at weekly planning)
 
 **Origin**: [README.md](README.md) § Strategic Review, run at the Oct 19–23 planning (2026-10-18). A periodic review, so 🟡. Scheduled into [WEEKLY.md](WEEKLY.md) G5.
@@ -378,7 +384,7 @@ two tasks because they have different shapes (architectural vs. visual).
 
 **Origin**: [archive/plans/2026-10-17_g5-claude-md-size-audit.md](../archive/plans/2026-10-17_g5-claude-md-size-audit.md) Improvement 4. A threshold watch, so 🟡, like the [2026-09-21] audit entry below it.
 
-- [ ] **Measure `CLAUDE.md`'s growth under the authoring rule at Cleanup Week #5, and re-set `BYTE_TRIGGER` there** — `BYTE_TRIGGER` = 69,000 (the G5 landing plus ~10 KB, by user ruling) rests on a guessed growth rate. At Cleanup Week #5 (due ~Oct 26–30), take the per-commit byte deltas to `CLAUDE.md` since the G5 merge (`git log -p 3fb797e.. -- CLAUDE.md`). Then set the trigger to the size at that audit plus about one Cleanup-Week cycle of measured growth, rounded up to the next 1,000. Spec § 6.2 promises this. Effort: XS. Affected: [scripts/check-claude-md-size.js](../../scripts/check-claude-md-size.js) (`BYTE_TRIGGER` and its comment).
+- [x] **Measure `CLAUDE.md`'s growth under the authoring rule at Cleanup Week #5, and re-set `BYTE_TRIGGER` there** — ✅ **Resolved 2026-11-06 (WEEKLY G5, PR #98, merge `1cfbcd4`)**; see [DONE.md](DONE.md). Growth since `3fb797e`: +12,705 bytes in 20 days (~4.4 KB a calendar week, about 30% of the pre-audit week). `BYTE_TRIGGER` = 85,000: the 71,287 bytes measured plus one ~3-week cycle (13,340 bytes), rounded up. **Not "at that audit"**: the file had already passed 69,000 on 2026-11-02 (`233a672`), so the audit it called for is 🟡 [2026-11-06] "Audit `CLAUDE.md`: it passed its 69,000-byte trigger on 2026-11-02, and the re-set to 85,000 was not an audit". _Original:_ `BYTE_TRIGGER` = 69,000 (the G5 landing plus ~10 KB, by user ruling) rests on a guessed growth rate. At Cleanup Week #5 (due ~Oct 26–30), take the per-commit byte deltas to `CLAUDE.md` since the G5 merge (`git log -p 3fb797e.. -- CLAUDE.md`). Then set the trigger to the size at that audit plus about one Cleanup-Week cycle of measured growth, rounded up to the next 1,000. Spec § 6.2 promises this. Effort: XS. Affected: [scripts/check-claude-md-size.js](../../scripts/check-claude-md-size.js) (`BYTE_TRIGGER` and its comment).
   ↳ **2026-10-19 (G1 I1, PR #84)**: one data point. `CLAUDE.md` went 58,582 → 59,949 bytes across the branch (+1,367: the app-scheme Security bullet, four tree entries, two gotchas and the E2E helper notes; the size warning fired at Task 9), then +128 at the closeout (two spec links, a reworded JXL line), to 60,077.
 
 ### [2026-09-21] CLAUDE.md size audit trigger re-fired (1 item)
@@ -477,6 +483,12 @@ than a defect. Periodic-maintenance in nature → 🟡, not 🟤.
 ---
 
 ## 🟤 Auto-Generated Tech Debt
+
+### [2026-11-06] From: G5 closeout (PR #98, merge `1cfbcd4` — `CLAUDE.md` byte-trigger re-set)
+
+**Origin**: the Future Improvements of the [G5 plan](../archive/plans/2026-11-06_g5-claude-md-byte-trigger.md) § 6, row 2, accepted as deferred by PR #98's close-out. Claude-surfaced → 🟤. Checked against BACKLOG first: no entry covers it.
+
+- [ ] **Note at v2 P1a's planning that the v2 spec's "v2's rules cannot land there" rested on the old 69,000 trigger** — The v2 modules spec § 19 step 4 reads "`CLAUDE.md` is 66,578 bytes at `308d43c`, 2.4 KB below its 69,000-byte trigger, so v2's rules cannot land there". G5 (PR #98) re-set the trigger to 85,000 without an audit, so a reader of P1a's plan may take the ~13.7 KB above today's file as room for v2's rules. The step's requirement, moving the moved code's rules into `.claude/rules/`, stands; its reason is now the owed audit (🟡 [2026-11-06] "Audit `CLAUDE.md`: it passed its 69,000-byte trigger…"), not the room. A line in P1a's plan, or a dated note on that spec line when P1a is planned. Effort: XS. Affected: P1a's plan; [v2 modules spec](../superpowers/specs/2026-10-22-v2-modules-design.md) § 19.
 
 ### [2026-11-06] From: G4 closeout (PR #97, merge `9a8ffb9` — AI research loose ends)
 

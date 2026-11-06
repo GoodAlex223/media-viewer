@@ -78,7 +78,11 @@ mv docs/planning/plans/YYYY-MM-DD_task.md docs/archive/plans/
 
 | Plan | Group | Status |
 | --- | --- | --- |
-| [2026-11-06_g5-claude-md-byte-trigger.md](2026-11-06_g5-claude-md-byte-trigger.md) | G5 (Cleanup Week #5) | In Progress |
+| _None currently active_ | — | — |
+
+<!-- 2026-11-06 (Group G5 closeout, Cleanup Week #5): 2026-11-06_g5-claude-md-byte-trigger.md left this table on archive.
+     Merged `1cfbcd4` via PR #98, moved to docs/archive/plans/ with `git mv`, and indexed in
+     docs/README.md as "G5 CLAUDE.md Byte-Trigger Re-set Plan" in the same commit. No spec: a 1-SP small change. -->
 
 <!-- 2026-10-30 (Group G2 closeout, Cleanup Week #5): 2026-10-30_g2-pre-push-gate.md left this table on archive.
      Merged `a80cc37` via PR #94, moved to docs/archive/plans/ with `git mv`, and indexed in

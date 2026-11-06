@@ -2,7 +2,7 @@
 
 **Task Reference**: WEEKLY.md Oct 26–30 § G5 (🟡, 1 SP) ← BACKLOG 🟡 [2026-10-17] "Measure `CLAUDE.md`'s growth under the authoring rule at Cleanup Week #5, and re-set `BYTE_TRIGGER` there"
 **Created**: 2026-11-06
-**Status**: In Progress
+**Status**: Complete — merged as PR #98 (`1cfbcd4`, 2026-11-06), closed out the same day
 **Last Updated**: 2026-11-06
 **Branch**: `g5-claude-md-byte-trigger` (from `main` @ `2e5afc9`; one PR)
 **Design**: no spec. A small change; the user skipped the brainstorming questions (2026-11-06), so the choices below are my calls, listed in § 2 for review.
@@ -16,10 +16,10 @@
 **Context**: the G5 audit (PR #82, merge `3fb797e`) set 69,000 as the landing plus ~10 KB, on a guessed growth rate. The WEEKLY entry's rule: take the per-commit byte deltas since `3fb797e`, then set the trigger to the size at this measurement plus about one Cleanup-Week cycle of measured growth, rounded up to the next 1,000.
 
 **Success Criteria**:
-- [ ] The growth since `3fb797e` is measured per commit and per landing on `main`, and recorded here.
-- [ ] `BYTE_TRIGGER` and its comment state the new figure and how it was derived.
-- [ ] A live run shows the change takes effect: a staged growth that printed the trigger line under 69,000 no longer does.
-- [ ] The audit that the crossed 69,000 trigger now calls for is recorded as a follow-up (§ 6), not silently cancelled by the re-set.
+- [x] The growth since `3fb797e` is measured per commit and per landing on `main`, and recorded here.
+- [x] `BYTE_TRIGGER` and its comment state the new figure and how it was derived.
+- [x] A live run shows the change takes effect: a staged growth that printed the trigger line under 69,000 no longer does.
+- [x] The audit that the crossed 69,000 trigger now calls for is recorded as a follow-up (§ 6), not silently cancelled by the re-set.
 
 ---
 
@@ -114,7 +114,7 @@ The trigger fired before it was re-set. `CLAUDE.md` passed 69,000 on 2026-11-02 
 | SP | 1 → 1 | Measurement, a constant and its comment, a live run, this plan. |
 | Execution | Sonnet · `medium` per WEEKLY; ran on Opus 5.5 | The session started on Opus. Switching would rebuild the cache for a change this small, so it stays. |
 | Switch | none | — |
-| Final review | light (`medium`), separate chat | The diff is one constant and a comment. |
+| Final review | light (`medium`), separate chat → ran in a read-only subagent, by the user's request | The diff is one constant and a comment. |
 
 ### Implementation Steps
 
@@ -124,7 +124,7 @@ The trigger fired before it was re-set. `CLAUDE.md` passed 69,000 on 2026-11-02 
 4. [x] The same staged growth prints the growth line only; restore the index and working tree, and check that `git diff --cached` names nothing.
 5. [x] `npm test`, ESLint and `npx prettier --check` on the script.
 6. [x] Commit through the hooks; stop for the user's approval to push (WORKFLOW § 3.4).
-7. [ ] After approval: push, PR, review in a separate chat, merge, closeout. Push and PR done: PR #98.
+7. [x] After approval: push, PR, review in a separate chat, merge, closeout. PR #98; the review ran in a subagent (§ 4); merged `1cfbcd4`; closed out (§ 8).
 
 ---
 
@@ -147,12 +147,42 @@ The trigger fired before it was re-set. `CLAUDE.md` passed 69,000 on 2026-11-02 
   3. **nit**: the size-audit spec's post-implementation note still read "`BYTE_TRIGGER` is 69,000" as current; it gets a superseded note (the closeout rule for a frozen spec), in this PR rather than at closeout.
   4. **nit**: the 14.7 KB was cited to spec § 2.1, which gives the sizes; § 6.2 states the figure. Both are cited now.
 - Before the close-out, a sweep for the old wording found two places still quoting it as current: § 2's Problem Restatement ("the script's comment says…", now "said", before this change) and the PR body's summary (updated). The 07:38 log entry keeps its words, as a record.
+- **Close-out** (the user's expanded "no issues" template), posted as [comment 6678571609](https://github.com/GoodAlex223/media-viewer/pull/98#issuecomment-6678571609) at head `62414c0`. Round 1 had never been posted, so it carries round 1 too. The same subagent drafted it: every response Confirmed, with evidence at `62414c0`; the two deferrals (§ 6) Accepted with their carrier lines; unit suite re-run (2,636 passed, 1 skipped, tree clean after); E2E not run, because `classifyPaths` returns SKIP for all 4 changed files (`main.js` as a control returns RUN). Before posting, I checked every linked line and fixed two citation slips in the draft (Files Affected is L102, not L104; the L30 quote).
+
+### 2026-11-06 — PHASE: Sub-Item Complete
+- Sub-item: the single G5 item, "Measure `CLAUDE.md`'s growth under the authoring rule, and re-set `BYTE_TRIGGER`".
+- **Results obtained**: `BYTE_TRIGGER` 85,000 from measured growth; the measurement recorded in § 2; merged as PR #98, merge `1cfbcd4` (`--merge`, at the reviewed head `62414c0`). The remote and local branches were deleted, and `main` was pulled.
+- **Lessons learned**: § 5.
+- **Problems encountered**: the trigger had already fired before the re-set (§ 2); my first rate comparison mixed units (review #1).
+- **Improvements identified**: § 6, both extracted.
+- **Technical debt noted**: none.
+- **Related code needing changes**: none; `CLAUDE.md` is untouched until the owed audit.
+
+### 2026-11-06 — PHASE: Complete
+- Final approach: approach A, 85,000, the audit kept owed.
+- Tests passing: yes (unit 2,636 passed, 1 skipped, on every commit; E2E skipped by the gate, as no path the app loads changed).
+- Documentation updated: the script comment, the size-audit spec's superseded note, this plan; at closeout BACKLOG, WEEKLY, DONE, TODO's header, `docs/README.md` and `docs/planning/plans/README.md`.
+- Improvements documented: 2, both extracted to BACKLOG.
+- Added to TODO.md: nothing (no out-of-tree work).
 
 ---
 
 ## 5. Key Discoveries
 
-<!-- Filled at completion -->
+**Technical Insights**:
+- **A threshold task planned while under its threshold can arrive after it fired.** WEEKLY measured 66,944 bytes on 2026-10-28, under 69,000; G3 pushed the file past it on 2026-11-02, before this group ran. A plan's figure is a snapshot: re-measure the gated quantity at execution, since it decides whether "re-set" is routine or raises the bar over a fired alarm.
+- **Where the growth comes from.** Under the authoring rule, growth fell to about 30% of the pre-audit pace (per calendar week), but did not stop. Three feature PRs carry 8.7 KB of the 12.7 KB; 4 of the 9 commits over 500 bytes were answers to review rounds.
+
+**Architectural Decisions**:
+- **Re-set from the size now, with the audit kept owed (approach A)**, over an audit now (B: over 2× the estimate, and P1a moves the same bullets) and leaving 69,000 (C: a warning on every growing commit, which teaches the reader to ignore it). The comment states the re-measure was not an audit, so the old rule ("change it only at an audit") is not quietly broken.
+- **A calendar-week cycle** (85,000) over three plan-weeks (91,000): the cadence is stated in weeks, the window is calendar-dated, and the lower figure keeps the backstop tighter while an audit is owed.
+
+**Patterns Identified**:
+- **A live CLI run with a positive control** (the same staged growth before and after the constant changed) proves the change takes effect; a test pinning 85,000 would only duplicate the constant.
+- **Compare rates in one unit.** Plan-weeks spill to ~10 days, so a plan-week rate does not compare with a 7-day week (review #1).
+
+**Anti-Patterns Avoided**:
+- **Raising a fired alarm silently**: the comment, the spec's superseded note, the PR body and a 🟡 entry all say the audit is owed.
 
 ---
 
@@ -164,6 +194,8 @@ The trigger fired before it was re-set. `CLAUDE.md` passed 69,000 on 2026-11-02 
 |------|-----------|--------|----------|
 | **Audit `CLAUDE.md`: the 69,000 trigger was crossed on 2026-11-02 (`233a672`)** — 🟡, at the next Cleanup Week (#6) or folded into v2 P1a's move of rules into `.claude/rules/`, whichever comes first; re-set `BYTE_TRIGGER` there from the size after the trim, with the rate in § 2 | § Maintenance makes a crossed trigger an audit; this re-set moved the bar without one. Doing it inside P1a avoids trimming bullets P1a is about to move. | M (~2–3 SP) | H |
 | **The v2 spec's reason for path-scoped rules cites the 69,000 trigger** (§ 19 step 4) — 🟤; its conclusion now rests on the owed audit, not on 2.4 KB of room. A one-line note at P1a's planning, not an edit to the approved spec now | A reader of P1a's plan may read 85,000 as room for v2's rules in `CLAUDE.md`. | L | L |
+
+**Extracted at closeout (2026-11-06)**: row 1 → BACKLOG 🟡 [2026-11-06] "Audit `CLAUDE.md`: it passed its 69,000-byte trigger on 2026-11-02, and the re-set to 85,000 was not an audit"; row 2 → BACKLOG 🟤 [2026-11-06] "Note at v2 P1a's planning that the v2 spec's 'v2's rules cannot land there' rested on the old 69,000 trigger".
 
 ### Technical Debt
 
@@ -194,3 +226,21 @@ None: the global ~200-line audit trigger is already a TODO § Spawned Tasks row.
 | Boundary, `evaluate` with the exported limits | Pass | 85,000 → 85,001 gives `["trigger"]`; 84,999 → 85,000 gives `[]` |
 | `npx vitest run` | Pass | 56 files; 2,636 passed, 1 skipped |
 | ESLint, Prettier `--check` on the script | Pass | — |
+| Review subagent's re-run at `62414c0` | Pass | `tests/check-claude-md-size.test.js` 25 passed at `96721fa`; the full suite 2,636 passed, 1 skipped at `62414c0` |
+
+---
+
+## 8. Closeout (2026-11-06, after the merge)
+
+Derived from the global `CLAUDE.md` § Task Completion rule (`docs/planning/plans/README.md` § Closeout artifacts).
+
+| Artifact | Done / N/A + reason |
+|---|---|
+| `BACKLOG.md` — improvements extracted (min 2, routed by source) | Done: 🟡 [2026-11-06] the owed audit (an audit → 🟡); 🟤 [2026-11-06] the v2-spec note (Claude-surfaced → 🟤). The 🟡 [2026-10-17] entry G5 closed is checked off. |
+| `TODO.md` — actionable items, § Spawned Tasks rows | Header note only: G5 came straight from BACKLOG 🟡 through WEEKLY, and there is no out-of-tree work. |
+| `DONE.md` — entry with plan link, summary, key changes | Done: the G5 entry under 2026-11 (November). |
+| `WEEKLY.md` — Summary-Table Status and the Daily-Schedule entry | Done: `✅ PR #98` in the table, the Friday row, the task box and the Spillover line. |
+| `docs/README.md` — plan under Archived Plans, spec under Design Specs | Done: the plan row. No spec of its own; the size-audit spec's row notes the re-set. |
+| `docs/archive/plans/` — plan moved here, original deleted | Done with `git mv`. |
+
+Cited commit SHAs were checked as ancestors of `main` before the commit.
