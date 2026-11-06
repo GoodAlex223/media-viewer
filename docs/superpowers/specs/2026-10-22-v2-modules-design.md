@@ -19,6 +19,9 @@ it rests on.
 - **AI sorting: folded in.** The report is `docs/research/2026-10-22-ai-sorting.md` in commit `96d9b22`. That
   commit is on branch `research/local-ai-sorting`; it was kept out of the G2 PR 2 merge.
   It is not in the planned `ai-sorting` worktree. It feeds §5.3, §12.1–§12.3, §13, §14, §16 and §17.
+  ↳ **Superseded 2026-11-06 (G4, PR #97, merge `9a8ffb9`)**: the commit is on `main`, merged rather than rebased,
+  so `96d9b22` still names it, and the branch `research/local-ai-sorting` is deleted. The report's § 10 adds the
+  real-folder check of A1: outcome _wait_ (BACKLOG 🟤 [2026-11-06] "From: G4 closeout").
 - **Downloaders: still pending.** Due under `.claude/worktrees/fetch-research/docs/research/`. §12.5 names what
   it may change.
 
@@ -1853,6 +1856,8 @@ These are planning actions for the user's sessions, recorded here so they have a
    - **Its seven open questions:**
      - **Q1, where the commit lives: resolved.** It was dropped from PR #87 before the merge (`f5ddfa3` does not
        contain it) and lives on `research/local-ai-sorting`, also on origin. Its own PR is still to come.
+       ↳ **Superseded 2026-11-06**: its own PR was #97 (merge `9a8ffb9`). The commit is on `main`, and the branch
+       is deleted.
      - **Q2, the planning documents: carried here.** The BACKLOG entries to file are in item 2 above.
      - **Q6, downloads and GPU: answered (yes, 2026-10-22).**
      - **Q7, the real-data check: answered (yes, 2026-10-22).**
@@ -1891,6 +1896,8 @@ These are planning actions for the user's sessions, recorded here so they have a
 - **AI-sorting research:** `docs/research/2026-10-22-ai-sorting.md` and `prototypes/ai-sorting/`, commit
   `96d9b22` (branch `research/local-ai-sorting`): § 1 (learner), § 2 (skips), § 3 (similarity grouping), § 4
   (near-duplicates), § 5 (q8 files), § 8 (main-process stalls), Recommendation, Open questions.
+  ↳ **2026-11-06**: on `main` since PR #97 (merge `9a8ffb9`); the branch is deleted, and § 10 adds the real-folder
+  check.
 - **Sibling projects:** the user's `media_parser` (a Python downloader and Telegram bot, July 2025) and
   `media_compression` (a PowerShell lossless JPEG XL converter with its design specs and a cold-archive track).
 

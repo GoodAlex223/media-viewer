@@ -161,6 +161,7 @@ Baseline: the before run, § 2.1 (a 119.8 s sort, 90.7 s of it training).
 - **R4 — The source-folder cache load takes 25.1 s** (`sourceCacheLoad`) on the first sort of each session, for 16,213 entries.
 - **R5 — F1 from the redirected spec, still true:** source-folder 64-dim vectors are extracted without file metadata, so training and scoring see different features in dims 42–47 and 54–61.
 - **R6 — The parked source-CLIP reuse**, branch `g3-departed-clips-parked` @ `e11b36e` (the redirected spec's F2/F3 travel with it). Revisit only if a measurement shows CLIP on moved or rated files matters, e.g. a long like-or-skip session's re-sorts.
+  ↳ **Superseded 2026-11-05 (G4, PR #97, merge `9a8ffb9`)**: the branch is deleted, by the user's ruling. The commit is kept as a verified patch, [`2026-10-13_g3-departed-clips-parked.patch`](../../archive/plans/2026-10-13_g3-departed-clips-parked.patch).
 - **R7 — `loadMediaAsImageData` still sets `src = ''`**: one stray `error` per video, no loop. Move it to `_releaseVideo` for consistency.
 
 ## 9. Estimate and execution

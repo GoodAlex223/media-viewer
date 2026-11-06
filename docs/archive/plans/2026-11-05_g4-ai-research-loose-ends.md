@@ -2,8 +2,8 @@
 
 **Task Reference**: WEEKLY.md G4 (Oct 26–30, Cleanup Week #5, spilled); BACKLOG 🟤 [2026-10-25] "Open the AI-sorting research's own PR (`research/local-ai-sorting`, commit `96d9b22`)"; 🟤 [2026-10-27] "Run the AI-sorting research harness on the user's own like/dislike folders, committing only overall numbers"; 🟤 [2026-10-16] "Decide the parked source-CLIP reuse branch"
 **Created**: 2026-11-05
-**Status**: In Progress
-**Last Updated**: 2026-11-05
+**Status**: Complete (merged as PR #97, merge `9a8ffb9`, 2026-11-06)
+**Last Updated**: 2026-11-06
 
 ---
 
@@ -211,11 +211,24 @@ Outcome across the usable contexts:
 - **#1, "about half":** right, that holds for A's 47% only. Both report sentences now give 30% and 47% ("a third to a half"). A search for the claim across the branch's docs found no other copy; the § 6 row already had both figures.
 - **Held back, the curve's z-scoring rows also score through `predict()`:** the reviewer asked for no action. I scoped the report's curve sentence instead: those rows were not re-scored by margin, so how much of their loss is ties is not known. Precondition (c) covers the re-check.
 
+### 2026-11-06 — PHASE: Review close-out, merge and closeout
+
+- **Round 4** (issuecomment-6675889080) and the reviewer's expanded close-out (issuecomment-6676064590): no issues. Every response bullet of rounds 1–3 was ruled on with evidence re-taken at `9373422`; preconditions (a)–(d) were accepted as deferred. The reviewer's own chat added that this box list's "Approved" was still open, and that it waited for this closeout.
+- **Merged** on the user's instruction: `gh pr merge 97 --merge`, pinned to the reviewed head (the pin needs the full SHA; a prefix failed and merged nothing). Merge commit `9a8ffb9`. The branch was deleted on origin (`gh api`) and locally (`git branch -d`), and the main checkout fast-forwarded.
+- **The worktree** was unregistered and emptied, after a reparse-point check with a planted-junction control. Its empty folder and `.git/worktrees` entry stayed, held by the session's own process, for `git worktree prune` after the session ends.
+- **Closeout** on `main` from a fresh worktree, as § 9 records.
+
 ---
 
 ## 5. Key Discoveries
 
-*Filled at completion.*
+1. **"Run the harness" hid a script.** The harness's input is subject labels from a manifest, so it could not take a real like and dislike folder. The check needed a driver that reads the app's own cached vectors and scores held-out files as a sort does.
+2. **On real folders the larger loss is the train/score metadata mismatch, not the learner.** Training vectors carry file metadata; sort-time vectors never do. Today's model ranks held-out files at 0.918 / 1.000 with their metadata and 0.724 / 0.707 as a sort sees them. A plain cross-validation would have reported the first pair. P4a's fp32 switch changes only the CLIP half, so it cannot fix this.
+3. **The learner fix does not pass on real folders as it stands** (outcome: wait). Z-scoring makes the mismatch worse, and behind today's `predict()` it ties 30–47% of held-out scores at exactly 0 or 1. A converged fit takes about 50 s at 25,000 labels, against the research's estimate of under a second.
+4. **"Nothing will be lost" was countable.** 303 of the parked commit's 314 meaningful added lines were in the archived plan; the verified patch closed the other 11 before the branch went.
+5. **A claim must cover every path that shares its mechanism.** The review's rounds 2 and 3 caught two claims wider than their evidence: a clamp check that covered two of the three learners behind `predict()`, and a corrected-interval sentence that held for AUC only. Each was measured or scoped, and no number changed the outcome.
+
+The pass mark was committed with the script before any real number existed, and the run was reproducible to the last value, so the verdict did not move through three review rounds.
 
 ---
 
@@ -235,12 +248,12 @@ Outcome across the usable contexts:
 
 | Item | Why It Exists | Impact | Remediation |
 |------|---------------|--------|-------------|
-| 173 `Liked_N`/`Disliked_N`-style names across 20 tracked files, tests included, against spec § 15's "never folder names" | Written before the rule, or as test fixtures | M: the rule and the tree disagree | The user rules: replace with placeholders, or narrow the rule. Frozen docs may take placeholder redactions (ruling of 2026-10-30) |
+| 173 names in the style of the like and dislike folders' numbered names, across 20 tracked files, tests included, against spec § 15's "never folder names" (redacted to this description at the closeout, by the 2026-10-30 ruling) | Written before the rule, or as test fixtures | M: the rule and the tree disagree | The user rules: replace with placeholders, or narrow the rule. Frozen docs may take placeholder redactions (ruling of 2026-10-30) |
 | The training/scoring vector mismatch (dims 42–47, 54–61) | Background and priority extraction post no metadata | H, measured: 0.918 → 0.724 (A), 1.000 → 0.707 (B) between training and sort-time vectors | The "close the gap" row above |
 
 ### Spawned Tasks
 
-None yet.
+None out of tree: every follow-up above is in this repository and went to BACKLOG at the closeout (§ 9).
 
 ---
 
@@ -273,8 +286,8 @@ None yet.
 
 - [x] Self-review complete (every report number checked against the run's output; the wording fixes of `747bea4` and `5cf4b2c`)
 - [x] Review in a separate chat (asked first; the user ran it: round 1, issuecomment-6671026802)
-- [x] Review comments addressed (round 1; the response comment names the fix commit)
-- [ ] Approved
+- [x] Review comments addressed (rounds 1–3, each answered in one comment naming its fix commit; round 4 and the reviewer's close-out found no issues)
+- [x] Approved (the user merged PR #97 with `--merge` on 2026-11-06, merge `9a8ffb9`)
 
 ---
 
@@ -284,16 +297,16 @@ Run after the merge, on `main`.
 
 | Artifact | Done / N/A + reason |
 |----------|---------------------|
-| `BACKLOG.md` — improvements extracted, routed by source | |
-| `TODO.md` — actionable items, plus § Spawned Tasks rows for out-of-tree work | |
-| `docs/archive/plans/` — plan moved here, original deleted | |
-| `DONE.md` — entry with plan link, summary, key changes | |
-| `WEEKLY.md` — Summary-Table Status an identifier; Daily-Schedule entry marked done; the user-in-the-loop line | |
-| `BACKLOG.md` / `TODO.md` — the three entries closed, plus A1's gate note (wait; re-check after a decided fix for the metadata gap, not after P4a alone), in the closeout commit | |
+| `BACKLOG.md` — improvements extracted, routed by source | Done: 🟤 [2026-11-06] "From: G4 closeout" holds the metadata-gap fix (tagged possible-dup of the 🟤 metadata-dims entry), the re-check with preconditions (a)–(d), "A1 ranks by margin" and the converged fit's cost. The P4c threshold idea is a dated note on the "Group copies" entry, the folder-name debt one on the 🟤 folder-names entry, and the measurement one on the metadata-dims entry. All Claude-surfaced → 🟤 |
+| `TODO.md` — actionable items, plus § Spawned Tasks rows for out-of-tree work | Done: nothing transitions (G4 came straight from BACKLOG through WEEKLY), no out-of-tree work; the header comment records the closeout |
+| `docs/archive/plans/` — plan moved here, original deleted | Done (`git mv`) |
+| `DONE.md` — entry with plan link, summary, key changes | Done; a November month heading added above the November entries |
+| `WEEKLY.md` — Summary-Table Status an identifier; Daily-Schedule entry marked done; the user-in-the-loop line | Done: `✅ PR #97`, the Thursday row, the three task boxes, the Spillover line, the G4 user-in-the-loop line and the "Looking ahead" A1 note |
+| `BACKLOG.md` / `TODO.md` — the three entries closed, plus A1's gate note (wait; re-check after a decided fix for the metadata gap, not after P4a alone), in the closeout commit | Done: the three 🟤 entries are checked off with their outcomes; A1 has a dated gate note, which also corrects its "the ranking is unchanged" claim |
 | Deploy record | N/A: no deploy step (WEEKLY: Auto-deploy no) |
-| Live docs — late findings corrected; the v2 spec's superseded note | |
-| `docs/README.md` — plan indexed | |
-| Memory — durable decisions and patterns captured | |
+| Live docs — late findings corrected; the v2 spec's superseded note | Done: dated notes in the v2 spec (header, § 19 Q1, sources) and in the two frozen G3 specs that named the parked branch; the research row in `docs/README.md` points to § 10. `PROJECT.md` and `CLAUDE.md` name neither branch (grep) |
+| `docs/README.md` — plan indexed | Done: an Archived Plans row and its link |
+| Memory — durable decisions and patterns captured | Done: the session note, `reference_g4_real_folder_evidence`, `feedback_job_scratch_is_not_durable`, the worktree-closeout note's PR #97 additions |
 
 ---
 

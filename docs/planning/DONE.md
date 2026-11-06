@@ -2,7 +2,8 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-11-05 <!-- G3 post-merge checks passed; reload roles removed, PR #96, merge 59218f3. -->
+**Last Updated**: 2026-11-06 <!-- Group G4: AI research loose ends (🟤, Cleanup Week #5, run Nov 5–6). MERGED 2026-11-06 via PR #97 (merge 9a8ffb9) after three review rounds (8 + 3 held back → 3 + 3 → 1 + 1), then a clean round 4 and close-out. Real-folder outcome: wait. -->
+<!-- Previous: G3 post-merge checks passed; reload roles removed, PR #96, merge 59218f3. -->
 <!-- Previous: Group G3: Rating data that can't go wrong (🟤 🏆, Cleanup Week #5, run Nov 2–3). MERGED 2026-11-03 via PR #95 (merge b9c76c0) after three review rounds (21 + 29 held back → 7 + 8 → 1 + 6); the manual scenarios stay with the user. -->
 <!-- Previous: Group G2: Pre-push gate (🟤, Cleanup Week #5, Oct 26–30, run Oct 30). MERGED 2026-10-30 via PR #94 (merge a80cc37) after three review rounds (15 + 10 held back → 3 + 1 → 0, then a close-out with two small re-raised answers): the blocking renderer line ratchet, the single read of git's ref lines, and the flaky tournament test. -->
 <!-- Previous: Group G1: Repo chores (🔵, Cleanup Week #5, Oct 26–30, run Oct 28–30). MERGED 2026-10-30 via PR #93 (merge 4894a13) after three review rounds (15 + 7 held back → 2 + 5 → 0) and a close-out: the pre-push SKIP list, --no-renames, the hook fail-safe, Context7 retired, MIT LICENSE. -->
@@ -36,7 +37,31 @@ Completed tasks with implementation details and learnings.
 
 <!-- Organize by month, newest first. -->
 
-## 2026-10 (October)
+## 2026-11 (November)
+
+### 2026-11-06 — Group G4: AI research loose ends 🟤 (Cleanup Week #5, Oct 26–30, run Nov 5–6) — **3/3, MERGED `9a8ffb9`** (PR #97)
+
+**Plan**: [2026-11-05_g4-ai-research-loose-ends.md](../archive/plans/2026-11-05_g4-ai-research-loose-ends.md). No spec: the brainstorm's description, approved in chat ("Looks right"), and the plan's pass mark are the design.
+**Branch**: `g4-ai-research-loose-ends`, cut from `main` at `56878dc`. It was deleted on the remote and locally after the merge.
+
+✅ **Status: 3/3 items, three BACKLOG entries closed. MERGED 2026-11-06 via PR #97** (merge `9a8ffb9`, with `--merge`). The review ran in a separate session at `high`:
+- **Round 1** (head `ea83a83`): 8 issues, 3 held back. Fixed: a crash in one taste's evaluation left the verdict to the others; a junction got past the repo refusal; a cache of another version was not refused; the flags were not validated. Recorded as the re-check's preconditions: the "z-scoring only" rule (the user ruled yes), one scoring function, the corrected interval and an fp32 reader.
+- **Round 2** (head `a6bb0c2`): 3 issues. The clamp check had covered two of the three learners behind `predict()`; extended, it found z-scoring tying 30–47% of scores. A corrected-interval sentence held for AUC only. An unreadable taste still left the verdict to the others, and now gives "no verdict".
+- **Round 3** (head `0ebf847`): one wording fix. Round 4 and an expanded close-out found no issues.
+
+**Summary**:
+- **The research lands on `main`** (item 1): `96d9b22`, the report and its throwaway prototype, merged rather than rebased, so the ID the v2 spec cites stays valid. The personal-data check of its 43 files passed.
+- **The real-folder check: outcome _wait_** (item 2). `prototypes/ai-sorting/real-folders.js` reads the app's cached vectors per like/dislike pair, one taste per main folder. It scores held-out files as a sort sees them (no metadata), keeps near-copies in one fold, and applies a pass mark committed before any number. Two usable tastes: neither learner-fix step gained +0.03 AUC (+0.005 at best, −0.27 at worst), so A1 waits.
+- **What it found instead**: the train/score metadata gap costs today's model 0.19–0.29 AUC (0.918 → 0.724, 1.000 → 0.707). P4a's fp32 switch cannot fix it, so the re-check waits for a decided fix. Z-scoring through the clamped `predict()` ties 30–47% of scores, and a converged fit costs about 50 s at 25,000 labels. All filed in 🟤 [2026-11-06] "From: G4 closeout".
+- **The parked branch is retired** (item 3): 303 of its commit's 314 lines were already archived, so the commit is kept as a verified patch, and the branch was deleted once the patch was on origin.
+
+**Key changes**: `prototypes/ai-sorting/real-folders.js` and `real-folders.selftest.js` (new), `bench.js` (exports), `prototypes/ai-sorting/README.md` (the real-folder section), `docs/research/2026-10-22-ai-sorting.md` (§ 10 and dated notes), `docs/archive/plans/2026-10-13_g3-departed-clips-parked.patch` (new), two `docs/README.md` rows. No app code changed.
+
+**Tests**: self-test 45/45 (31 at the run, 14 added in review, each seen failing first). Mutation checks in scratch copies: 21, 13 and 6, all killed. Unit 2,636 passed, 1 skipped, on every commit; the pre-push gate skipped E2E, since no path the app loads changed. The real run took 55 minutes, its controls passed, and a second run reproduced it to the last value.
+
+**Privacy**: only overall numbers entered git, and an outgoing name check with planted controls ran before every push. The run's full output stays outside the repo, in `%APPDATA%\media_viewer\research\2026-11-05-real-folders\`.
+
+**Sizing**: planned 3 SP, re-estimated ~4.25 at the plan, because the harness could not take real folders and needed a driver with tests. Then the first run was stopped for low memory, and three review rounds followed. No actual SP was measured.
 
 ### 2026-11-05 — G3 post-merge checks passed; the reload roles removed — **MERGED `59218f3`** (PR #96)
 
@@ -75,6 +100,8 @@ Merged at the user's request with no separate review round. Pre-push E2E: 255 pa
 **Not run**: the manual scenarios and the 15 s cap on a real large cache. The user merged with these open; they are a 🟠 TODO item, with the reload decision.
 
 **Sizing**: planned 8 SP, re-estimated ~9 at the plan; three review rounds beyond that, so it ran over again, as the week's velocity notes expect. No actual SP was measured.
+
+## 2026-10 (October)
 
 ### 2026-10-30 — Group G2: Pre-push gate 🟤 (Cleanup Week #5, Oct 26–30, run Oct 30) — **2/2, MERGED `a80cc37`** (PR #94)
 
