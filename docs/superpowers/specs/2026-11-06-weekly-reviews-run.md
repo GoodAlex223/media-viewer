@@ -244,6 +244,11 @@ user's screenshot of `/plugin` → Installed.
 4. **§2's `defer` is partly the scope guard's work**: at most one new trial, and the user's free-plan condition put
    Codex first.
 5. **The analyzer took 170 s** (73 s on 10-27); the window it read starts on 2026-10-07.
+6. **The Codex trial row was tightened after the commit**, from a *Heads up* side-agent note the user relayed: a
+   free-plan run may undersell Codex (a lighter model, an unpublished allowance). The row and its BACKLOG entry now
+   record the model that ran and whether the allowance ran out, and a `drop` reads `drop (free tier)`. Checked
+   against this run's own sources before applying: the pricing page names a lighter model for Free, and no OpenAI
+   page states the Free allowance.
 
 ## Improvements (extracted at closeout)
 
