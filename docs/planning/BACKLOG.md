@@ -2,7 +2,7 @@
 
 Ideas and tasks not yet prioritized for active development.
 
-**Last Updated**: 2026-11-06 — **G6 Weekly Reviews (2026-11-06 run, branch `g6-weekly-reviews`)**: 1 new 🟤 entry (the Codex CLI review trial) under `### [2026-11-06] From: Weekly Reviews (2026-11-06 run)`; the three 🟤 [2026-10-27] G6-closeout method lines checked off, done in the run. Earlier the same day, **G5 closeout (PR #98, merge `1cfbcd4`)**: 1 new 🟡 entry (the owed `CLAUDE.md` audit) and 1 new 🟤 entry (the v2-spec note for P1a's planning), each under `### [2026-11-06] From: G5 closeout`; the 🟡 [2026-10-17] re-set entry checked off. Earlier the same day, a follow-up note on 🟤 "Close the train/score metadata gap…": the file details mostly mark how a training vector was cached. Earlier the same day, **G4 closeout (PR #97, merge `9a8ffb9`)**: 4 new 🟤 entries under `### [2026-11-06] From: G4 closeout`. Closed the three entries G4 shipped; a gate note on A1; dated notes on the metadata-dims, folder-names and "Group copies" entries. Before that, 2026-11-05 — reload decision resolved (PR #96).
+**Last Updated**: 2026-11-06 — **G6 closeout (PR #99, merge `d326ed1`)**: 2 new 🟤 entries under `### [2026-11-06] From: G6 closeout`: a §1 review reads a candidate's skills and hooks for run-time downloads, and the recurring read-out covers built-in plugins. Earlier the same day, **G6 Weekly Reviews (2026-11-06 run, branch `g6-weekly-reviews`)**: 1 new 🟤 entry (the Codex CLI review trial) under `### [2026-11-06] From: Weekly Reviews (2026-11-06 run)`; the three 🟤 [2026-10-27] G6-closeout method lines checked off, done in the run. Earlier the same day, **G5 closeout (PR #98, merge `1cfbcd4`)**: 1 new 🟡 entry (the owed `CLAUDE.md` audit) and 1 new 🟤 entry (the v2-spec note for P1a's planning), each under `### [2026-11-06] From: G5 closeout`; the 🟡 [2026-10-17] re-set entry checked off. Earlier the same day, a follow-up note on 🟤 "Close the train/score metadata gap…": the file details mostly mark how a training vector was cached. Earlier the same day, **G4 closeout (PR #97, merge `9a8ffb9`)**: 4 new 🟤 entries under `### [2026-11-06] From: G4 closeout`. Closed the three entries G4 shipped; a gate note on A1; dated notes on the metadata-dims, folder-names and "Group copies" entries.
 
 **Purpose**: Holding area for unprioritized ideas and future work.
 **Active tasks**: See [TODO.md](TODO.md)
@@ -483,6 +483,13 @@ than a defect. Periodic-maintenance in nature → 🟡, not 🟤.
 ---
 
 ## 🟤 Auto-Generated Tech Debt
+
+### [2026-11-06] From: G6 closeout (PR #99, merge `d326ed1` — Weekly Reviews 2026-11-06 run)
+
+**Origin**: run-card [`2026-11-06-weekly-reviews-run.md`](../superpowers/specs/2026-11-06-weekly-reviews-run.md) § Improvements, from §1a, the § 5 read-out and key discoveries 2 and 5. Merged `d326ed1` after three review rounds (8 findings and a session remark, one fixed differently; then 1 finding; then none). Claude-surfaced → 🟤. A run-card is a spec, not a plan, so nothing is archived.
+
+- [ ] **A §1 review reads a candidate's skills and hooks for run-time downloads: a line in REVIEW-QUEUE §1** — a catalog's SHA pin covers the plugin's repository, not what it fetches when it runs (`npx … @latest`, `pip install`, `curl | sh`), so a review searches the candidate's `SKILL.md` files and hook scripts for such commands and names any it finds. Evidence: `modern-web-guidance` is pinned at `b31dc0a` in the official catalog, yet its skill runs `npx -y modern-web-guidance@latest` on every use (2026-11-06 §1a row; run-card key discovery 2). A review that read only the manifest and the hooks would have missed it. Effort XS. Affected: `docs/planning/REVIEW-QUEUE.md` §1.
+- [ ] **The recurring read-out covers built-in plugins: a line in REVIEW-QUEUE § 5's recurring read-out** — the `/plugin` Installed tab lists built-in plugins that `claude plugin list` omits (`cc-plugin-agents-md`, `-diff`, `-plugin-authoring`, `-telemetry` and *You should know* on 2026-11-06). Price each with `claude plugin details <name>@builtin` where it answers, record "not found" where it does not (`cc-plugin-diff`), and note that ~0 is a floor: `cc-plugin-plugin-authoring` still puts a full skill description into the session's skill list. Evidence: run-card key discovery 5; the 2026-11-06 read-out's note 1. Effort XS. Affected: `docs/planning/REVIEW-QUEUE.md` § 5 Policy.
 
 ### [2026-11-06] From: Weekly Reviews (2026-11-06 run)
 

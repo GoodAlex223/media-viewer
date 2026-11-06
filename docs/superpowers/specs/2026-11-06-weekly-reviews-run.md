@@ -292,7 +292,22 @@ new issue, present since `91fdd04`.
 - **Held back, candidate 2 ("a tool-call command" reads wider than the Bash tool), fixed with #1**: the sentence now
   says "a Bash-tool command".
 
+### PR #99 review, round 3, and the merge (2026-11-06)
+
+At head `d3f4a6f`: **no issues found**. The reviewer confirmed all three round-2 replies against the files, and
+re-ran the gates itself: the cell counts, the docs index, and the unit suite under Git Bash, 2,636 passed and 1
+skipped. It dropped three candidates. (1) The second swap of item 4 in the user's saved note has one carrier, this
+card's round-2 section: the user was told directly in the session. (2) Item 4's fourth line runs 155 characters, past
+the card's 120-column wrap: it renders the same, left as is. (3) The title is shorter than the measured fact: the
+body states it exactly.
+
+**Merged `d326ed1` on 2026-11-06** with `--merge`, at the user's request, pinned to the full head SHA
+(`gh pr merge --match-head-commit`). The branch was deleted on the remote and locally. Closeout: this section, the
+Improvements pointer below, DONE, WEEKLY `✅ PR #99`, TODO's stamp and the BACKLOG extract, in one commit on `main`.
+
 ## Improvements (extracted at closeout)
+
+Extracted 2026-11-06 to BACKLOG 🟤 `[2026-11-06] From: G6 closeout (PR #99, merge d326ed1 — Weekly Reviews 2026-11-06 run)`.
 
 1. **A §1 review reads a candidate's skills and hooks for run-time downloads.** Add a line to REVIEW-QUEUE §1: a
    catalog's SHA pin covers the plugin's repository, not what it fetches when it runs (`npx … @latest`, `pip install`,

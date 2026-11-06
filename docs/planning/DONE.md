@@ -2,7 +2,8 @@
 
 Completed tasks with implementation details and learnings.
 
-**Last Updated**: 2026-11-06 <!-- Group G5: CLAUDE.md byte-trigger re-set (🟡, Cleanup Week #5, run Nov 6). MERGED 2026-11-06 via PR #98 (merge 1cfbcd4) after one subagent review round (0 blocking, 4 fixed) and a close-out. BYTE_TRIGGER 69,000 → 85,000; the owed audit filed 🟡. -->
+**Last Updated**: 2026-11-06 <!-- Group G6: Weekly Reviews (2026-11-06 run, ⚪ Overhead, Cleanup Week #5, run Nov 6). MERGED 2026-11-06 via PR #99 (merge d326ed1) after three review rounds (8 findings and a session remark → 1 → 0). claude-security off between scans; a Codex CLI review trial filed; three hand-offs closed as filed at origin. -->
+<!-- Previous: Group G5: CLAUDE.md byte-trigger re-set (🟡, Cleanup Week #5, run Nov 6). MERGED 2026-11-06 via PR #98 (merge 1cfbcd4) after one subagent review round (0 blocking, 4 fixed) and a close-out. BYTE_TRIGGER 69,000 → 85,000; the owed audit filed 🟡. -->
 <!-- Previous: Group G4: AI research loose ends (🟤, Cleanup Week #5, run Nov 5–6). MERGED 2026-11-06 via PR #97 (merge 9a8ffb9) after three review rounds (8 + 3 held back → 3 + 3 → 1 + 1), then a clean round 4 and close-out. Real-folder outcome: wait. -->
 <!-- Previous: G3 post-merge checks passed; reload roles removed, PR #96, merge 59218f3. -->
 <!-- Previous: Group G3: Rating data that can't go wrong (🟤 🏆, Cleanup Week #5, run Nov 2–3). MERGED 2026-11-03 via PR #95 (merge b9c76c0) after three review rounds (21 + 29 held back → 7 + 8 → 1 + 6); the manual scenarios stay with the user. -->
@@ -39,6 +40,44 @@ Completed tasks with implementation details and learnings.
 <!-- Organize by month, newest first. -->
 
 ## 2026-11 (November)
+
+### 2026-11-06 — Group G6: Weekly Reviews ⚪ (2026-11-06 run, Cleanup Week #5, Oct 26–30, run Nov 6) — **4/4, MERGED `d326ed1`** (PR #99)
+
+**Run-card**: [2026-11-06-weekly-reviews-run.md](../superpowers/specs/2026-11-06-weekly-reviews-run.md) (codified-repeat ⚪ overhead, so no plan file and nothing to archive). The user took the brainstorm, so the card came first, was read by a builder-check subagent, and was approved before any measurement; one checkpoint then carried six rulings, all as recommended. Its Outcome section holds the verdicts, the discoveries, six deviations and all three review rounds. Appendix A is the hand-off note for the sibling, which the user saved; item 4 changed twice in review, and the user got each replacement in the session.
+**Branch**: `g6-weekly-reviews`, cut from `main` at `e1f017c`. It was deleted on the remote and locally after the merge.
+
+✅ **Status: 4/4 categories, plus the context-cost read-out. MERGED 2026-11-06 via PR #99** (merge `d326ed1`, with `--merge`). It ran on 2026-11-06, six days past its Sunday slot. Three review rounds ran in a separate session:
+- **Round 1** (head `91fdd04`): 8 findings, plus a remark from the reviewer's session transcript. All were checked first-hand and fixed in `ad1d81a`; #5 ("50 files" is 53) was fixed differently, since 50 was right for the Markdown filter every count used. The two that reached outside the repo: the Codex trial now runs in a fresh worktree outside the main checkout, with a disclosure covering whatever Codex reads; and "a quoted heredoc" left the backslash remedy, after a reproduction showed two backslashes reaching bash as one.
+- **Round 2** (head `ad1d81a`): 1 finding, fixed in `d3f4a6f`. The backslash rule pointed the sibling at `LANGUAGES/powershell.md`, but the PowerShell tool keeps both backslashes (character codes 65, 92, 92, 66 against the Bash tool's 65, 92, 66). Two dropped candidates were fixed anyway (the Codex worktree's removal step, "a Bash-tool command").
+- **Round 3** (head `d3f4a6f`): no issues found; three dropped candidates, none needing a change.
+
+**Summary**: The 9th Weekly Reviews run. **The plugin context-cost read-out first**, with `session-report`'s usage step for the first time: `claude-security` is disabled at project scope between scans (user ruling), taking enabled always-on tokens from ~1,803 to ~1,025. The user's *Not used recently* reading: `claude-md-management` only. **1 adopt / 2 pass / 1 defer:**
+- §1a `modern-web-guidance` (Google Chrome) passed: its skill runs an unpinned `npx … @latest` on every use; its 187 guides are parked for v2's redesign. The official catalog grew 315 → 317, with no fit.
+- §1b a Codex CLI review **adopted as a trial** on the user's free plan, with `/code-review` (the posted review at its recorded level) as the incumbent it must beat. The hook-bearing `openai/codex-plugin-cc` itself is `defer`.
+- §2 idle compaction vs the keep-warm timer deferred, both parked premises updated.
+- §3 Codex's review of subagents' state-changing calls passed, already tracked by a 🟤 entry.
+
+§ 4: the three handed-off rows close as **`filed at origin`**, a new outcome: the sibling had filed them in its 2026-10-28 intake, a day after the 10-27 card called the channel "stalled" (corrected in that card). Three new propagations by hand-off: a guard can be partial or over-broad; shared-checkout verification with mutants in a copy; and the Bash tool's backslash collapse. Inbound: the sibling applied what this repo sent; its "minimum 2" README fix is applied here, and its guard-timeout row is noted (4 timeouts, all before fail-closed, none since).
+
+**Key changes**:
+- **Config**: `claude-security` → `false` in `.claude/settings.json` (a pre-push SKIP path).
+- **REVIEW-QUEUE**: the 2026-11-06 baselines (official `a1ecfbc`, 317; community `06ec7b6`, 2,283); four verdict rows; the in-use re-measure convention (§1) and the incumbent rule (§ 5), both 🟤 `[2026-10-27]` ride-alongs; § 4's `filed at origin` convention, an outbound row, six outcome-log rows, an inbound row and the Next-up changes; § 5's stocktake, the Codex trial row and the read-out table.
+- **Methodology**: rule #7, a downloaded-package probe is authorized at the checkpoint (the third ride-along).
+- **BACKLOG**: 🟤 `[2026-11-06]` Weekly Reviews (the Codex trial); the three `[2026-10-27]` G6-closeout lines checked off. Closeout extract: 🟤 `[2026-11-06]` G6 closeout.
+- **TODO § Spawned Tasks**: three rows closed as filed at the sibling (with `59ffd0d:<line>`), three new propagation rows.
+- **The plan and archive READMEs**: the five "minimum 2" lines now match the global "None found" rule.
+- **Out of repo**: none, apart from scratch reads. Memory notes: sibling hand-offs land in its TODO; PowerShell's `[datetime]'…Z'` is local time; the Grep tool's `dir/file` glob matches nothing.
+
+**Tests**: the pre-commit hook on all four commits, 2,636 passed and 1 skipped; the pre-push gate skipped E2E each time, and the ratchet held at 11,597. Table column counts were checked with a planted-row control.
+
+**Learnings**:
+- A hand-off's status lives in the receiver's intake, not in its target file. "Absent from live `~/.claude`" measured application and read as a stalled channel; the notes had been filed the next day.
+- A catalog's SHA pin covers a plugin's repository, not what its skills download when they run.
+- A vendor's own plugin may be in no Anthropic catalog, and then its only install tracks a moving branch; its capability can be trialled through the vendor's CLI instead.
+- An absence check needs a positive control every time: the Grep tool's `dir/file` glob returned "No matches" over files that held the phrase, and a PowerShell time filter dropped a file by two hours. Both were caught only because a second probe disagreed.
+- Two backslashes in a Bash-tool command reach bash as one, inside quotes too; the PowerShell tool keeps both.
+
+**Follow-ups**: 🟤 [2026-11-06] "Trial: a Codex CLI review beside `/code-review` on the next code PR"; 🟤 [2026-11-06] G6 closeout (two method lines). The user's saved hand-off note carries the corrected item 4.
 
 ### 2026-11-06 — Group G5: `CLAUDE.md` byte-trigger re-set 🟡 (Cleanup Week #5, Oct 26–30, run Nov 6) — **1/1, MERGED `1cfbcd4`** (PR #98)
 

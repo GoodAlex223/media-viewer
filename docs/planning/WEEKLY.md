@@ -3,7 +3,7 @@
 **Week**: Monday October 26 – Friday October 30, 2026
 **Created**: 2026-10-28
 **Sources**: MILESTONES.md, ROADMAP.md, GOALS.md (all `Last Updated` 2026-10-27 by G5's refresh, one day old; this pass adds a status edit for the v2-share ruling, see Notes → v2's weekly share), BACKLOG.md (📌 Process Rules; the open 🔵 pool; the 🟤 sections filed since Cleanup Week #4, [2026-10-11] → [2026-10-27]; 🟡 [2026-10-17]; the last plan's unverified reap list, re-checked first-hand), TODO.md (🔴 I1 real-profile check, both 🟠 items, § Spawned Tasks), git log (last 2 weeks: the Oct 19–27 merges `4548269`, `f668611`, `654fb3e`, `f5ddfa3`, `e1c4e03`, `7f75013`, `082e3b2`, `7fb9978`, `c5ac35f` and their closeouts through `fab2bf6`; intake `d639e1c`), previous WEEKLY.md (Oct 19–23, spilled to 2026-10-27, archived below), REVIEW-QUEUE.md (§§1–5; last run 2026-10-27; § 5 queue at 0). Live-config drift check: N/A — this repo keeps no live-config sync. OWNER-QUEUE.md: absent.
-**Spillover**: past the close-out gate's grace (Sunday Nov 1). G3–G6 were still open on 2026-11-02, when G3's plan recorded this. G1 and G2 merged on 2026-10-30, G3 on 2026-11-03, and G4 and G5 on 2026-11-06; G6 remains.
+**Spillover**: past the close-out gate's grace (Sunday Nov 1). G3–G6 were still open on 2026-11-02, when G3's plan recorded this. G1 and G2 merged on 2026-10-30, G3 on 2026-11-03, and G4, G5 and G6 on 2026-11-06 (G6 via PR #99, merge `d326ed1`). Every group is closed.
 **Cleanup Week?**: **Yes — 🧹 CLEANUP WEEK #5, OVERDUE.** The quota **inverts**: 🟤 Auto-Generated is the majority, the ≤1-group and ≤25% 🟤 caps are suspended, 🟡 stays ≤25%, and 🔵 is limited to one sanctioned exception (G1, 3 SP, my call, delegated by the user). #5 fell due this very week, Oct 26–30, while the Oct 19–23 plan's spillover ran through Tuesday the 27th: overdue, not skipped, so it runs now. The 🟤-size trigger fires too: 174 open 🟤 entries sit in sections dated 2026-10-11 → 2026-10-27, and 390 are open in all (measured 2026-10-28, before this pass's reaps).
 **Context**: Roadmap phase _v2 — modules and redesign_; next milestone _v2 pilot (P1a + P1b)_, whose P1a can start the week of Nov 2–6. This week's agreed theme is **"clear the runway for v2, then make the rating data safe"**: cheaper pushes and two repo chores first (G1, the 🔵 exception); the blocking line ratchet P1a must merge under, with the flaky test that blocks pushes (G2); then the open defects that can leave a file or a rating in the wrong state (🏆 G3); the AI research's PR and the real-data check A1 waits on (G4); the `CLAUDE.md` byte-trigger re-set this week owes (G5); and Weekly Reviews with the overdue plugin context-cost read-out (G6). **Planned as of Sunday 2026-10-25 by the user's ruling and written Wednesday 2026-10-28; each header day runs two days later (Monday's work on Wed Oct 28, through Friday's on Sun Nov 1).**
 
@@ -86,6 +86,7 @@
 - [x] **Claude best-practices (1 SP)** — a fresh check against the parked list. ✅ 2026-11-06: idle compaction vs the keep-warm timer **defer**, both parked premises updated.
 - [x] **Non-Claude AI best-practices (1 SP)** — the same, for AI models and tools other than Claude. ✅ 2026-11-06: Codex's review of subagents' state-changing calls **pass**, already tracked by a 🟤 entry.
 - [x] **Cross-project propagation (1 SP)** — outbound: this week's shipped work (G1–G5) and the memory files changed since 2026-10-27, at the high bar; inbound: new sibling rows naming this repo; and the status of the three TODO § Spawned Tasks rows still handed over (two from 2026-10-17, re-handed 2026-10-27, and one from 2026-10-27). ✅ 2026-11-06: the three rows were found filed at the sibling and closed here (`filed at origin`, user ruling); three new propagations handed over; inbound, the "minimum 2" README lines fixed and the guard-timeout row measured and noted.
+- [x] ✅ **MERGED 2026-11-06 via PR #99 (merge `d326ed1`)**, six days past the Sunday slot (Spillover), after three review rounds in a separate session: 8 findings and a session remark (one fixed differently), then 1 finding, then none; see [DONE.md](DONE.md).
 
 ---
 
@@ -123,7 +124,7 @@
 ### Friday, October 30 (run Sunday, November 1) — The trigger; reviews
 
 - **[G5](#g5-claudemd-byte-trigger-re-set-solo---pre-commit-size-warning--1-sp)** 🟡 — measure; re-set; review; merge. ✅ PR #98 (merge `1cfbcd4`, 2026-11-06; reviewed in a subagent, one round and a close-out).
-- **[G6](#g6-weekly-reviews-batch--overhead--research--process--5-sp)** ⚪ — the context-cost read-out, then §§1–4. ◐ Run 2026-11-06 on branch `g6-weekly-reviews`, unmerged.
+- **[G6](#g6-weekly-reviews-batch--overhead--research--process--5-sp)** ⚪ — the context-cost read-out, then §§1–4. ✅ PR #99 (merge `d326ed1`, 2026-11-06), after three review rounds (8 findings, then 1, then none).
 - Buffer for review rounds. Closeout per group, **after its merge**: Summary-Table Status → `✅ PR #N`, the group's Daily-Schedule rows, and every BACKLOG/TODO entry it closed — in the closeout commit.
 
 **Daily total**: ~1 SP + 5 overhead + buffer
@@ -139,7 +140,7 @@
 | G3  | Rating data that can't go wrong `[batch]` 🏆 | File and rating safety  | 🟤 Auto     | 7      | 8        | Tue–Thu | ✅ PR #95  |
 | G4  | AI research loose ends `[batch]`              | AI sorting research     | 🟤 Auto     | 3      | 3        | Thu     | ✅ PR #97  |
 | G5  | `CLAUDE.md` byte-trigger re-set `[solo]`      | Pre-commit size warning | 🟡 Ops      | 1      | 1        | Fri     | ✅ PR #98  |
-| G6  | Weekly Reviews `[batch]`                      | Research / process      | ⚪ Overhead | 4      | 5        | Fri     | ◐ Branch complete, unmerged |
+| G6  | Weekly Reviews `[batch]`                      | Research / process      | ⚪ Overhead | 4      | 5        | Fri     | ✅ PR #99  |
 |     | **Total (quota-counted)**                     |                         |             | **16** | **19**   |         |            |
 |     | **Total (incl. ⚪ overhead)**                 |                         |             | **20** | **24**   |         |            |
 
