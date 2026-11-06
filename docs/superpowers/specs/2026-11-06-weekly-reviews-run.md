@@ -275,6 +275,23 @@ mechanism this card called "never pinned down"). Each was checked first-hand bef
 - **Transcript remark, fixed**: "the mechanism was never pinned down" is replaced, wherever it stood, by the measured
   collapse (two backslashes become one before bash parses the command).
 
+### PR #99 review, round 2 (2026-11-06)
+
+At head `ad1d81a`, the reviewer confirmed all eight round-1 fixes and accepted #5's "fixed differently". It found one
+new issue, present since `91fdd04`.
+
+1. **Fixed.** The escapes rule pointed the sibling at `LANGUAGES/powershell.md`, but the PowerShell tool keeps both
+   backslashes. Reproduced: the same single-quoted string gave character codes 65, 92, 92, 66 in the PowerShell tool
+   and 65, 92, 66 in the Bash tool. The rule's title now names the Bash tool (and the editor tool for the escape
+   case), and its target is a tool-use note in `WORKFLOW.md`, with the PowerShell measurement given as the reason.
+   The same change went into the TODO row, the outbound row, the outcome log and Appendix A item 4. The user's saved
+   note needs item 4 swapped a second time.
+- **Held back, candidate 1 (the Codex worktree has no removal step), fixed anyway**: the trial row and its BACKLOG
+  entry now end with `git worktree remove <folder>`. It costs one clause, and the fresh worktree holds no junction, so
+  the removal cannot reach the main checkout.
+- **Held back, candidate 2 ("a tool-call command" reads wider than the Bash tool), fixed with #1**: the sentence now
+  says "a Bash-tool command".
+
 ## Improvements (extracted at closeout)
 
 1. **A §1 review reads a candidate's skills and hooks for run-time downloads.** Add a line to REVIEW-QUEUE §1: a
@@ -313,20 +330,22 @@ mechanism this card called "never pinned down"). Each was checked first-hand bef
 >    Absent: `shared checkout`, `same checkout`, `parallel session`, `local HEAD`, `git rev-parse HEAD` and `mutant` 0
 >    (control `worktree` 5). Target: a new § in `POLICIES/git.md` after § Throwaway Worktrees, plus a clause at
 >    `critical-thinking.md:155`.
-> 4. **New: on this Windows host, tool text can lose or alter escapes.** Build backslashes and escapes from
->    character codes (`chr(92)`, `String.fromCharCode(92)`), then check the bytes after writing (`od -c`, or a
->    `grep -c` of the literal character). No shell quoting is a remedy: two consecutive backslashes in a tool-call
->    command reach bash as one, inside a quoted heredoc (`<<'EOF'`) or single quotes too, while a lone backslash
+> 4. **New: on this Windows host, the Bash tool collapses backslashes and an editor tool can unescape a typed
+>    escape.** Build backslashes and escapes from character codes (`chr(92)`, `String.fromCharCode(92)`), then
+>    check the bytes after writing (`od -c`, or a `grep -c` of the literal character). No shell quoting is a remedy:
+>    two consecutive backslashes in a Bash-tool command reach bash as one, inside a quoted heredoc (`<<'EOF'`) or single quotes too, while a lone backslash
 >    survives (`od -c`, measured twice on 2026-11-06). The collapse happens before bash parses the text. The Write
 >    tool alone is not the remedy either: an editor tool once wrote a typed escape as the literal character.
 >    Incidents: media_viewer's G1 (2026-10-11) and PR #94, plus G6 (10-18), which fits either cause. Absent:
 >    `backslash`, `heredoc`, `chr(92)`, `BOM`, `U+FEFF` and `fromCharCode` 0 (control `Windows` 8 occurrences over
->    the 50 Markdown files). Target: yours to choose; `LANGUAGES/powershell.md` § Windows-Specific Considerations or
->    a tool-use note in `WORKFLOW.md`.
+>    the 50 Markdown files). Target: a tool-use note in `WORKFLOW.md`, where within it yours to choose. Not
+>    `LANGUAGES/powershell.md`: the PowerShell tool keeps both backslashes (character codes 65, 92, 92, 66 against
+>    the Bash tool's 65, 92, 66 for the same single-quoted string, measured 2026-11-06).
 >
 > _Item 4 was corrected in PR #99's review, after the user had saved this note: the first version listed "a quoted
 > heredoc" among the remedies, counted G2's 2026-10-30 backticks (ordinary command substitution) as an incident, and
-> said the mechanism was never pinned down._
+> said the mechanism was never pinned down. Round 2 corrected it again: its title now names the Bash tool, and its
+> target moved from `LANGUAGES/powershell.md` to `WORKFLOW.md`, because the PowerShell tool keeps both backslashes._
 > 5. **Your row "Hand media_viewer its `guard-preload-bash.js` timeouts" can close: noted.** In media_viewer's
 >    transcripts still on disk (main folder, subagents and worktree folders): 4 guard timeouts (2026-10-07, 10-09,
 >    10-16 and 10-17), all before `onFailure: "block"` took effect on 2026-10-19, and none after 10-17. The 10 s limit
