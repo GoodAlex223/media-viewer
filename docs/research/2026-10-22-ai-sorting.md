@@ -565,7 +565,8 @@ of that drop is ties at the sigmoid's clamp, see below), 55.2 with the converged
 out. In B any order shows almost only likes (59.6 of 60), so
 that clause does not apply. In the learning curve (n likes + n dislikes), neither fix step gains at 3, 10 or 30
 per side in either taste (every CI spans zero, or the gain is below it), and both lose at 100 and 300 per side in
-A (converged -0.033 and -0.058, z-scoring -0.069 and -0.094).
+A (converged -0.033 and -0.058, z-scoring -0.069 and -0.094). The z-scoring curve rows also score through the
+app's `predict()` and were not re-scored by margin (see *Checks*), so how much of their loss is ties is not known.
 
 **Controls.** With labels shuffled, every main learner landed at 0.493-0.498 in A (bound: within 0.010 of 0.5)
 and 0.469-0.508 in B (bound: within 0.064): passed. Letting near-copies straddle folds moved today's learner by
@@ -589,7 +590,7 @@ result in every one of its 345 values apart from timings; a planted change of 1e
     A's first 60, not 40.2. So most of that first-60 drop is ties, while its AUC loss stands, and B's below-chance
     ranking is not a tie effect.
   - The pass mark scored z-scoring as the app would ship it, through `predict()`, so the outcome is unchanged. A
-    z-scored model behind today's `predict()` would tie about half its scores.
+    z-scored model behind today's `predict()` would tie a third to a half of its scores (30% and 47% here).
 - The script was hardened after this run (flag checks, the repo refusal through junctions, a cache-version check; a
   throwing evaluation now fails the run, and an unreadable context makes the outcome no verdict). This run reached
   none of those paths.
@@ -607,7 +608,8 @@ should carry that fix as a candidate fixed in advance.
   0.738 and 0.734 for today's learner on CLIP alone), and a sort never sees it.
 - Z-scoring makes the mismatch worse, likely because it scales the metadata dims up to the size of every other
   feature, so the model leans on exactly what scoring takes away. In B its ranking falls below chance (0.352, and
-  0.325 by margin). Its margins also run past the app's sigmoid clamp, tying about half its scores (see *Checks*).
+  0.325 by margin). Its margins also run past the app's sigmoid clamp, tying 30% (B) to 47% (A) of its scores (see
+  *Checks*).
 - Leaving the metadata out of training is the one variant that clearly helps in A (+0.058, every fold won) and
   does no harm in B (+0.007, CI spanning zero). It was not a pre-registered candidate, so it is a lead for a new
   check, not a result. The other way to close the gap is to give background extraction the metadata, so that the

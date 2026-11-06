@@ -206,6 +206,11 @@ Outcome across the usable contexts:
 - **#3, an unreadable context still left the verdict to the others.** Fixed: `verdictInput` marks it unread, `verdict()` gives `no verdict` (a failed shuffled control still outranks it, as `void`), and the outcome line names the context. Too-small contexts stay excluded, since their counts are known. This adds a "no verdict" trigger for missing data and moves no threshold; this run never reached it. 3 new tests and an assertion, seen failing (45 pass); 6 of 6 mutants killed.
 - **Held back:** all three agreed, no change. I withdraw round 1's "the n = 1 edge is closed": a curve size near a fold's class count can still leave one trial and print `n/a`, in a context-only row.
 
+### 2026-11-06 — PHASE: Review round 3 (issuecomment-6675610212: 1 minor issue, 1 held back; round 2 accepted)
+
+- **#1, "about half":** right, that holds for A's 47% only. Both report sentences now give 30% and 47% ("a third to a half"). A search for the claim across the branch's docs found no other copy; the § 6 row already had both figures.
+- **Held back, the curve's z-scoring rows also score through `predict()`:** the reviewer asked for no action. I scoped the report's curve sentence instead: those rows were not re-scored by margin, so how much of their loss is ties is not known. Precondition (c) covers the re-check.
+
 ---
 
 ## 5. Key Discoveries
