@@ -27,7 +27,7 @@
 
 ### Problem Restatement
 
-The trigger fired before it was re-set. `CLAUDE.md` passed 69,000 on 2026-11-02 (G3's `233a672`) and is 71,287 bytes now. Every commit that grew it since has printed "due for an audit". WEEKLY planned G5 on 2026-10-28, when the file was 66,944 bytes, so the group carries the re-set only, not an audit. The spec meant the re-set to happen at an audit ("re-set the trigger at that audit", § 6.2), and the script's comment says "Change it only at an audit". Re-setting now without a trim raises the bar over a warning that has already fired, so the audit must stay owed explicitly.
+The trigger fired before it was re-set. `CLAUDE.md` passed 69,000 on 2026-11-02 (G3's `233a672`) and is 71,287 bytes now. Every commit that grew it since has printed "due for an audit". WEEKLY planned G5 on 2026-10-28, when the file was 66,944 bytes, so the group carries the re-set only, not an audit. The spec meant the re-set to happen at an audit ("re-set the trigger at that audit", § 6.2), and the script's comment before this change said "Change it only at an audit". Re-setting now without a trim raises the bar over a warning that has already fired, so the audit must stay owed explicitly.
 
 ### Measurements (2026-11-06, `wc -c`-equivalent UTF-8 bytes of each commit's `CLAUDE.md`)
 
@@ -146,6 +146,7 @@ The trigger fired before it was re-set. `CLAUDE.md` passed 69,000 on 2026-11-02 
   2. **nit**: the comment ended "Change it only at an audit" right above a change made outside one; now "Change it next only at that owed audit".
   3. **nit**: the size-audit spec's post-implementation note still read "`BYTE_TRIGGER` is 69,000" as current; it gets a superseded note (the closeout rule for a frozen spec), in this PR rather than at closeout.
   4. **nit**: the 14.7 KB was cited to spec § 2.1, which gives the sizes; § 6.2 states the figure. Both are cited now.
+- Before the close-out, a sweep for the old wording found two places still quoting it as current: § 2's Problem Restatement ("the script's comment says…", now "said", before this change) and the PR body's summary (updated). The 07:38 log entry keeps its words, as a record.
 
 ---
 
