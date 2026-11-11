@@ -340,7 +340,7 @@ Spec §§ 6.1, 6.5 steps 1–2, 8.1.
 
 `isActive(id)` is `enabledAtLaunch && status === 'enabled'`. `folderFileDecl(owner, name)` requires `isActive(owner)` and the name in that manifest. There is no `core` owner in P1a (C2). `moduleDir(id)` returns the realpath'd folder for any non-`invalid` module, or `null`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Run every case through an in-memory `fs` fake (`readdir`, `stat`, `readFile`, `realpath`) and a recording writer:
 - `validateManifest`: one valid fixture passes. Each row of the table above fails, with the error naming the key. A BOM-prefixed file parses; a 65,537-byte file is refused.
@@ -360,17 +360,17 @@ Run every case through an in-memory `fs` fake (`readdir`, `stat`, `readFile`, `r
 - `folderFileDecl`: an active module's declared name; null for owner `'core'`; null for an off module's declared name; null for an undeclared name.
 - `moduleDir`: null for an invalid module.
 
-- [ ] **Step 2: Run and see them fail**
+- [x] **Step 2: Run and see them fail**
 
 Run: `npx vitest run tests/module-registry.test.js`. Expected: FAIL (`Cannot find module '../main/module-registry'`).
 
-- [ ] **Step 3: Implement `main/module-registry.js` to the interface above**
+- [x] **Step 3: Implement `main/module-registry.js` to the interface above**
 
-- [ ] **Step 4: Run and see them pass, and check the count**
+- [x] **Step 4: Run and see them pass, and check the count**
 
 Run: `npx vitest run tests/module-registry.test.js`. Expected: PASS, with the count equal to the cases written.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add main/module-registry.js tests/module-registry.test.js
@@ -882,6 +882,12 @@ Spec § 7.13 (per-launch isolation), § 14 exit criteria.
 - **Task 1 done.** Lint blocks 1d (`main/**`, `modules/*/main/**`), 2d (`core/**`), 2e/2f (module `ui/`, `workers/`); M-1 on block 1 and 1c; M-2 merged with the HTML sink guard; local rule `mv/module-imports`. `tests/lint-guard.test.js` 240 → 331 (90 new cases failed first, all on the expected groups), `tests/module-boundary.test.js` 4, `tests/media-url.test.js` 12, `tests/check-e2e-needed.test.js` 81. Whole-repo lint unchanged (0 errors, the same 2 warnings as `main`).
   - Ruling: `mv/module-imports` also flags an `import()` of a computed name in module code (the plan named literal sources only). A computed name is a hole no reader can check; P1a modules need none. Cost if wrong: one case and one message to drop.
   - Ruling: in `media-url.test.js`'s walk, an `import`/`importScripts` resolves against the referring file, a `<script src>`/`new Worker` URL against the page (the plan said "the referring file" for all). That is how the browser resolves them. Cost if wrong: none today, every worker is at the root.
+
+- **Task 2 done.** `main/module-registry.js`; `tests/module-registry.test.js` 92 cases (RED on the missing module first).
+  - Ruling: required manifest keys are `id`, `name`, `version`, `apiVersion`, `entry`, `defaultEnabled`; `description`, `requires`, `optional`, `folderFiles` default to `''`/`[]` (the plan's table did not say which are required). Cost if wrong: a fixture manifest gains or loses a key.
+  - Ruling: a module folder whose realpath differs from its joined path (a link) is `invalid`, so `moduleDir` never hands the protocol a folder outside its root. Cost if wrong: one refusal to relax.
+  - Ruling: `setEnabled` calls run one at a time, each from the last written state, so two quick toggles of different modules both reach disk (the writer's per-target queue alone kept only the last). Cost if wrong: none.
+  - Ruling: `modules.json` over 65,536 bytes counts as unreadable (defaults, one warning), like the manifest cap. Cost if wrong: one constant.
 
 ## 5. Key Discoveries
 
