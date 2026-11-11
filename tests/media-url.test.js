@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createRequire } from 'module';
-import { readFileSync } from 'fs';
+import { readFileSync, readdirSync } from 'fs';
+import path from 'path';
 import { toMediaUrl, MEDIA_URL_PREFIX } from '../media-url.js';
 
 const require = createRequire(import.meta.url);
@@ -25,8 +26,35 @@ describe('toMediaUrl (G1 I1)', () => {
 
 // A control, not a convention (memory feedback_convention_is_not_a_control): the renderer never
 // names a file: URL, and every src it assigns is a known kind.
+// Every real .js file under a repo folder, as repo-relative paths with forward slashes ([] when it is absent).
+function jsFilesUnder(dir, keep = () => true) {
+    let entries;
+    try {
+        entries = readdirSync(new URL(`../${dir}`, import.meta.url), { recursive: true });
+    } catch {
+        return [];
+    }
+    return entries
+        .map((f) => `${dir}/${f.split(path.sep).join('/')}`)
+        .filter((f) => f.endsWith('.js'))
+        .filter(keep);
+}
+
+// True when a source names a file: URL or converts a path to one.
+export function namesFileUrl(src) {
+    return src.includes('file://') || src.includes('pathToFileURL');
+}
+
+describe('namesFileUrl', () => {
+    it('finds a planted file: URL (control: the check fires)', () => {
+        expect(namesFileUrl("x.src = 'file:///c:/a.jpg';")).toBe(true);
+        expect(namesFileUrl('const u = url.pathToFileURL(p);')).toBe(true);
+        expect(namesFileUrl("x.src = MediaUrl.toMediaUrl('C:/a.jpg');")).toBe(false);
+    });
+});
+
 describe('renderer media URLs (G1 I1)', () => {
-    const RENDERER_FILES = [
+    const NAMED_FILES = [
         'media-viewer.js',
         'fullscreen.js',
         'zoom.js',
@@ -53,21 +81,31 @@ describe('renderer media URLs (G1 I1)', () => {
         'hash-worker.js',
         'index.html',
     ];
+    // v2: core code and every module's page-side code join by folder, so a new file cannot be left off.
+    const RENDERER_FILES = [
+        ...NAMED_FILES,
+        ...jsFilesUnder('core'),
+        ...jsFilesUnder('modules', (f) => ['ui', 'workers'].includes(f.split('/')[2])),
+    ];
     const read = (f) => readFileSync(new URL(`../${f}`, import.meta.url), 'utf8');
 
     // Every app file the page loads, by import, worker or importScripts, from index.html. G2 PR 2 moved the hash
-    // route's src assignments into a module the list above did not name (PR #87 review #5).
+    // route's src assignments into a module the list above did not name (PR #87 review #5). An import and an
+    // importScripts resolve against the referring file's folder; a <script src> and a Worker URL against the page.
     function loadedByThePage() {
         const seen = new Set(['index.html']);
         const queue = ['index.html'];
         while (queue.length > 0) {
-            const text = read(queue.shift());
+            const from = queue.shift();
+            const text = read(from);
+            const here = (ref) => path.posix.normalize(path.posix.join(path.posix.dirname(from), ref));
+            const page = (ref) => path.posix.normalize(ref);
             const refs = [
-                ...text.matchAll(/<script[^>]*\bsrc="(?:\.\/)?([a-z0-9-]+\.js)"/g),
-                ...text.matchAll(/\bfrom\s+'\.\/([a-z0-9-]+\.js)'/g),
-                ...text.matchAll(/new Worker\('(?:\.\/)?([a-z0-9-]+\.js)'/g),
-                ...text.matchAll(/importScripts\(\s*'(?:\.\/)?([a-z0-9-]+\.js)'/g),
-            ].map((m) => m[1]);
+                ...[...text.matchAll(/<script[^>]*\bsrc="((?:\.\/)?[a-z0-9/-]+\.js)"/g)].map((m) => page(m[1])),
+                ...[...text.matchAll(/\bfrom\s+'((?:\.{1,2}\/)+[a-z0-9/-]+\.js)'/g)].map((m) => here(m[1])),
+                ...[...text.matchAll(/new Worker\('((?:\.\/)?[a-z0-9/-]+\.js)'/g)].map((m) => page(m[1])),
+                ...[...text.matchAll(/importScripts\(\s*'((?:\.\/)?[a-z0-9/-]+\.js)'/g)].map((m) => here(m[1])),
+            ];
             for (const ref of refs) {
                 if (!seen.has(ref)) {
                     seen.add(ref);
@@ -101,8 +139,7 @@ describe('renderer media URLs (G1 I1)', () => {
 
     it('no renderer file names a file:// URL or converts a path to one', () => {
         for (const f of RENDERER_FILES) {
-            expect(read(f), f).not.toContain('file://');
-            expect(read(f), f).not.toContain('pathToFileURL');
+            expect(namesFileUrl(read(f)), f).toBe(false);
         }
         expect(read('index.html')).not.toMatch(/http-equiv="Content-Security-Policy"/);
         expect(read('index.html')).not.toContain('unpkg.com');

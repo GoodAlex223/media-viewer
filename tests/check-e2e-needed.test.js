@@ -125,6 +125,11 @@ describe('classifyPaths — near misses and look-alikes run E2E', () => {
         'vendor/lucide/lucide.min.js',
         'vitest.config.js.bak',
         'sub/vitest.config.js',
+        // v2 (P1a): the app loads core/, modules/ and main/, and the E2E suite loads its fixture modules.
+        'core/module-host.js',
+        'modules/x/ui/index.js',
+        'main/folder-files.js',
+        'tests/e2e/fixtures/modules/x/module.json',
     ])('%s → RUN', (p) => {
         expect(classifyPaths([p])).toBe(true);
     });
