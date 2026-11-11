@@ -751,11 +751,11 @@ Spec § 10 (P1a part, C4, C10).
 - On a toggle the panel awaits `api.setModuleEnabled`. On `{ error }` or `null` it reverts the box and calls `notify('Could not save the module setting: <error>', 'error')`. Otherwise it stores the new list and re-renders. The restart bar shows iff `restartNeeded`. "Restart now" calls `requestRestart()`, which is `() => this.handleAppCloseRequest({ restart: true })`.
 - The DOM is built with `createElement`/`textContent` only (lint-enforced).
 
-- [ ] **Step 1: Write the failing row-model tests**: every status row above; the restart suffix; `empty` for a null and an empty list; `toggleDisabled` only for invalid. Run: `npx vitest run tests/modules-panel.test.js`. Expected: FAIL.
-- [ ] **Step 2: Implement; wire `this.moduleHost.ready.then(() => this.modulesPanel.render())`**
-- [ ] **Step 3: Run the units and lint.** Run: `npx vitest run` and `npm run lint`. Expected: PASS.
-- [ ] **Step 4: Smoke it.** `npm start`, F1: the Modules section reads "No modules yet".
-- [ ] **Step 5: Commit** `feat(modules): the Modules section in F1 - rows, toggle, restart`
+- [x] **Step 1: Write the failing row-model tests**: every status row above; the restart suffix; `empty` for a null and an empty list; `toggleDisabled` only for invalid. Run: `npx vitest run tests/modules-panel.test.js`. Expected: FAIL.
+- [x] **Step 2: Implement; wire `this.moduleHost.ready.then(() => this.modulesPanel.render())`**
+- [x] **Step 3: Run the units and lint.** Run: `npx vitest run` and `npm run lint`. Expected: PASS.
+- [x] **Step 4: Smoke it.** `npm start`, F1: the Modules section reads "No modules yet".
+- [x] **Step 5: Commit** `feat(modules): the Modules section in F1 - rows, toggle, restart`
 
 ---
 
@@ -921,6 +921,10 @@ Spec § 7.13 (per-launch isolation), § 14 exit criteria.
   - Ruling: a plain close let through during a restart's save turns the relaunch off (`_closeRestarts = false`), so the save's `finally` sends `allowAppClose`, not `restartApp`; and main's `restart-app` arms nothing once `isQuitting` is set. The plan's "closes without relaunching" needed both: the restart save's own `finally` would otherwise still send `restartApp` before the window is gone. Cost if wrong: none.
   - Ruling: `deactivateAll()` also waits for every store call still in flight (a module's `onVisitEnd` save is issued at once, and the quit must not close before main has it), under the close flow's 15 s cap. Test added to `module-host.test.js`, RED first. Cost if wrong: a quit waits for a module's last write.
   - Ruling: the shared `stubModuleHost()` lives in `tests/feature-cache-harness.js` beside `stubFeatureCacheStore`, and the four context builders that run `loadFolder`/`_switchToFolderNow` get it, plus member 6's close context. No assertion changed. Cost if wrong: none.
+
+- **Task 11 done.** `core/modules-panel.js` (`describeModuleRows`, `ModulesPanel`), the `#modulesSection` markup after Settings, and its styles from existing tokens (`.modules-restart-bar[hidden]` restated, since `display: flex` outranks the attribute). `tests/modules-panel.test.js` 19 (RED on the missing module first): every status, the restart suffix, `empty`, `toggleDisabled`, and the toggle's save, revert-and-notify on a refusal, error, null or rejection, and Restart now. Unit suite 63 files, 3,071 passed. **`wc -l media-viewer.js` = 11,544.**
+  - Ruling: an enabled module with no outcome reads "Not started" (the plan's table had no row for it). Cost if wrong: one string.
+  - Ruling: Step 4's manual F1 smoke ("No modules yet") is done by E2E case 1 in Task 12, which opens F1 and reads the section on a real launch. Cost if wrong: none; E2E is stronger.
 
 ## 5. Key Discoveries
 

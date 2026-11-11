@@ -13,6 +13,7 @@ import * as HashPool from './hash-pool.js';
 import * as HashParity from './hash-parity.js';
 import { Notifier } from './core/notifications.js';
 import { ModuleHost } from './core/module-host.js';
+import { ModulesPanel } from './core/modules-panel.js';
 
 const DEFAULT_SHORTCUTS = {
     single: {
@@ -414,7 +415,16 @@ class MediaViewer {
             getFiles: () => this.mediaFiles,
         });
         this.modules = this.moduleHost.testApis; // each active module's testApi (E2E)
-        this.moduleHost.start();
+        // F1's Modules section (core/modules-panel.js): rows once the host is ready; Restart runs the close flow.
+        this.modulesPanel = new ModulesPanel({
+            root: document.getElementById('modulesSection'),
+            api: window.electronAPI,
+            notify: (...args) => this.showNotification(...args),
+            getList: () => this.moduleHost.list(),
+            outcomeOf: (id) => this.moduleHost.outcome(id),
+            requestRestart: () => this.handleAppCloseRequest({ restart: true }),
+        });
+        this.moduleHost.start().then(() => this.modulesPanel.render());
         this.setupEventListeners();
         this.setupHeaderVisibility();
         this.setupFileInfoVisibility();
