@@ -39,6 +39,11 @@ const SERVED_TREES = Object.freeze([
     ['node_modules', '@vladmandic', 'face-api', 'model'],
 ]);
 
+// v2 (spec § 9): core/ holds the page's own JS and CSS. main/ and every module's main/ are main-process code and
+// are never served, from either door.
+const CORE_FILE = /\.(?:js|css)$/;
+const MODULE_FILE = /\.(?:js|json|css|wasm)$/;
+
 function isServedAppPath(segments) {
     if (segments.length === 0 || segments.some((s) => s.startsWith('.'))) {
         return false;
@@ -46,7 +51,28 @@ function isServedAppPath(segments) {
     if (segments.length === 1) {
         return TOP_LEVEL_FILE.test(segments[0]);
     }
+    if (segments[0] === 'core') {
+        return CORE_FILE.test(segments[segments.length - 1]);
+    }
     return SERVED_TREES.some((tree) => segments.length > tree.length && tree.every((name, i) => segments[i] === name));
+}
+
+// A module's file (v2 P1a, spec §§ 6.4, 9): modules/<id>/module.json, or a .js/.json/.css/.wasm file under its ui/
+// or workers/ folder, resolved in the folder the registry found for <id> (which may be outside the app folder, as
+// the E2E fixture root is). Null for anything else, and for an id the registry does not hold or holds as invalid.
+function moduleFilePath(segments, resolveModuleDir) {
+    if (segments.length < 3 || segments[0] !== 'modules' || segments.some((s) => s.startsWith('.'))) {
+        return null;
+    }
+    const rest = segments.slice(2);
+    const admitted =
+        (rest.length === 1 && rest[0] === 'module.json') ||
+        ((rest[0] === 'ui' || rest[0] === 'workers') && rest.length >= 2 && MODULE_FILE.test(rest[rest.length - 1]));
+    if (!admitted) {
+        return null;
+    }
+    const dir = resolveModuleDir(segments[1]);
+    return dir ? path.join(dir, ...rest) : null;
 }
 
 // The decoded segments of an app-file path, or null: each one non-empty, not . or .., and holding
@@ -121,7 +147,14 @@ function isBlockedEgress(url) {
     return /^(?:https?|wss?):/i.test(String(url));
 }
 
-function createAppProtocol({ appRoot, resolveMediaRead, getMimeType, csp = null, logger }) {
+function createAppProtocol({
+    appRoot,
+    resolveModuleDir = () => null,
+    resolveMediaRead,
+    getMimeType,
+    csp = null,
+    logger,
+}) {
     let openStreams = 0;
 
     const refuse = (url, reason) => {
@@ -142,10 +175,16 @@ function createAppProtocol({ appRoot, resolveMediaRead, getMimeType, csp = null,
 
     async function serveAppFile(request, url) {
         const segments = decodeAppPath(url.pathname);
-        if (!segments || !isServedAppPath(segments)) {
+        if (!segments) {
             return refuse(request.url, 'not an app file');
         }
-        const joined = path.join(appRoot, ...segments);
+        const joined = isServedAppPath(segments)
+            ? path.join(appRoot, ...segments)
+            : moduleFilePath(segments, resolveModuleDir);
+        if (joined === null) {
+            return refuse(request.url, 'not an app file');
+        }
+        // A module folder is the registry's realpath, so for both doors a link anywhere below the root shows here.
         let real;
         try {
             real = await jsRealpath(joined);
@@ -250,6 +289,7 @@ module.exports = {
     decodeAppPath,
     decodeMediaPath,
     isServedAppPath,
+    moduleFilePath,
     parseRange,
     isBlockedEgress,
     APP_SCHEME,

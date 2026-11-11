@@ -455,7 +455,7 @@ Spec § 9 (allowlist row), § 6.4 (roots).
 - Returns `path.join(dir, ...rest)`.
 - `serveAppFile` takes its `joined` path from the static rule (as today) or from this, then applies today's realpath-equals-joined check, so a link inside a module folder is refused like one in the app folder.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 - **Served (200):** `core/a.js`, `core/sub/b.css`, `modules/m/module.json`, `modules/m/ui/index.js`, `modules/m/ui/x/y.css`, `modules/m/workers/w.js`, `modules/m/workers/d.wasm`. Each comes from a temp root with `resolveModuleDir` mapping `m`.
 - **404:**
@@ -465,10 +465,10 @@ Spec § 9 (allowlist row), § 6.4 (roots).
   - `modules/m/ui/../main/a.js` (encoded `%2E%2E`);
   - a link at `modules/m/ui/link.js`.
 
-- [ ] **Step 2: Run and see them fail.** Run: `npx vitest run tests/app-protocol.test.js`. Expected: FAIL on the new cases.
-- [ ] **Step 3: Implement**
-- [ ] **Step 4: Run and see them pass.** Expected: PASS; the existing cases are unchanged.
-- [ ] **Step 5: Commit** `feat(protocol): v2 P1a - serve core/ and module roots, never main code`
+- [x] **Step 2: Run and see them fail.** Run: `npx vitest run tests/app-protocol.test.js`. Expected: FAIL on the new cases.
+- [x] **Step 3: Implement**
+- [x] **Step 4: Run and see them pass.** Expected: PASS; the existing cases are unchanged.
+- [x] **Step 5: Commit** `feat(protocol): v2 P1a - serve core/ and module roots, never main code`
 
 ---
 
@@ -892,6 +892,9 @@ Spec § 7.13 (per-launch isolation), § 14 exit criteria.
 - **Task 3 done.** `main/folder-files.js`; `tests/folder-files.test.js` 18 cases (RED on the missing module first).
   - Ruling: write and delete of one file run one at a time in call order inside the service, so a delete asked for after a write is never overtaken by it (the atomic writer orders writes only). Cost if wrong: none; a few lines.
   - Ruling: a folder at the name, on read, is `unreadable` "not a file" (the plan named only the delete case). Cost if wrong: none.
+
+- **Task 4 done.** `app-protocol.js` serves `core/**` (`.js .css`) and module files through `moduleFilePath`; `tests/app-protocol.test.js` 77 → 100 (11 new cases failed first; the link cases passed before, as refusals should).
+  - Note for Task 6: the protocol compares Node's JS realpath, so the registry must get the JS realpath too (`fs.promises.realpath` is the native one, which resolves a subst or mapped drive and would refuse every module file). Task 6 passes `{ ...fs.promises, realpath: promisify(fs.realpath) }`.
 
 ## 5. Key Discoveries
 
