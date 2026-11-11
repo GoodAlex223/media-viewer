@@ -30,6 +30,9 @@ const { createAppProtocol, isBlockedEgress, APP_SCHEME, APP_HOST } = require('./
 const { migrateStorage } = require('./storage-migration');
 const { readClipImage } = require('./clip-image');
 const { createAtomicWriter, readRecoveryCopy } = require('./atomic-write');
+const { createModuleRegistry } = require('./main/module-registry');
+const { createFolderFiles } = require('./main/folder-files');
+const { registerModuleIpc } = require('./main/module-ipc');
 
 // Per-folder cache files the renderer may read and write by NAME (G1): main joins the file
 // name, so the renderer never names a file path for these channels.
@@ -320,7 +323,7 @@ app.whenReady().then(async () => {
     // at the joined name. Every concrete path a handler opens is checked here: it must not be a
     // link (the app never creates one), and it must resolve inside a granted folder. Throws, so
     // each handler's existing catch turns it into that channel's usual failure value.
-    async function assertFixedPath(p) {
+    async function refuseLink(p) {
         try {
             if ((await fs.lstat(p)).isSymbolicLink()) {
                 throw new Error(`Not permitted: ${path.basename(p)} is a link`);
@@ -330,6 +333,9 @@ app.whenReady().then(async () => {
                 throw err;
             }
         }
+    }
+    async function assertFixedPath(p) {
+        await refuseLink(p);
         if ((await grants.resolveAllowed(p)) === null) {
             throw new Error(`Not permitted: ${path.basename(p)}`);
         }
@@ -339,10 +345,46 @@ app.whenReady().then(async () => {
     // assertFixedPath before it touches the disk, so its callers do not check them again.
     const atomicWriter = createAtomicWriter({ fs, assertPath: assertFixedPath, withRetries: withReadRetries });
 
+    // Modules (v2 P1a, spec §§ 6.4–6.5). The registry reads each root's module folders as data: main never requires
+    // a module's code (rule M-1). The toggles live in modules.json, in the state folder: userData, or MV_E2E_STATE_DIR
+    // for an E2E launch (plan C7). The E2E fixture root is a second root only when both E2E variables are set (C5).
+    const stateDir = process.env.MV_E2E_STATE_DIR || app.getPath('userData');
+    const moduleRoots = [{ dir: path.join(APP_ROOT, 'modules'), kind: 'app' }];
+    if (process.env.MV_E2E_STATE_DIR && process.env.MV_E2E_MODULE_ROOT) {
+        moduleRoots.push({ dir: process.env.MV_E2E_MODULE_ROOT, kind: 'e2e' });
+    }
+    const registry = createModuleRegistry({
+        // Node's JS realpath, the one app-protocol.js compares module files against (the native one resolves a subst
+        // or mapped drive to its target, and every module file would then be refused).
+        fs: { ...fs, realpath: promisify(fsSync.realpath) },
+        roots: moduleRoots,
+        statePath: path.join(stateDir, 'modules.json'),
+        // The state folder is not a granted folder, so modules.json gets a writer that refuses a planted link only.
+        writer: createAtomicWriter({ fs, assertPath: refuseLink, withRetries: withReadRetries }),
+        logger,
+    });
+    await registry.load();
+    const moduleRows = registry.list().modules;
+    console.log(
+        `Modules: ${moduleRows.length} found, ${moduleRows.filter((m) => m.status === 'enabled').length} enabled`
+    );
+    // Per-folder files by owner and declared name, and the module channels (main/module-ipc.js). Registered before
+    // the window loads, so the page's first listModules finds its handler.
+    const folderFiles = createFolderFiles({
+        fs,
+        registry,
+        assertPath: assertFixedPath,
+        writer: atomicWriter,
+        readRecoveryCopy,
+        logger,
+    });
+    registerModuleIpc({ guard, registry, folderFiles });
+
     // The app scheme (G1 I1): app files from an allowlist; media through the same read rule as the
-    // IPC guard's content-read kinds.
+    // IPC guard's content-read kinds; module files from the folders the registry found (v2 P1a).
     const appProtocol = createAppProtocol({
         appRoot: APP_ROOT,
+        resolveModuleDir: (id) => registry.moduleDir(id),
         resolveMediaRead: createMediaReadRule({ grants, isMediaFile }),
         getMimeType,
         csp: APP_CSP,
@@ -365,6 +407,7 @@ app.whenReady().then(async () => {
     if (process.env.MV_E2E_GRANTS_FILE) {
         global.__mvGrants = grants;
         global.__mvAppProtocol = appProtocol; // E2E only: its open-stream count (handle release)
+        global.__mvModules = registry; // E2E only: the module registry (v2 P1a)
     }
 
     createWindow().catch((err) => logger.error('window', `Window failed to load: ${err.message}`));
@@ -375,6 +418,8 @@ app.whenReady().then(async () => {
     // which createWindow reassigns, so it always targets the current window.
     // Trusted by sender identity, not the page URL: closing is not privileged, and the close
     // handler has already called preventDefault — a refusal here would trap the window.
+    const isMainWindowSender = (event) =>
+        !!mainWindow && !mainWindow.isDestroyed() && event.sender === mainWindow.webContents;
     guard.on(
         'app-close-allow',
         () => {
@@ -385,7 +430,24 @@ app.whenReady().then(async () => {
                 mainWindow.close();
             }
         },
-        { isTrusted: (event) => !!mainWindow && !mainWindow.isDestroyed() && event.sender === mainWindow.webContents }
+        { isTrusted: isMainWindowSender }
+    );
+
+    // Restart (v2 P1a, plan C8): module toggles take effect on the next launch. The renderer sends this only at the
+    // end of its own close flow (the leave prompt, the saves, the modules' deactivation), as it sends app-close-allow,
+    // so main arms the relaunch only as the window closes: a Cancel in that flow never leaves one armed. Trusted by
+    // sender identity for the same reason: the page has already wound down, and a refusal would strand the window.
+    guard.on(
+        'restart-app',
+        () => {
+            if (mainWindow && !mainWindow.isDestroyed()) {
+                console.log('Restart requested: relaunching after close');
+                app.relaunch();
+                isQuitting = true;
+                mainWindow.close();
+            }
+        },
+        { isTrusted: isMainWindowSender }
     );
 
     // Register Alt+F4 to close the focused window (Windows compatibility)

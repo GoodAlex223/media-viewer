@@ -555,7 +555,7 @@ Spec §§ 6.5, 7.13 (isolation), 8.1, 8.8.
       folderFileDelete: (owner, folderPath, name) => ipcRenderer.invoke('folder-file-delete', owner, folderPath, name),
   ```
 
-- [ ] **Step 1: Write `tests/bridge-surface.test.js`, failing**
+- [x] **Step 1: Write `tests/bridge-surface.test.js`, failing**
 
 - `surfaceOf(src)` runs a preload source through `new Function('require', 'window', 'console', src)`. Its fake `require` returns:
   - `electron`: a `contextBridge` that captures `exposeInMainWorld`, and an `ipcRenderer` whose `invoke`/`send`/`on` record their channel;
@@ -568,11 +568,11 @@ Spec §§ 6.5, 7.13 (isolation), 8.1, 8.8.
   3. Every `invoke`/`send` channel appears in `/guard\.(?:handle|on)\(\s*'([^']+)'/g` over `main.js` + `main/**/*.js`.
   4. Every `on` channel (`clip-download-progress`, `app-close-requested`) appears as a quoted string in `main.js`.
 
-- [ ] **Step 2: Run and see it fail.** Run: `npx vitest run tests/bridge-surface.test.js`. Expected: FAIL; the six keys and channels are missing.
-- [ ] **Step 3: Implement `main/module-ipc.js`, the `main.js` wiring and the `preload.js` delta.** The edit prompts. That is the Tier-1 approval at work, not a fault.
-- [ ] **Step 4: Run the bridge test and the whole unit suite.** Run: `npx vitest run`. Expected: PASS, with `main-hardening` unchanged.
-- [ ] **Step 5: Smoke the app.** Run `npm start`, check the session log has `Modules: 0 found, 0 enabled`, then quit.
-- [ ] **Step 6: Commit** `feat(modules): v2 P1a module IPC, restart-app and the bridge-surface pin`
+- [x] **Step 2: Run and see it fail.** Run: `npx vitest run tests/bridge-surface.test.js`. Expected: FAIL; the six keys and channels are missing.
+- [x] **Step 3: Implement `main/module-ipc.js`, the `main.js` wiring and the `preload.js` delta.** The edit prompts. That is the Tier-1 approval at work, not a fault.
+- [x] **Step 4: Run the bridge test and the whole unit suite.** Run: `npx vitest run`. Expected: PASS, with `main-hardening` unchanged.
+- [x] **Step 5: Smoke the app.** Run `npm start`, check the session log has `Modules: 0 found, 0 enabled`, then quit.
+- [x] **Step 6: Commit** `feat(modules): v2 P1a module IPC, restart-app and the bridge-surface pin`
 
 ---
 
@@ -904,6 +904,10 @@ Spec § 7.13 (per-launch isolation), § 14 exit criteria.
   - Ruling: folder-file names are lower-case only (deviates from the plan's `[A-Za-z0-9_-]`). Cost if wrong: a module author renames a file.
 
 - **Task 5 done.** `logger.sanitizeLogText`; `normalizeRendererLogEntry` folds, caps at 8,000 and restricts `source`; `log-perf` caps at 2,000. `tests/logger.test.js` 46 → 56 (10 failed first). Every existing perf line (AI sort, ML training, hash parity) is a single line well under 2,000 characters; the existing sources (`renderer`, `hash-pool`, `model-cache`, `session`) all match the new rule.
+
+- **Task 6 done.** `main/module-ipc.js`; `main.js` wires the registry (JS realpath; its own link-refusing writer for `modules.json`, since the state folder is not granted), the folder-file service, the protocol's `resolveModuleDir`, `global.__mvModules`, and `restart-app` beside `app-close-allow` on one hoisted `isMainWindowSender`; `assertFixedPath`'s link half is now `refuseLink`, shared. `preload.js` +6 keys exactly as approved. `tests/bridge-surface.test.js` 4 (RED on 39 keys vs 45 first), `tests/module-ipc.test.js` 10 (RED on the missing module first). Unit suite 61 files, 2,942 passed, 1 skipped; `main-hardening` unchanged. Smoke on an empty scratch profile (`MV_USER_DATA_DIR`): the session log reads `Modules: 0 found, 0 enabled`, with no error.
+  - Ruling: added `tests/module-ipc.test.js` (the plan named only the bridge test). It pins the refusal values at unit level, so Task 14's mutation 1 (`rejectValue` → absent) fails in the unit suite as well as in E2E 8. Cost if wrong: one test file.
+  - Ruling: the registry loads and the module channels register before `createWindow`, so the page's first `listModules` finds its handler (the plan said "after the grant load" without placing it against the window). Cost if wrong: a few ms of startup with no modules folder.
 
 ## 5. Key Discoveries
 
