@@ -537,6 +537,30 @@ describe('visits and the folder-file store', () => {
 });
 
 describe('deactivateAll', () => {
+    // A save asked for in onVisitEnd is issued at once (C9), but the quit must not close the window before main has it:
+    // the close flow awaits deactivateAll, which waits for every store call still in flight.
+    it('waits for a store call still in flight, such as a save asked for in onVisitEnd', async () => {
+        const x = capturing();
+        const { host, api } = makeHost([row('x', { folderFiles: [{ name: '.x.json', kind: 'data', maxBytes: 99 }] })], {
+            x,
+        });
+        await host.start();
+        let finishWrite;
+        api.folderFileWrite.mockImplementation(() => new Promise((resolve) => (finishWrite = resolve)));
+        x.host.folder.onVisitEnd((v) => {
+            x.host.store.folderFile('.x.json').write(v, { last: true });
+        });
+        host.beginVisit('C:\\f');
+        host.endVisit();
+        let done = false;
+        host.deactivateAll().then(() => (done = true));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(done).toBe(false);
+        finishWrite({ success: true });
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(done).toBe(true);
+    });
+
     it('deactivates in reverse activation order, survives a throw, and leaves every store refusing', async () => {
         const order = [];
         const mk = (id, opts = {}) => {

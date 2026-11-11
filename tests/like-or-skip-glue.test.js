@@ -5,7 +5,7 @@ import { createRequire } from 'module';
 import * as LikeOrSkip from '../like-or-skip.js';
 import * as SimilaritySort from '../similarity-sort.js';
 import * as HashPool from '../hash-pool.js';
-import { stubFeatureCacheStore } from './feature-cache-harness.js';
+import { stubFeatureCacheStore, stubModuleHost } from './feature-cache-harness.js';
 
 const require = createRequire(import.meta.url);
 const fs = require('fs');
@@ -1260,6 +1260,7 @@ describe('the change-folder button refuses before it wipes anything (G2 final re
             ...overrides,
         };
         ctx.featureCacheStore = stubFeatureCacheStore(ctx);
+        ctx.moduleHost = stubModuleHost();
         return ctx;
     }
 

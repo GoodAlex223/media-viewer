@@ -12,6 +12,7 @@ import * as MainThreadHash from './main-thread-hash.js';
 import * as HashPool from './hash-pool.js';
 import * as HashParity from './hash-parity.js';
 import { Notifier } from './core/notifications.js';
+import { ModuleHost } from './core/module-host.js';
 
 const DEFAULT_SHORTCUTS = {
     single: {
@@ -405,6 +406,15 @@ class MediaViewer {
         });
 
         this.initializeElements();
+        // v2 P1a: the module host fetches main's module list and activates the enabled modules, not awaited here. A
+        // folder load waits for it (loadFolder), so its first visit reaches every module that started.
+        this.moduleHost = new ModuleHost({
+            api: window.electronAPI,
+            notify: (...args) => this.showNotification(...args),
+            getFiles: () => this.mediaFiles,
+        });
+        this.modules = this.moduleHost.testApis; // each active module's testApi (E2E)
+        this.moduleHost.start();
         this.setupEventListeners();
         this.setupHeaderVisibility();
         this.setupFileInfoVisibility();
@@ -2983,6 +2993,8 @@ class MediaViewer {
             this._updateRecentFoldersButton(); // inside the try: the finally must release the flag whatever throws
             console.log('Loading folder:', folderPath);
             this.showLoadingSpinner();
+            // The modules start with the app; a load waits for them (a hung one for at most 5 s) under the spinner.
+            await this.moduleHost.ready;
 
             const result = await window.electronAPI.loadFolder(folderPath);
             console.log('Load result:', result);
@@ -3026,6 +3038,7 @@ class MediaViewer {
             this._invalidateSimilarityRun();
             this._abortInFlightPredictionSort();
             this.featureCacheStore.endVisit();
+            this.moduleHost.endVisit();
             this._bulkRatedSaveWarning = { warned: false }; // a failed .bulk_rated.json write warns once per visit
 
             if (result.files.length === 0) {
@@ -3040,6 +3053,7 @@ class MediaViewer {
                 this.clipCache.clear();
                 this.featureMetadata.clear();
                 this.featureCacheStore.beginVisit(folderPath);
+                this.moduleHost.beginVisit(folderPath);
                 this.showDropZone();
                 this.showError('No media files found in the selected folder');
                 return;
@@ -3066,6 +3080,7 @@ class MediaViewer {
             this.clipCache.clear();
             this.featureMetadata.clear();
             this.featureCacheStore.beginVisit(folderPath);
+            this.moduleHost.beginVisit(folderPath);
             this.predictionScores.clear();
             // Hydrate corrective-training records for this folder (prunes stale filenames)
             await this.loadBulkRatedFile();
@@ -3468,6 +3483,7 @@ class MediaViewer {
         // list is still the old folder's. After a failed listing no visit is current, so nothing saves.
         this.cancelBackgroundExtraction();
         this.featureCacheStore.endVisit();
+        this.moduleHost.endVisit();
         this.mediaFiles = [];
         this.currentIndex = 0;
         this.currentMedia = null;
@@ -5703,12 +5719,17 @@ class MediaViewer {
     // may proceed. For an incomplete tournament, show the same Save/Discard/Cancel leave
     // prompt the user sees on Escape — Save/Discard then close, Cancel keeps the app open.
     // Every close saves what it owes first (_saveThenAllowClose). Fail-safe: any error still
-    // allows the close, so a renderer bug can never make the app unclosable.
-    handleAppCloseRequest() {
+    // allows the close, so a renderer bug can never make the app unclosable. `restart` (v2 P1a, the
+    // Modules section's Restart now): the same flow, then a relaunch; a Cancel arms nothing.
+    handleAppCloseRequest({ restart = false } = {}) {
         try {
             if (this._closeSaveInFlight) {
                 // Only once the note has offered it: until then this is a double click, and it would drop a queued save.
-                if (this._closeSaveNoteShown) window.electronAPI.allowAppClose();
+                // A restart pressed during a save is ignored; a close during a restart's save closes, with no relaunch.
+                if (!restart && this._closeSaveNoteShown) {
+                    this._closeRestarts = false;
+                    window.electronAPI.allowAppClose();
+                }
                 return;
             }
             // Re-entrancy guard: suppress a 2nd close request ONLY while the *leave* prompt is
@@ -5727,26 +5748,27 @@ class MediaViewer {
                 leaveTitle &&
                 leaveTitle.textContent === 'Leave tournament?'
             ) {
-                if (this._leaveChoiceMade) this._saveThenAllowClose();
+                if (this._leaveChoiceMade) this._saveThenAllowClose(restart);
                 return;
             }
             if (this.isTournamentMode && this.tournament.engine && !this.tournament.engine.isComplete()) {
-                this.showTournamentLeavePrompt(() => this._saveThenAllowClose());
+                this.showTournamentLeavePrompt(() => this._saveThenAllowClose(restart));
             } else {
-                this._saveThenAllowClose();
+                this._saveThenAllowClose(restart);
             }
         } catch (err) {
             window.electronAPI.logError?.('app-close handler failed: ' + err.message);
-            window.electronAPI.allowAppClose();
+            window.electronAPI[restart ? 'restartApp' : 'allowAppClose']();
         }
     }
 
     // A quit writes what the app still owes the disk (G3 member 6): a coalesced bulk-rated save waits in the renderer,
     // where closing would lose it. This wait cannot trap the window: the cap, a close once the note has shown (above),
     // and the finally. Past the cap a streaming save's temp file is abandoned and the file on disk stays as it was.
-    async _saveThenAllowClose() {
+    async _saveThenAllowClose(restart = false) {
         if (this._closeSaveInFlight) return; // the leave prompt's continuation, after a close let this start early
         this._closeSaveInFlight = true;
+        this._closeRestarts = restart; // a close let through meanwhile turns the relaunch off (handleAppCloseRequest)
         const start = Date.now();
         let outcome = 'settled'; // a failed write settles too, and logs itself
         let capTimer;
@@ -5768,7 +5790,7 @@ class MediaViewer {
         } finally {
             clearTimeout(noteTimer);
             clearTimeout(capTimer);
-            window.electronAPI.allowAppClose();
+            window.electronAPI[this._closeRestarts ? 'restartApp' : 'allowAppClose']();
         }
     }
 
@@ -5778,6 +5800,12 @@ class MediaViewer {
         const start = Date.now();
         while (this._fileOpInFlight && Date.now() - start < 2000) {
             await new Promise((resolve) => setTimeout(resolve, 25));
+        }
+        try {
+            // The modules' visit ends first: each asks for its last save while the visit is live (v2 P1a, plan C9).
+            this.moduleHost.endVisit();
+        } catch (err) {
+            window.electronAPI.logError?.('ending the modules visit before close failed: ' + err.message);
         }
         try {
             // Stops new work. A result already in flight can still land after the flush froze its copy; the next
@@ -5791,6 +5819,7 @@ class MediaViewer {
             this._bulkRatedSaver.whenIdle(),
             this.featureCacheStore.flush(),
             this.tournament.flushPending(),
+            this.moduleHost.deactivateAll(), // waits for the saves the modules asked for, too
         ]);
     }
 

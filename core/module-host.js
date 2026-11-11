@@ -57,6 +57,7 @@ export class ModuleHost {
         this._liveVisit = null;
         this._visitSeq = 0;
         this._started = null;
+        this._inFlight = new Set(); // store calls whose IPC has not settled
         this.ready = new Promise((resolve) => (this._resolveReady = resolve));
     }
 
@@ -179,7 +180,11 @@ export class ModuleHost {
         this._liveVisit = null;
     }
 
-    /** Deactivates every active module, newest first. Never rejects; a module's failure is logged. */
+    /**
+     * Deactivates every active module, newest first, then waits for every store call still in flight (a save asked for
+     * in onVisitEnd is issued at once, and the quit must not close before main has it). Never rejects; a module's
+     * failure is logged.
+     */
     async deactivateAll() {
         const active = this._active.splice(0).reverse();
         for (const { record, deactivate } of active) {
@@ -192,6 +197,7 @@ export class ModuleHost {
                 }
             }
         }
+        await Promise.allSettled([...this._inFlight]);
     }
 
     _handlers(kind) {
@@ -257,11 +263,16 @@ export class ModuleHost {
             return visit === this._liveVisit ? null : 'visit ended';
         };
         const issue = (call) => {
+            let sent;
             try {
-                return Promise.resolve(call());
+                sent = Promise.resolve(call());
             } catch (err) {
                 return Promise.reject(err);
             }
+            this._inFlight.add(sent);
+            const done = () => this._inFlight.delete(sent);
+            sent.then(done, done);
+            return sent;
         };
         const folderFile = (name) => {
             if (!declared.has(name)) {

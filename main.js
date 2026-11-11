@@ -437,10 +437,11 @@ app.whenReady().then(async () => {
     // end of its own close flow (the leave prompt, the saves, the modules' deactivation), as it sends app-close-allow,
     // so main arms the relaunch only as the window closes: a Cancel in that flow never leaves one armed. Trusted by
     // sender identity for the same reason: the page has already wound down, and a refusal would strand the window.
+    // Once a plain close is allowed (isQuitting), a restart that arrives after it arms nothing.
     guard.on(
         'restart-app',
         () => {
-            if (mainWindow && !mainWindow.isDestroyed()) {
+            if (mainWindow && !mainWindow.isDestroyed() && !isQuitting) {
                 console.log('Restart requested: relaunching after close');
                 app.relaunch();
                 isQuitting = true;

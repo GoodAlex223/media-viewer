@@ -481,6 +481,7 @@ describe('member 6: _saveThenAllowClose', () => {
             _bulkRatedSaver: { whenIdle: vi.fn(async () => {}) },
             featureCacheStore: { flush: vi.fn(async () => {}) },
             tournament: { flushPending: vi.fn(async () => {}) },
+            moduleHost: { endVisit: vi.fn(), deactivateAll: vi.fn(async () => {}) }, // v2 P1a: no modules
             showNotification: vi.fn(),
             ...over,
         };
@@ -686,5 +687,208 @@ describe('member 6: _saveThenAllowClose', () => {
         expect(ctx._bulkRatedSaver.whenIdle).toHaveBeenCalledTimes(1);
         await closing;
         expect(allowAppClose).toHaveBeenCalledTimes(1);
+    });
+});
+
+// v2 P1a (plan C8, Review Focus 4): Restart is a close with a relaunch. It runs the same close flow (the leave prompt,
+// the saves, the modules' visit end and deactivation) and only then asks main to relaunch, so a Cancel never leaves
+// one armed, and a plain close during a restart's save closes without one.
+describe('v2 P1a: restart through the close flow', () => {
+    const handleAppCloseRequest = extract('handleAppCloseRequest');
+    const saveThenAllowClose = extract('_saveThenAllowClose');
+    const settleSavesForClose = extract('_settleSavesForClose');
+    let allowAppClose, restartApp, logPerf, logError;
+
+    const unfinished = () => ({ engine: { isComplete: () => false }, flushPending: vi.fn(async () => {}) });
+
+    function makeCtx(over = {}) {
+        const ctx = {
+            _fileOpInFlight: false,
+            isTournamentMode: false,
+            tournament: { engine: null, flushPending: vi.fn(async () => {}) },
+            cancelBackgroundExtraction: vi.fn(),
+            _bulkRatedSaver: { whenIdle: vi.fn(async () => {}) },
+            featureCacheStore: { flush: vi.fn(async () => {}) },
+            moduleHost: { endVisit: vi.fn(), deactivateAll: vi.fn(async () => {}) },
+            showNotification: vi.fn(),
+            showTournamentLeavePrompt: vi.fn(),
+            ...over,
+        };
+        ctx._settleSavesForClose = settleSavesForClose.bind(ctx);
+        ctx._saveThenAllowClose = saveThenAllowClose.bind(ctx);
+        ctx.handleAppCloseRequest = handleAppCloseRequest.bind(ctx);
+        return ctx;
+    }
+
+    beforeEach(() => {
+        vi.useFakeTimers();
+        allowAppClose = vi.fn();
+        restartApp = vi.fn();
+        logPerf = vi.fn();
+        logError = vi.fn();
+        globalThis.window = { electronAPI: { allowAppClose, restartApp, logPerf, logError } };
+        globalThis.document = { getElementById: () => null };
+    });
+    afterEach(() => {
+        vi.useRealTimers();
+        delete globalThis.window;
+        delete globalThis.document;
+    });
+
+    it('with no tournament, saves and then asks main to restart, never to close', async () => {
+        const ctx = makeCtx();
+        ctx.handleAppCloseRequest({ restart: true });
+        await vi.advanceTimersByTimeAsync(0);
+        expect(ctx.featureCacheStore.flush).toHaveBeenCalledOnce();
+        expect(restartApp).toHaveBeenCalledOnce();
+        expect(allowAppClose).not.toHaveBeenCalled();
+    });
+
+    it('a plain close still asks main to close', async () => {
+        const ctx = makeCtx();
+        ctx.handleAppCloseRequest();
+        await vi.advanceTimersByTimeAsync(0);
+        expect(allowAppClose).toHaveBeenCalledOnce();
+        expect(restartApp).not.toHaveBeenCalled();
+    });
+
+    it('with an unfinished tournament, opens the leave prompt, and its continuation restarts', async () => {
+        const ctx = makeCtx({ isTournamentMode: true, tournament: unfinished() });
+        ctx.handleAppCloseRequest({ restart: true });
+        expect(ctx.showTournamentLeavePrompt).toHaveBeenCalledOnce();
+        expect(restartApp).not.toHaveBeenCalled();
+        ctx.showTournamentLeavePrompt.mock.calls[0][0]();
+        await vi.advanceTimersByTimeAsync(0);
+        expect(restartApp).toHaveBeenCalledOnce();
+        expect(allowAppClose).not.toHaveBeenCalled();
+    });
+
+    it("the prompt's Cancel arms nothing: a later plain close closes, and never restarts", async () => {
+        const ctx = makeCtx({ isTournamentMode: true, tournament: unfinished() });
+        ctx.handleAppCloseRequest({ restart: true });
+        // Cancel: the prompt closes and its continuation is never called.
+        await vi.advanceTimersByTimeAsync(60_000);
+        expect(restartApp).not.toHaveBeenCalled();
+        expect(allowAppClose).not.toHaveBeenCalled();
+        ctx.isTournamentMode = false;
+        ctx.handleAppCloseRequest();
+        await vi.advanceTimersByTimeAsync(0);
+        expect(allowAppClose).toHaveBeenCalledOnce();
+        expect(restartApp).not.toHaveBeenCalled();
+    });
+
+    it("a close once the save note shows closes at once, and the restart's save then closes, never restarts", async () => {
+        let finish;
+        const ctx = makeCtx({
+            featureCacheStore: { flush: vi.fn(() => new Promise((resolve) => (finish = resolve))) },
+        });
+        ctx.handleAppCloseRequest({ restart: true });
+        await vi.advanceTimersByTimeAsync(300); // the note shows
+        expect(ctx._closeSaveNoteShown).toBe(true);
+        ctx.handleAppCloseRequest(); // the main window's close, from main
+        expect(allowAppClose).toHaveBeenCalledOnce();
+        finish();
+        await vi.advanceTimersByTimeAsync(0);
+        expect(restartApp).not.toHaveBeenCalled();
+    });
+
+    it('a restart pressed during a close save is ignored, and the close still closes', async () => {
+        let finish;
+        const ctx = makeCtx({
+            featureCacheStore: { flush: vi.fn(() => new Promise((resolve) => (finish = resolve))) },
+        });
+        ctx.handleAppCloseRequest();
+        await vi.advanceTimersByTimeAsync(300);
+        ctx.handleAppCloseRequest({ restart: true });
+        expect(allowAppClose).not.toHaveBeenCalled();
+        finish();
+        await vi.advanceTimersByTimeAsync(0);
+        expect(allowAppClose).toHaveBeenCalledOnce();
+        expect(restartApp).not.toHaveBeenCalled();
+    });
+
+    it('a handler that throws on a restart still restarts (the window is never stranded)', () => {
+        const ctx = makeCtx({ isTournamentMode: true, tournament: null });
+        ctx.handleAppCloseRequest({ restart: true });
+        expect(restartApp).toHaveBeenCalledOnce();
+        expect(allowAppClose).not.toHaveBeenCalled();
+    });
+
+    it("ends the modules' visit before deactivating them, and waits for the deactivation", async () => {
+        const order = [];
+        let finishDeactivate;
+        const ctx = makeCtx({
+            moduleHost: {
+                endVisit: vi.fn(() => order.push('endVisit')),
+                deactivateAll: vi.fn(() => {
+                    order.push('deactivateAll');
+                    return new Promise((resolve) => (finishDeactivate = resolve));
+                }),
+            },
+        });
+        const closing = ctx._saveThenAllowClose();
+        await vi.advanceTimersByTimeAsync(0);
+        expect(order).toEqual(['endVisit', 'deactivateAll']);
+        expect(allowAppClose).not.toHaveBeenCalled();
+        finishDeactivate();
+        await closing;
+        expect(allowAppClose).toHaveBeenCalledOnce();
+    });
+
+    it('an endVisit that throws does not stop the saves or the close, and is logged', async () => {
+        const ctx = makeCtx({
+            moduleHost: {
+                endVisit: vi.fn(() => {
+                    throw new Error('handler');
+                }),
+                deactivateAll: vi.fn(async () => {}),
+            },
+        });
+        await ctx._saveThenAllowClose();
+        expect(ctx.featureCacheStore.flush).toHaveBeenCalledOnce();
+        expect(ctx.moduleHost.deactivateAll).toHaveBeenCalledOnce();
+        expect(allowAppClose).toHaveBeenCalledOnce();
+        expect(logError).toHaveBeenCalled();
+    });
+});
+
+describe('v2 P1a: the module host at each folder visit', () => {
+    it('loadFolder waits for the modules after the spinner, before it lists the folder', async () => {
+        const loadFolder = extract('loadFolder');
+        const listing = vi.fn(async () => ({ success: false, error: 'x' }));
+        globalThis.window = { electronAPI: { loadFolder: listing } };
+        const ctx = {
+            _folderIntentGen: 0,
+            _closeTournamentPrompts: vi.fn(),
+            _refuseIfFileOpInFlight: () => false,
+            _refuseIfFolderLoadInFlight: () => false,
+            _updateRecentFoldersButton: vi.fn(),
+            showLoadingSpinner: vi.fn(),
+            moduleHost: { ready: new Promise(() => {}) }, // a module that never settles
+        };
+        vi.spyOn(console, 'log').mockImplementation(() => {});
+        loadFolder.call(ctx, 'C:\\f');
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        expect(ctx.showLoadingSpinner).toHaveBeenCalledOnce();
+        expect(listing).not.toHaveBeenCalled();
+        expect(ctx._folderLoadInFlight).toBe(true);
+        vi.restoreAllMocks();
+        delete globalThis.window;
+    });
+
+    it("each feature-cache visit start and end is followed by the module host's", () => {
+        const begins = extract('loadFolder')
+            .toString()
+            .split('this.featureCacheStore.beginVisit(folderPath);')
+            .slice(1);
+        expect(begins).toHaveLength(2);
+        for (const after of begins) {
+            expect(after.trimStart().startsWith('this.moduleHost.beginVisit(folderPath);')).toBe(true);
+        }
+        for (const method of ['loadFolder', '_switchToFolderNow']) {
+            const ends = extract(method).toString().split('this.featureCacheStore.endVisit();').slice(1);
+            expect(ends, method).toHaveLength(1);
+            expect(ends[0].trimStart().startsWith('this.moduleHost.endVisit();'), method).toBe(true);
+        }
     });
 });

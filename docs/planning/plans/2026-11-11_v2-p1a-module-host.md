@@ -705,7 +705,7 @@ Visits and store:
   - **`_saveThenAllowClose(restart = false)`:** its `finally` calls `window.electronAPI[restart ? 'restartApp' : 'allowAppClose']()`.
   - **`_settleSavesForClose`:** after the file-action wait, `this.moduleHost.endVisit()`, then `this.moduleHost.deactivateAll()` joins the `allSettled` list.
 
-- [ ] **Step 1: Write the failing glue cases**
+- [x] **Step 1: Write the failing glue cases**
   - restart + no tournament → after the saves, `restartApp` is called once and `allowAppClose` never;
   - restart + an unfinished tournament → the leave prompt opens, and its continuation calls `restartApp`;
   - restart, then the prompt's Cancel → neither call, and a later plain close calls `allowAppClose`, not `restartApp`;
@@ -714,10 +714,10 @@ Visits and store:
   - `loadFolder` awaits `ready` before `window.electronAPI.loadFolder` (a never-resolving `ready` means no listing call).
 
   Run: `npx vitest run tests/rating-data-safety-glue.test.js`. Expected: FAIL.
-- [ ] **Step 2: Implement the wiring**
-- [ ] **Step 3: Run the whole unit suite.** Run: `npx vitest run`. Expected: PASS.
-- [ ] **Step 4: Measure.** `wc -l media-viewer.js` must still be below 11,597, and the number goes in the log.
-- [ ] **Step 5: Commit** `feat(modules): wire the module host into folder visits, quit and restart`
+- [x] **Step 2: Implement the wiring**
+- [x] **Step 3: Run the whole unit suite.** Run: `npx vitest run`. Expected: PASS.
+- [x] **Step 4: Measure.** `wc -l media-viewer.js` must still be below 11,597, and the number goes in the log.
+- [x] **Step 5: Commit** `feat(modules): wire the module host into folder visits, quit and restart`
 
 ---
 
@@ -916,6 +916,11 @@ Spec § 7.13 (per-launch isolation), § 14 exit criteria.
   - Ruling: a dependent of a module the host itself blocked reads "disabled because X is disabled" (the plan named only "failed to start", for a failed dependency). Cost if wrong: one string.
   - Ruling: an IPC reply that is not a known shape reads as `unreadable` "no reply" (or `{ success: false, error: 'no reply' }`), never absent. Cost if wrong: none.
   - Ruling: `start()` also catches an unexpected throw in its own loop and logs it under `modules`, so it never rejects (a case added for it, RED first). Cost if wrong: none.
+
+- **Task 10 done.** `MediaViewer` builds the host after `initializeElements` (`this.modules` = `testApis`; `start()` not awaited); `loadFolder` awaits `ready` right after the spinner; `beginVisit`/`endVisit` follow each `featureCacheStore` call (a source-order test pins all four). `handleAppCloseRequest({ restart })`, `_saveThenAllowClose(restart)`, and `_settleSavesForClose` ends the modules' visit (in its own try) and adds `deactivateAll()` to the settled list. 10 new glue cases (8 failed first; the 3 that passed early guard against a restart armed where none may be, and fail on a naive implementation). Unit suite 62 files, 3,038 passed. **`wc -l media-viewer.js` = 11,534** (ceiling 11,597).
+  - Ruling: a plain close let through during a restart's save turns the relaunch off (`_closeRestarts = false`), so the save's `finally` sends `allowAppClose`, not `restartApp`; and main's `restart-app` arms nothing once `isQuitting` is set. The plan's "closes without relaunching" needed both: the restart save's own `finally` would otherwise still send `restartApp` before the window is gone. Cost if wrong: none.
+  - Ruling: `deactivateAll()` also waits for every store call still in flight (a module's `onVisitEnd` save is issued at once, and the quit must not close before main has it), under the close flow's 15 s cap. Test added to `module-host.test.js`, RED first. Cost if wrong: a quit waits for a module's last write.
+  - Ruling: the shared `stubModuleHost()` lives in `tests/feature-cache-harness.js` beside `stubFeatureCacheStore`, and the four context builders that run `loadFolder`/`_switchToFolderNow` get it, plus member 6's close context. No assertion changed. Cost if wrong: none.
 
 ## 5. Key Discoveries
 
