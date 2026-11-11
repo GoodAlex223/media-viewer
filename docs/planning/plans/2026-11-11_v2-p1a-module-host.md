@@ -415,17 +415,17 @@ Spec §§ 7.9, 8.2.
   1. `assertPath`.
   2. Unlink. ENOENT counts as success, and a directory at that name is an error.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Use a temp folder (`fs.mkdtemp`), the real `atomic-write.js` writer and a stub registry. Cases:
 - **read:** `ok` with `recovered: false`; `absent`; torn file + whole tmp → `ok`, `recovered: true`; torn file, no tmp → `unreadable` "does not parse"; over cap → `unreadable` "too large"; a link at the name → `unreadable`; undeclared → `unreadable` "Not permitted"; an `EACCES` stub → `unreadable`.
 - **write:** round-trips through read; over cap refused, file unchanged; `undefined` refused; undeclared refused, nothing written.
 - **remove:** removes; absent counts as success; undeclared refused, file kept.
 
-- [ ] **Step 2: Run and see them fail.** Run: `npx vitest run tests/folder-files.test.js`. Expected: FAIL (module missing).
-- [ ] **Step 3: Implement `main/folder-files.js`**
-- [ ] **Step 4: Run and see them pass.** Expected: PASS, with the count checked.
-- [ ] **Step 5: Commit**
+- [x] **Step 2: Run and see them fail.** Run: `npx vitest run tests/folder-files.test.js`. Expected: FAIL (module missing).
+- [x] **Step 3: Implement `main/folder-files.js`**
+- [x] **Step 4: Run and see them pass.** Expected: PASS, with the count checked.
+- [x] **Step 5: Commit**
 
 ```bash
 git add main/folder-files.js tests/folder-files.test.js
@@ -888,6 +888,10 @@ Spec § 7.13 (per-launch isolation), § 14 exit criteria.
   - Ruling: a module folder whose realpath differs from its joined path (a link) is `invalid`, so `moduleDir` never hands the protocol a folder outside its root. Cost if wrong: one refusal to relax.
   - Ruling: `setEnabled` calls run one at a time, each from the last written state, so two quick toggles of different modules both reach disk (the writer's per-target queue alone kept only the last). Cost if wrong: none.
   - Ruling: `modules.json` over 65,536 bytes counts as unreadable (defaults, one warning), like the manifest cap. Cost if wrong: one constant.
+
+- **Task 3 done.** `main/folder-files.js`; `tests/folder-files.test.js` 18 cases (RED on the missing module first).
+  - Ruling: write and delete of one file run one at a time in call order inside the service, so a delete asked for after a write is never overtaken by it (the atomic writer orders writes only). Cost if wrong: none; a few lines.
+  - Ruling: a folder at the name, on read, is `unreadable` "not a file" (the plan named only the delete case). Cost if wrong: none.
 
 ## 5. Key Discoveries
 
