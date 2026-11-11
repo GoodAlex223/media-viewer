@@ -936,6 +936,31 @@ Spec § 7.13 (per-launch isolation), § 14 exit criteria.
   - **Ceiling:** `scripts/renderer-line-ceiling.txt` 11,597 → **11,544**. G2 has not merged (`origin/main` = `d7b0fb8`), so Task 15 re-measures after merging `main`.
   - **GOALS G-7:** `media-viewer.js` 11,544 + `core/*.js` 682 (`host-api` 47, `module-host` 374, `modules-panel` 147, `notifications` 114) = **12,226**, 281 over the soft 11,945 (the plan predicted ~235). It goes in the PR, and feeds Cleanup Week #6's ceiling-extension decision.
 
+- **Task 14 (verify), all but the manual smoke:**
+  - Units 63 files, **3,071 passed, 1 skipped**. Lint: 0 errors, the same 2 warnings as `main`. `format:check` fails only on ten git-ignored local `CLAUDE-SECURITY-*` scan outputs, which are not branch files; every file this branch changed passes Prettier.
+  - E2E: **264 passed, 7 skipped** (Task 12, 12.0 min). Since then only docs, rules and the ceiling file changed; the pre-push hook runs the suite again.
+  - **`/security-review`** (spec § 15): **no findings** at the >80% bar. It checked:
+    - traversal through `folder-file-*`;
+    - reaching core's five files (the case fold included);
+    - owner and name spoofing;
+    - the app scheme serving main code, a link, or a file outside a module folder;
+    - a manifest loading code;
+    - a folder-file write planting module code;
+    - untrusted senders on the new channels;
+    - the E2E root;
+    - HTML injection in `core/`;
+    - log forging;
+    - the capped recovery read.
+
+    It noted two items below the bar: `moduleDir` serves the files of off or blocked modules (app-shipped, so nothing is exposed), and module isolation from `window.electronAPI` is lint-only (it matters only if modules stop being app-shipped).
+  - **Mutation checks**, each in a scratch copy:
+    - 1 (`rejectValue` → absent): killed, `module-ipc` 5 fail.
+    - 2 (`endVisit` marks the visit dead first): killed, `module-host` 2 fail.
+    - 3 (6,000 ms): killed, 4 fail.
+    - 4 (`ownerKind` takes any string): **survives by design**. `declaredName` → `folderFileDecl` already requires the owner to be active, so the two checks are one check keyed on one fact. **4b** (`folderFileDecl` without that check) is killed, `module-registry` 1 fail.
+    - 5 (serve `main/`): killed, `app-protocol` 2 fail.
+  - **Owed by the user:** the manual smoke on a copy of the real profile (below, under the handoff).
+
 ## 5. Key Discoveries
 
 _(filled during execution)_
