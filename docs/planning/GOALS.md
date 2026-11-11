@@ -2,7 +2,7 @@
 
 Project objectives and success metrics.
 
-**Last Updated**: 2026-11-11 <!-- Weekly planning (Nov 16–20, written 2026-11-11): a status edit only, not a refresh. v2 P1a is scheduled for Nov 16–20 (WEEKLY G1), two weeks after its earliest slot: Cleanup Week #5 spilled through Nov 6, and Nov 9–13 had no plan. The 2-month clock still runs from 2026-10-27. --> <!-- Prior (2026-10-30): G2 pre-push gate: a status edit only (G-7 ratchet built; pre-push description). --> <!-- Weekly planning (Cleanup Week #5, Oct 26–30): a status edit only, not a refresh. v2's weekly 🔵 share is set to ~12 SP ("Most", user ruling 2026-10-28), so Objective 2's timeline moves to about May 2027. The 2-month clock still runs from 2026-10-27. --> <!-- G5 strategic-doc refresh (plan 2026-10-27_g5-strategic-doc-refresh.md): mission widened, Objective 1 achieved, Objective 2 re-baselined to v2 (spec § 11.1), by the user's rulings of 2026-10-27. The 2-month clock restarts here. Earlier: 2026-10-09 and 2026-10-17 were status flips only, not refreshes. -->
+**Last Updated**: 2026-11-11 <!-- Weekly planning (Nov 16–20, written 2026-11-11): a status edit only, not a refresh. v2 P1a is scheduled for Nov 16–20 (WEEKLY G1), two weeks after its earliest slot: Cleanup Week #5 spilled through Nov 6, and Nov 9–13 had no plan. Later the same day, by user ruling, Linux was dropped from v2 (G-8, spec D21): v2 is Windows only, and the Linux design is parked in BACKLOG. The 2-month clock still runs from 2026-10-27. --> <!-- Prior (2026-10-30): G2 pre-push gate: a status edit only (G-7 ratchet built; pre-push description). --> <!-- Weekly planning (Cleanup Week #5, Oct 26–30): a status edit only, not a refresh. v2's weekly 🔵 share is set to ~12 SP ("Most", user ruling 2026-10-28), so Objective 2's timeline moves to about May 2027. The 2-month clock still runs from 2026-10-27. --> <!-- G5 strategic-doc refresh (plan 2026-10-27_g5-strategic-doc-refresh.md): mission widened, Objective 1 achieved, Objective 2 re-baselined to v2 (spec § 11.1), by the user's rulings of 2026-10-27. The 2-month clock restarts here. Earlier: 2026-10-09 and 2026-10-17 were status flips only, not refreshes. -->
 **Review Cycle**: Continuous — planning-session staleness check (see [README.md](README.md) § Strategic Review)
 
 ---
@@ -29,7 +29,7 @@ Provide the most efficient desktop tool for collecting, reviewing, rating and ke
 | G-5 Compress: lossless JPEG XL in place, verified, revertible until Finalize | P5 | Not started | 🔴 |
 | G-6 Redesign: the shell (P2), the control registry (P6a), the responsive pass (P7) | § 11.2 | Not started | 🔴 |
 | G-7 The renderer shrinks | Net `wc -l media-viewer.js` ≤ 0 in every phase's PR, enforced by a blocking line ratchet (user ruling 2026-10-27); the renderer plus `core/*.js` below 11,945 lines (`308d43c`); `media-viewer.js` below 6,000 by the end of P7 (§ 11.1) | 11,597 lines after G3 (2026-11-03; 11,529 at `e0b2a16` on 2026-10-27); the ratchet is built (G2): `scripts/renderer-line-ceiling.txt`, 11,597 | 🔴 |
-| G-8 Runs on Windows and Linux: both suites on both platforms at every phase exit | From P1a's Linux baseline | Windows only | 🔴 |
+| ~~G-8 Runs on Windows and Linux~~ — **dropped 2026-11-11 (user ruling)**: v2 is Windows only; the Linux design is parked in BACKLOG 🔵 [2026-11-11] "Linux support: parked until wanted" | — | Windows only | ⛔ Dropped |
 
 **Timeline**: P1a scheduled for Nov 16–20, 2026 (its earliest week was Nov 2–6); about May 2027 (soft). The date assumes v2 takes ~12 SP of each normal week's ~17 🔵 SP (user ruling 2026-10-28); a week that gives v2 less moves it later ([ROADMAP.md](ROADMAP.md) § Releases)
 **Owner**: goodalex223
@@ -69,6 +69,7 @@ Things we explicitly are NOT trying to do:
 - **Mobile support** — Desktop (Electron) only
 - **Video editing** — View and rate only, no editing
 - **Third-party modules or a module store** — v2's modules are first-party and ship in the repo (spec § 3)
+- **Linux support, for v2** — dropped 2026-11-11 by user ruling (was G-8): the user develops and runs the app on Windows only, and a Linux run at every phase exit slowed every phase. Linux and macOS are untested. Parked in BACKLOG 🔵 [2026-11-11] "Linux support: parked until wanted", so it can come back
 - **Embedded players or streaming remote content** — Fetch downloads first, then the viewer shows local files (spec § 3, § 9)
 
 _v2's full non-goals list is in the [v2 spec](../superpowers/specs/2026-10-22-v2-modules-design.md) § 3._

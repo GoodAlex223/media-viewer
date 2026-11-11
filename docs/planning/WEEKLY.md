@@ -4,17 +4,16 @@
 **Created**: 2026-11-11
 **Sources**: MILESTONES.md, ROADMAP.md, GOALS.md (all `Last Updated` 2026-10-30, status edits after G5's refresh of 2026-10-27, so inside the 2-month clock; this pass adds a status edit for P1a's date, see Notes → Strategic docs), BACKLOG.md (📌 Process Rules; the 🔵 pool with the 2026-11-10 and 11-11 manual-testing intakes; 🟡, the `CLAUDE.md` audit first; the 🟤 sections filed since Cleanup Week #5, [2026-10-30] → [2026-11-11]; after this pass's reaps 54 🔵, 6 🟡 and 423 🟤 entries are open), TODO.md (the 🟠 compare special-move queue item; § Spawned Tasks, three rows handed over 2026-11-06), git log (last 2 weeks: the merges `4894a13`, `a80cc37`, `b9c76c0`, `59218f3`, `9a8ffb9`, `1cfbcd4`, `d326ed1` and their closeouts through `5a45a15`; intake `d0a6c40`, `6f6b09b`), previous WEEKLY.md (Oct 26–30, Cleanup Week #5, spilled to 2026-11-06, archived below), the [v2 spec](../superpowers/specs/2026-10-22-v2-modules-design.md) § 14 (P1a's row and the BACKLOG entries it closes), REVIEW-QUEUE.md (§§1–5; last run 2026-11-06). Live-config drift check: N/A — this repo keeps no live-config sync. OWNER-QUEUE.md: absent.
 **Cleanup Week?**: **No — 🟢 Normal week.** Cleanup Week #6 falls due this week by cadence (three weeks after #5's header week, Oct 26–30), and the 🟤-size trigger fires too (423 open). By the user's ruling of 2026-11-11 it is **deferred one week, to Nov 23–27**, so that v2 P1a, two weeks past its earliest slot, starts now: deferred by ruling, not skipped (Notes → Cleanup Week #6).
-**Context**: Roadmap phase _v2 — modules and redesign_; next milestone _v2 pilot (P1a + P1b)_, early January 2027 (soft). This week's agreed theme is **"start the v2 pilot"**: P1a, the module host and a Linux baseline, leads and is the challenge (🏆 G1), with the Linux baseline first because it is the part most likely to surprise; the compare special-move fix from the latest manual testing, with the undo side swap in the same index math, runs beside it and merges first (G2); Weekly Reviews close the week (G3). **Sized to the recent pace** (user ruling): 14 quota-counted SP, ~19 with overhead. **Written Wednesday 2026-11-11 for next week**; Thu–Fri Nov 12–13 go to P1a's plan, which is prep, not delivery.
+**Context**: Roadmap phase _v2 — modules and redesign_; next milestone _v2 pilot (P1a + P1b)_, early January 2027 (soft). This week's agreed theme is **"start the v2 pilot"**: P1a, the module host, leads and is the challenge (🏆 G1); the compare special-move fix from the latest manual testing, with the undo side swap in the same index math, runs beside it and merges first (G2); Weekly Reviews close the week (G3). **Sized to the recent pace** (user ruling): 12 quota-counted SP, ~17 with overhead (14 and ~19 before Linux was dropped from v2, Notes → Linux dropped). **Written Wednesday 2026-11-11 for next week**; Thu–Fri Nov 12–13 go to P1a's plan, which is prep, not delivery.
 
 ---
 
 ## Parallel Work
 
 - **Auto-deploy: no** (Electron desktop app; a single `main` trunk with no production branch; no `.github/` directory and no deploy step — GOALS § Constraints "No CI service"). No Deploy Window group.
-- **G2 beside G1**: G2 runs Mon–Tue in its own worktree and session while G1 starts on the Linux baseline, and merges first. G1's branch then merges `main` before its next push, so the line ratchet measures both. Both edit `media-viewer.js`; G2's change sits in `moveToSpecialFolder` and its undo, which P1a's § 14 row does not move. A fresh worktree needs `npm ci` before its first commit, or every hook is skipped.
+- **G2 beside G1**: G2 runs Mon–Tue in its own worktree and session while G1 starts on the host's core, and merges first. G1's branch then merges `main` before its next push, so the line ratchet measures both. Both edit `media-viewer.js`; G2's change sits in `moveToSpecialFolder` and its undo, which P1a's § 14 row does not move. A fresh worktree needs `npm ci` before its first commit, or every hook is skipped.
 - **Pre-week prep (Thu–Fri Nov 12–13)**: P1a's plan, written from the spec (Opus · `xhigh`). Nothing merges before the header Monday.
 - **User-in-the-loop steps** (part of their groups; listed here so they are visible in one place):
-  - **G1 (plan, Thu–Fri this week)**: the Linux setup, **done before Monday so the week's first step does not stall**. Measured 2026-11-11: WSL2 is installed with Ubuntu 24.04 running, and WSLg is on (`DISPLAY=:0`), so a GUI app can show its window; Electron itself has not been tried there. Ubuntu has git but **no Linux Node**: the `npm` on its PATH is Windows' (`/mnt/c/Program Files/nodejs/npm`, through interop), which must not run the install. Still to set up: a Linux Node, a clone inside the Linux filesystem (not under `/mnt/c`, and never a link to the Windows checkout), `npm ci` there for the Linux builds of Electron, `sharp` and `ffmpeg-static`, and the system libraries Electron needs. The `apt` installs need your `sudo` password, so those steps are yours; P1a's plan lists them first, and anything to install is asked first.
   - **G2 (Mon)**: the TODO item's two **To decide** points, asked before G2's plan: whether the partner stays in place (the next pair is the partner and the following file) or still goes to the end; and whether the AI-sorted compare keeps resetting its extremes pairing after a special move.
   - **G1 (review, Fri)**: the Codex CLI install and `codex login` with your own free ChatGPT account, in the review session (the 🟤 trial entry's setup). The `preload.js` edits prompt you, as enforced.
   - **G3 (Thu–Fri)**: the run's rulings, as every week.
@@ -26,12 +25,12 @@
 
 ## Task Groups
 
-### G1. v2 P1a: module host and Linux baseline `[batch]` 🔵 🏆 — v2 modules — 11 SP
+### G1. v2 P1a: the module host `[batch]` 🔵 🏆 — v2 modules — 9 SP
 
-> **Mon–Fri; the Linux baseline first, on Monday.** The [v2 spec](../superpowers/specs/2026-10-22-v2-modules-design.md) § 14 row: the manifest schema, registry, `modules.json` and loader; failure isolation and cascade; the Modules tab (list, toggle, restart); the app-scheme allowlist for `core/**` and `modules/*`; lint rules M-1 and M-2, each shown able to fail by a planted violation; the bridge-surface test; glob-based sink and `file:` checks; the `folder-file-*` channels with tagged reads and delete; per-launch E2E isolation. **First**, today's app and both suites run on Linux, and whatever fails there is fixed. **Exit**: an empty module loads, fails safely, cascades and toggles, and all suites are green on Windows and Linux. **Net `wc -l media-viewer.js` ≤ 0** under the blocking line ratchet (ceiling 11,597), and the phase moves the `CLAUDE.md` rules for the code it moves into `.claude/rules/`. One branch, one PR; the plan is written Thu–Fri Nov 12–13 (prep). **`preload.js` changes** (the bridge for the folder-file channels): security review required. **Public repository**: the Linux setup notes name no profile paths or user folders. At the closeout, flip P1a's rows on ROADMAP's v2 table and GOALS G-1, G-2 and G-8 by hand (🟤 "Let each v2 phase's closeout flip its own row…" is not built yet).
+> **Mon–Fri.** The [v2 spec](../superpowers/specs/2026-10-22-v2-modules-design.md) § 14 row: the manifest schema, registry, `modules.json` and loader; failure isolation and cascade; the Modules tab (list, toggle, restart); the app-scheme allowlist for `core/**` and `modules/*`; lint rules M-1 and M-2, each shown able to fail by a planted violation; the bridge-surface test; glob-based sink and `file:` checks; the `folder-file-*` channels with tagged reads and delete; per-launch E2E isolation. **Exit**: an empty module loads, fails safely, cascades and toggles, and all suites are green on Windows. **No Linux baseline**: Linux was dropped from v2 by your ruling of 2026-11-11 (Notes → Linux dropped), so the plan re-estimates the row's ~11 SP; ~9 is my estimate, since the spec's change log (§ 21) puts the Linux baseline at ~2. **Net `wc -l media-viewer.js` ≤ 0** under the blocking line ratchet (ceiling 11,597), and the phase moves the `CLAUDE.md` rules for the code it moves into `.claude/rules/`. One branch, one PR; the plan is written Thu–Fri Nov 12–13 (prep). **`preload.js` changes** (the bridge for the folder-file channels): security review required. At the closeout, flip P1a's rows on ROADMAP's v2 table and GOALS G-1 and G-2 by hand (🟤 "Let each v2 phase's closeout flip its own row…" is not built yet).
 > **Model:** start Opus · `high` (the 8+ SP row; edge cases likely across main, the bridge, the loader and the E2E harness); `xhigh` to write the plan → execute Opus · `medium`, Sonnet · `medium` for the steps the plan spells out; review deep (`max`), in a separate session, asked first — first guess; the plan confirms or revises it (WORKFLOW.md § 1.0)
 
-- [ ] **v2 P1a — the module host and a Linux baseline** — per the v2 spec § 14 (P1a, exit criteria above) and its sections on the manifest, host and bridge; v2's ~12-SP weekly 🔵 share (user ruling 2026-10-28). New `core/`, `modules/`, `main/folder-files.js`; `main.js`, `preload.js`, `app-protocol.js`, `eslint.config.mjs`, `tests/`, `tests/e2e/helpers/`, `CLAUDE.md` → `.claude/rules/` (11) — 🔵 v2 spec (approved 2026-10-22) ← 🔵 "Design add-on/extension system for the media viewer"
+- [ ] **v2 P1a — the module host** — per the v2 spec § 14 (P1a, exit criteria above) and its sections on the manifest, host and bridge; v2's ~12-SP weekly 🔵 share (user ruling 2026-10-28). New `core/`, `modules/`, `main/folder-files.js`; `main.js`, `preload.js`, `app-protocol.js`, `eslint.config.mjs`, `tests/`, `tests/e2e/helpers/`, `CLAUDE.md` → `.claude/rules/` (9) — 🔵 v2 spec (approved 2026-10-22) ← 🔵 "Design add-on/extension system for the media viewer"
 - [ ] **Closed by P1a (spec § 14)** — 🟤 "`docs/ARCHITECTURE.md`'s file tree omits every extracted module" (P1a rewrites the tree) and 🟤 "Extract `extractAsyncMethod` helper to `tests/helpers/extract-method.js` on third use" (P1a's first rewiring needs the shared helper). `docs/ARCHITECTURE.md`, `tests/helpers/` (inside the 11; XS each)
 - [ ] **P1a's plan carries the G5 note** — per 🟤 [2026-11-06] "Note at v2 P1a's planning that the v2 spec's 'v2's rules cannot land there' rested on the old 69,000 trigger": one line in P1a's plan, or a dated note on spec § 19 step 4. The audit that line names, 🟡 [2026-11-06] "Audit `CLAUDE.md`…", moved to Cleanup Week #6, so the plan records it as still owed. (XS, inside the plan)
 - [ ] **Codex CLI review trial on P1a's PR** — per 🟤 [2026-11-06] "Trial: a Codex CLI review beside `/code-review` on the next code PR". **Incumbent**: the posted `/code-review` round at the level the PR uses (record it), plus the reviewer's first-hand check of each candidate. **Question**: did Codex report a defect, confirmed first-hand, that the posted review of the same commit did not? Record the model, `/status`, whether the free allowance ran out, and the wall time. G2 may merge first but is not the vehicle: the entry names P1a, and a 3-SP fix gives the trial little to find (my call). (rides the review)
@@ -60,46 +59,46 @@
 
 ### Before the week: Thursday–Friday, November 12–13 — P1a's plan (prep, not delivery)
 
-- **[G1](#g1-v2-p1a-module-host-and-linux-baseline-batch----v2-modules--11-sp)** 🔵 🏆 — the Linux setup in WSL2 (Parallel Work; the `sudo` steps are yours), then P1a's plan from spec § 14, carrying the G5 note.
+- **[G1](#g1-v2-p1a-the-module-host-batch----v2-modules--9-sp)** 🔵 🏆 — P1a's plan from spec § 14, without its Linux baseline, carrying the G5 note.
 
-### Monday, November 16 — The Linux baseline; the queue fix starts
+### Monday, November 16 — The host's core; the queue fix starts
 
-> G1's riskiest part first; G2 beside it, in its own worktree.
+> G2 beside G1, in its own worktree.
 
-- **[G1](#g1-v2-p1a-module-host-and-linux-baseline-batch----v2-modules--11-sp)** 🔵 🏆 — today's app and both suites on Linux; fix what fails there (part 1 of 5).
+- **[G1](#g1-v2-p1a-the-module-host-batch----v2-modules--9-sp)** 🔵 🏆 — the manifest schema, registry, `modules.json` and loader (part 1 of 5).
 - **[G2](#g2-compare-special-move-keeps-its-place-batch----compare-mode--3-sp)** 🔵 🟤 — your two To decide points; Phase 0, both RED tests; the plan (part 1 of 2).
 
 **Daily total**: ~4 SP
 
-### Tuesday, November 17 — The host's core; the queue fix lands
+### Tuesday, November 17 — Failure isolation and the Modules tab; the queue fix lands
 
-- **[G1](#g1-v2-p1a-module-host-and-linux-baseline-batch----v2-modules--11-sp)** 🔵 🏆 — the manifest schema, registry, `modules.json` and loader (part 2 of 5).
+- **[G1](#g1-v2-p1a-the-module-host-batch----v2-modules--9-sp)** 🔵 🏆 — failure isolation and cascade; the Modules tab (part 2 of 5).
 - **[G2](#g2-compare-special-move-keeps-its-place-batch----compare-mode--3-sp)** 🔵 🟤 — the fix; review; merge (part 2 of 2).
 
-**Daily total**: ~4 SP
+**Daily total**: ~3.5 SP
 
-### Wednesday, November 18 — Failure isolation, the Modules tab, the bridge
+### Wednesday, November 18 — The allowlist and the bridge
 
 > After G2 merges, G1's branch merges `main` before its next push.
 
-- **[G1](#g1-v2-p1a-module-host-and-linux-baseline-batch----v2-modules--11-sp)** 🔵 🏆 — failure isolation and cascade; the Modules tab; the app-scheme allowlist; the `folder-file-*` channels and their `preload.js` bridge (part 3 of 5).
+- **[G1](#g1-v2-p1a-the-module-host-batch----v2-modules--9-sp)** 🔵 🏆 — the app-scheme allowlist; the `folder-file-*` channels and their `preload.js` bridge (part 3 of 5).
 
-**Daily total**: ~3 SP
+**Daily total**: ~2.5 SP
 
 ### Thursday, November 19 — The checks that make it hold; reviews start
 
-- **[G1](#g1-v2-p1a-module-host-and-linux-baseline-batch----v2-modules--11-sp)** 🔵 🏆 — M-1 and M-2 with planted violations; the bridge-surface test; per-launch E2E isolation; the rules move; both suites on Windows and Linux (part 4 of 5).
+- **[G1](#g1-v2-p1a-the-module-host-batch----v2-modules--9-sp)** 🔵 🏆 — M-1 and M-2 with planted violations; the bridge-surface test; per-launch E2E isolation; the rules move; both suites green (part 4 of 5).
 - **[G3](#g3-weekly-reviews-batch--overhead--research--process--5-sp)** ⚪ — § 5, then §1 plugins (part 1 of 2).
 
-**Daily total**: ~2 SP + ~2 overhead
+**Daily total**: ~1.5 SP + ~2 overhead
 
 ### Friday, November 20 — P1a's review; reviews
 
-- **[G1](#g1-v2-p1a-module-host-and-linux-baseline-batch----v2-modules--11-sp)** 🔵 🏆 — the deep review in a separate session, with the Codex trial beside it; merge (part 5 of 5; review rounds may run past Friday).
+- **[G1](#g1-v2-p1a-the-module-host-batch----v2-modules--9-sp)** 🔵 🏆 — the deep review in a separate session, with the Codex trial beside it; merge (part 5 of 5; review rounds may run past Friday).
 - **[G3](#g3-weekly-reviews-batch--overhead--research--process--5-sp)** ⚪ — §§2–4; the PR (part 2 of 2).
 - Buffer for review rounds. Closeout per group, **after its merge**: Summary-Table Status → `✅ PR #N`, the group's Daily-Schedule rows, and every BACKLOG/TODO entry it closed — in the closeout commit.
 
-**Daily total**: ~1 SP + ~3 overhead + buffer
+**Daily total**: ~0.5 SP + ~3 overhead + buffer
 
 ---
 
@@ -107,11 +106,11 @@
 
 | ID  | Group                                                 | Domain             | Source               | Tasks  | Total SP | Day     | Status |
 | --- | ----------------------------------------------------- | ------------------ | -------------------- | ------ | -------- | ------- | ------ |
-| G1  | v2 P1a: module host and Linux baseline `[batch]` 🏆   | v2 modules         | 🔵 User              | 4      | 11       | Mon–Fri | ⬜     |
+| G1  | v2 P1a: the module host `[batch]` 🏆                  | v2 modules         | 🔵 User              | 4      | 9        | Mon–Fri | ⬜     |
 | G2  | Compare special move keeps its place `[batch]`        | Compare mode       | 🔵 User 2 · 🟤 Auto 1 | 2      | 3        | Mon–Tue | ⬜     |
 | G3  | Weekly Reviews `[batch]`                              | Research / process | ⚪ Overhead          | 4      | 5        | Thu–Fri | ⬜     |
-|     | **Total (quota-counted)**                             |                    |                      | **6**  | **14**   |         |        |
-|     | **Total (incl. ⚪ overhead)**                         |                    |                      | **10** | **19**   |         |        |
+|     | **Total (quota-counted)**                             |                    |                      | **6**  | **12**   |         |        |
+|     | **Total (incl. ⚪ overhead)**                         |                    |                      | **10** | **17**   |         |        |
 
 _Source legend: 🔵 User · 🟡 Ops · 🟤 Auto · ⚪ Overhead (exempt from the quota denominator)._
 _Status cell on completion: `✅ PR #N` where a PR was opened (every group since 2026-09-10 has been), else `✅ <merge-SHA>` — never a bare `✅`. Flip it in the closeout commit, which runs after the merge, together with the group's Daily-Schedule rows and every BACKLOG/TODO entry the group closed._
@@ -122,11 +121,12 @@ _Status cell on completion: `✅ PR #N` where a PR was opened (every group since
 
 - **Theme.** The user chose A, "start the v2 pilot", over B, Cleanup Week #6 on time (G3's quit-path and tournament-prompt follow-ups and the `CLAUDE.md` audit; P1a would have slipped a third week), and C, the latest manual-testing wins (the queue reset, the wheel over the empty area, E2E windows on screen, sorts by size and name, drag-and-drop; no v2 work).
 - **Dates (user ruling, 2026-11-11).** The header is next week, Nov 16–20, written Wednesday 2026-11-11. Not chosen: a header of this week (Nov 9–13), as on 2026-10-28, which would have spilled from its first day, since P1a cannot finish in two days. Thu–Fri Nov 12–13 go to P1a's plan: prep, so nothing is delivered before the header Monday.
-- **Sizing (user ruling, 2026-11-11): to the recent pace.** 14 quota-counted SP + 5 overhead, ~3–4 SP a day. The last two normal weeks ran 1.6× and 1.9× over their estimates (archive below); each of the last five normal weeks finished after its Friday, four beyond the close-out gate's 2-day grace; and the Oct 26–30 plan's 24 SP took eight working days (Oct 28 – Nov 6). Not chosen: the full ~23 SP (adding the `CLAUDE.md` audit and the line-ceiling extension) with a drop order. v2 takes 11 of this week's 13 🔵 SP, near the ~12-SP share of 2026-10-28.
+- **Sizing (user ruling, 2026-11-11): to the recent pace.** 12 quota-counted SP + 5 overhead, ~3–4 SP a day (14 before Linux was dropped; the ~2 SP it freed stay as buffer, my call, given the pace). The last two normal weeks ran 1.6× and 1.9× over their estimates (archive below); each of the last five normal weeks finished after its Friday, four beyond the close-out gate's 2-day grace; and the Oct 26–30 plan's 24 SP took eight working days (Oct 28 – Nov 6). Not chosen: the full ~23 SP (adding the `CLAUDE.md` audit and the line-ceiling extension) with a drop order. v2 takes 9 of this week's 11 🔵 SP, near the ~12-SP share of 2026-10-28.
 - **Cleanup Week #6 (user ruling, 2026-11-11): deferred one week, to Nov 23–27.** It carries the 🟡 `CLAUDE.md` audit (the other slot its entry names) and the 🟤 line-ceiling extension to `core/` (it needs P1a's `core/`), each with a dated note on its entry. The wider sweep of the 423 open 🟤 entries is its job too.
 - **Overrun rule.** If G1 has not merged by Sunday Nov 22, the end of the close-out gate's grace, add the `**Spillover**` line then, not later (the Jul 13–17 lesson). G2 and G3 do not wait on G1. **Never drop** G2's Phase 0: a fix without its RED tests is not accepted.
 - **Dependencies.** G2 merges before G1 (both edit `media-viewer.js`), and G1's branch merges `main` before its next push. G1's Codex trial needs your setup in the review session. G3 last; its propagation reads what G1 and G2 shipped.
-- **Risks.** (1) The Linux baseline is an unknown: WSL2 and WSLg are present, but nothing has run the app or the suites there yet, and Ubuntu has no Linux Node (Parallel Work → G1's setup). A setup problem blocks P1a's exit criterion, while the host work can go on on Windows. (2) P1a at 11 SP may fill more than the week at the measured pace; the overrun rule above applies. (3) `preload.js` changes need the security review.
+- **Risks.** (1) P1a at ~9 SP may fill more than the week at the measured pace; the overrun rule above applies. (2) `preload.js` changes need the security review.
+- **Linux dropped (user ruling, 2026-11-11, after this plan's first commit `55edcde`).** You will not use the app on Linux in the near future, and G-8 added work to every v2 phase (both suites on Linux at each exit, per-platform code in later modules), so v2 is Windows only. GOALS drops G-8 and lists Linux under Non-Goals for v2; MILESTONES drops the pilot's Linux criterion and risk; ROADMAP renames P1a; the spec gets a § 21 row and markers at G-8, the P1a row, § 15 and D21. The spec's Linux design is parked as 🔵 [2026-11-11] "Linux support: parked until wanted" rather than deleted (my call), since "not in the near future" is not never. Measured before the ruling, for that entry: WSL2 with Ubuntu 24.04 and WSLg present, no Linux Node.
 - **Branch / PR shape.** Two code branches (G1, G2), each through a PR, as every group since 2026-09-10 has been. G3 through a PR as well.
 - **Strategic docs.** MILESTONES, ROADMAP and GOALS get a status edit in this planning pass (P1a scheduled for Nov 16–20, two weeks after its earliest slot; the pilot's early-January date kept, with the slip named in MILESTONES' Risks), not a refresh. The 2-month clock runs from 2026-10-27.
 - **Reaps — nominated in the brainstorm, user-approved and executed 2026-11-11** (entry bodies deleted, tombstone rows in Rejected Ideas). Each premise was checked first-hand:
@@ -134,27 +134,27 @@ _Status cell on completion: `✅ PR #N` where a PR was opened (every group since
     2. 🟤 [2026-10-25] v2 spec closeout _"Run or recover the downloader research before P3b's plan"_ — superseded by 🔵 [2026-11-10] "Run the downloader research for the Fetch module: the 2026-10-22 session never ran", which answers its first step and carries its gate, effort and spec amendment. The 🔵 Fetch-module entry's gate now points there.
 - **Considered, not reaped**: 🟡 "Add a pre-commit secret guard (or gitleaks)…" — its gitleaks tier still covers a real gap (fine-grained `github_pat_…` tokens and AWS secret access keys); 🟡 "Full audit of `regression-checker.md`…" and "Update `regression-checker.md` line-count…" — the agent file still reads "~11,500 lines", and v2 will move that number.
 - **Not scheduled**: 🔵 [2026-11-10] the downloader research — its gate is P3b's plan, months out; it can run as a background session whenever you choose, once its prepared text gets the refresh its entry lists.
-- _Brainstorm sanity-checks (user-in-the-loop, 2026-11-11): week dates set by user ruling to Mon Nov 16 – Fri Nov 20, 2026, written Wednesday 11-11 (git: last commit `6f6b09b` today; no DONE entry after 2026-11-06); the previous plan (Oct 26–30, Cleanup Week #5) **spilled to 2026-11-06**, six days past its Friday, as its `**Spillover**` line records; the week of Nov 2–6 carried that spillover, and **Nov 9–13 went unplanned** (two intake commits only); nothing was delivered before its header Monday (G1 built from Wed 10-28, merged 10-30); one follow-up PR ran beside it (#96, G3's reload roles, 11-05); velocity 19 planned + 5 overhead over eight working days (~3 SP a day) → 14 + 5 planned, agreed; Cleanup Week #6 **due** by cadence and **deferred one week** by user ruling; quotas satisfiable in the normal form; two reap nominations put in-dialogue, both approved and executed; owner queue N/A (no OWNER-QUEUE.md)._
+- _Brainstorm sanity-checks (user-in-the-loop, 2026-11-11): week dates set by user ruling to Mon Nov 16 – Fri Nov 20, 2026, written Wednesday 11-11 (git: last commit `6f6b09b` today; no DONE entry after 2026-11-06); the previous plan (Oct 26–30, Cleanup Week #5) **spilled to 2026-11-06**, six days past its Friday, as its `**Spillover**` line records; the week of Nov 2–6 carried that spillover, and **Nov 9–13 went unplanned** (two intake commits only); nothing was delivered before its header Monday (G1 built from Wed 10-28, merged 10-30); one follow-up PR ran beside it (#96, G3's reload roles, 11-05); velocity 19 planned + 5 overhead over eight working days (~3 SP a day) → 14 + 5 planned, agreed; Cleanup Week #6 **due** by cadence and **deferred one week** by user ruling; quotas satisfiable in the normal form; two reap nominations put in-dialogue, both approved and executed; owner queue N/A (no OWNER-QUEUE.md); after the first commit (`55edcde`), Linux dropped from v2 by user ruling, G1 11 → ~9 SP, the freed ~2 SP kept as buffer._
 
 ### Quota Check
 
-- 🔵 **User-Flagged SP**: 13 / 14 (**93%**) — ✅ ≥50%. G1, 11 SP (v2's weekly share); G2's queue fix, 2 SP, a TODO 🟠 carry-forward counted against its origin section (🔵, the user's manual testing of 2026-11-11).
-- 🟡 **Operational SP**: 0 / 14 (**0%**) — ✅ ≤25%. The one due 🟡 item, the `CLAUDE.md` audit, moved to Cleanup Week #6 (user ruling).
-- 🟤 **Auto-Generated SP**: 1 / 14 (**7%**), **1 group** (G2's side-swap task) — ✅ ≤1 group and ≤25%. G1's two 🟤 closers (spec § 14) and its two 🟤 riders (the G5 note, the Codex trial) sit inside P1a's estimate and are not counted apart.
+- 🔵 **User-Flagged SP**: 11 / 12 (**92%**) — ✅ ≥50%. G1, 9 SP (v2's weekly share); G2's queue fix, 2 SP, a TODO 🟠 carry-forward counted against its origin section (🔵, the user's manual testing of 2026-11-11).
+- 🟡 **Operational SP**: 0 / 12 (**0%**) — ✅ ≤25%. The one due 🟡 item, the `CLAUDE.md` audit, moved to Cleanup Week #6 (user ruling).
+- 🟤 **Auto-Generated SP**: 1 / 12 (**8%**), **1 group** (G2's side-swap task) — ✅ ≤1 group and ≤25%. G1's two 🟤 closers (spec § 14) and its two 🟤 riders (the G5 note, the Codex trial) sit inside P1a's estimate and are not counted apart.
 - **Minimum group size**: ✅ every group is ≥2 SP (G2 at 3).
 - **Daily capacity**: ~3–4 SP a day, below the nominal 5–8 by the velocity adjustment (Notes → Sizing).
 - **Cleanup Week status**: not active — #6 falls due by cadence this week and is **deferred to Nov 23–27** by user ruling.
 - **Last Cleanup Week**: October 26–30, 2026 (the 5th; delivered through 2026-11-06). Next: November 23–27, 2026 (the 6th).
 - **Compliance**: ✅ normal-week quotas met.
-- _Denominator note_: Y = total quota-counted SP (14) — the exempt ⚪ Overhead Weekly Reviews batch (G3, 5 SP) is excluded; 19 incl. overhead. No Deploy Window (auto-deploy: no).
+- _Denominator note_: Y = total quota-counted SP (12) — the exempt ⚪ Overhead Weekly Reviews batch (G3, 5 SP) is excluded; 17 incl. overhead. No Deploy Window (auto-deploy: no).
 
 ---
 
 ## Weekly Challenge 🏆
 
-**v2 P1a: the module host and a Linux baseline** (Group G1, Mon–Fri).
+**v2 P1a: the module host** (Group G1, Mon–Fri).
 
-**Why this one**: it is the first v2 phase and the gate on every phase after it, and the default 🔵 pick. The stretch is the proof, not the size: an empty module that loads, fails safely, cascades and toggles; M-1 and M-2 each shown able to fail by a planted violation; both suites green on Linux as well as Windows, a platform no earlier week has run; and a renderer no longer than it started, under the ratchet.
+**Why this one**: it is the first v2 phase and the gate on every phase after it, and the default 🔵 pick. The stretch is the proof, not the size: an empty module that loads, fails safely, cascades and toggles; M-1 and M-2 each shown able to fail by a planted violation; both suites green; and a renderer no longer than it started, under the ratchet.
 
 ---
 
