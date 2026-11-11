@@ -647,7 +647,7 @@ Spec §§ 6.3 ("When a module's code throws"), 6.5 step 3, 7.1–7.3 (P1a part),
   - `beginVisit` ends any live visit first. It creates `Visit = Object.freeze({ id, folder, isLive })` and calls each `onLoaded(visit, files)`, without awaiting. The snapshot is built only if a handler exists. A handler's throw or rejection is logged with its module id.
   - `endVisit` calls each `onVisitEnd(visit)` while the visit is still live, then marks it dead. It is idempotent.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Use a fake `api`, a fake `importModule` returning crafted module objects, fake timers and a `Map`-backed storage.
 
@@ -677,10 +677,10 @@ Visits and store:
 - a failed module's store refuses;
 - `deactivateAll` runs in reverse order and survives a throwing `deactivate`.
 
-- [ ] **Step 2: Run and see them fail.** Run: `npx vitest run tests/module-host.test.js`. Expected: FAIL.
-- [ ] **Step 3: Implement**
-- [ ] **Step 4: Run and see them pass; check the count**
-- [ ] **Step 5: Commit** `feat(core): v2 P1a module host - loader, per-module host, visits`
+- [x] **Step 2: Run and see them fail.** Run: `npx vitest run tests/module-host.test.js`. Expected: FAIL.
+- [x] **Step 3: Implement**
+- [x] **Step 4: Run and see them pass; check the count**
+- [x] **Step 5: Commit** `feat(core): v2 P1a module host - loader, per-module host, visits`
 
 ---
 
@@ -910,6 +910,12 @@ Spec § 7.13 (per-launch isolation), § 14 exit criteria.
   - Ruling: the registry loads and the module channels register before `createWindow`, so the page's first `listModules` finds its handler (the plan said "after the grant load" without placing it against the window). Cost if wrong: a few ms of startup with no modules folder.
 
 - **Task 8 done.** `core/notifications.js` (`Notifier`, body moved unchanged; `autoCloseErrors` is a getter read at each show). `showNotification` is a one-line delegate; `this.notifier` is built in `initializeElements` beside `notificationContainer`. `wc -l media-viewer.js` 11,597 → **11,505** (−92). Glue tests repointed at `Notifier` (RED on the missing module first) plus two new: the setting is read at each show, and the delegate passes every call through. Unit suite 2,958 passed; `lint-guard` and `media-url` now include `core/notifications.js` by glob (357 between them).
+
+- **Task 9 done.** `core/host-api.js` (typedefs), `core/module-host.js` (`ModuleHost`, `ACTIVATION_TIMEOUT_MS`). `tests/module-host.test.js` 40 cases (RED on the missing module first; one test bug fixed on the way: a capture that kept the newest visit instead of the first). Fake timers pin the 5,000 ms edge. The C9 case (a write inside `onVisitEnd` reaches the old folder) is what Task 14's mutation 2 will break.
+  - Ruling: `beginVisit(folderPath)` takes no files argument; its snapshot comes from `getFiles()`, the same source as `files.list()` (the plan had `beginVisit(folderPath, files)` and a `getFiles` spy, which conflict). Cost if wrong: one argument.
+  - Ruling: a dependent of a module the host itself blocked reads "disabled because X is disabled" (the plan named only "failed to start", for a failed dependency). Cost if wrong: one string.
+  - Ruling: an IPC reply that is not a known shape reads as `unreadable` "no reply" (or `{ success: false, error: 'no reply' }`), never absent. Cost if wrong: none.
+  - Ruling: `start()` also catches an unexpected throw in its own loop and logs it under `modules`, so it never rejects (a case added for it, RED first). Cost if wrong: none.
 
 ## 5. Key Discoveries
 
