@@ -1431,9 +1431,10 @@ app.whenReady().then(async () => {
         fn(source, message);
     });
 
-    // Receive renderer perf/diagnostics lines for the persistent perf log (fire-and-forget).
+    // Receive renderer perf/diagnostics lines for the persistent perf log (fire-and-forget). Newlines fold and the
+    // length is capped, so a line cannot forge another (v2 § 8.7).
     guard.on('log-perf', (_event, message) => {
-        logger.logPerf(String(message ?? ''));
+        logger.logPerf(logger.sanitizeLogText(message ?? '', 2000));
     });
 
     app.on('activate', () => {

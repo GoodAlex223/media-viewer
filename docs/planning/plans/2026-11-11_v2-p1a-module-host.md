@@ -487,7 +487,7 @@ Spec § 8.7.
   - `source` kept only if it matches `/^[a-z][a-z0-9:-]{0,63}$/`, else `'renderer'`.
 - `log-perf` → `logger.logPerf(sanitizeLogText(message ?? '', 2000))`.
 
-- [ ] **Step 1: Failing tests**:
+- [x] **Step 1: Failing tests**:
   - `'a\nb\r\nc'` → `'a ⏎ b ⏎ c'`;
   - 8,001 chars → 8,000 + `… [+1 chars]`;
   - a `source` of `'x]\n[main'` → `'renderer'`;
@@ -495,10 +495,10 @@ Spec § 8.7.
   - `'hash-pool'` kept.
 
   The existing normalize cases are unchanged.
-- [ ] **Step 2: Run and see them fail.** Run: `npx vitest run tests/logger.test.js`.
-- [ ] **Step 3: Implement**
-- [ ] **Step 4: Run and see them pass**
-- [ ] **Step 5: Commit** `fix(logger): fold newlines, cap length and restrict source on renderer log lines (v2 § 8.7)`
+- [x] **Step 2: Run and see them fail.** Run: `npx vitest run tests/logger.test.js`.
+- [x] **Step 3: Implement**
+- [x] **Step 4: Run and see them pass**
+- [x] **Step 5: Commit** `fix(logger): fold newlines, cap length and restrict source on renderer log lines (v2 § 8.7)`
 
 ---
 
@@ -896,6 +896,15 @@ Spec § 7.13 (per-launch isolation), § 14 exit criteria.
 - **Task 4 done.** `app-protocol.js` serves `core/**` (`.js .css`) and module files through `moduleFilePath`; `tests/app-protocol.test.js` 77 → 100 (11 new cases failed first; the link cases passed before, as refusals should).
   - Note for Task 6: the protocol compares Node's JS realpath, so the registry must get the JS realpath too (`fs.promises.realpath` is the native one, which resolves a subst or mapped drive and would refuse every module file). Task 6 passes `{ ...fs.promises, realpath: promisify(fs.realpath) }`.
 
+- **Security review of Task 3** (`cc72c66`; the background commit scan, three MEDIUM findings), fixed with failing tests first:
+  1. A case differential: NTFS folds case, so a declared `.BULK_RATED.json` was core's ratings file on disk. Folder-file names are now lower-case ASCII only (the plan's regex allowed `A-Z`), and `folder-files.js` also refuses any name that is a core name once ASCII-folded.
+  2. The cap bounded the result, not the read: a file that grew after its size check was read whole. Reads now go through one handle and stop at `maxBytes + 1` bytes.
+  3. The recovery read had no cap: a planted huge tmp beside a torn file was read whole. It now goes through the same bounded read, and a tmp over the cap is skipped.
+  - `tests/folder-files.test.js` 18 → 21, `tests/module-registry.test.js` 92 → 94; all five new cases failed first.
+  - Ruling: folder-file names are lower-case only (deviates from the plan's `[A-Za-z0-9_-]`). Cost if wrong: a module author renames a file.
+
+- **Task 5 done.** `logger.sanitizeLogText`; `normalizeRendererLogEntry` folds, caps at 8,000 and restricts `source`; `log-perf` caps at 2,000. `tests/logger.test.js` 46 → 56 (10 failed first). Every existing perf line (AI sort, ML training, hash parity) is a single line well under 2,000 characters; the existing sources (`renderer`, `hash-pool`, `model-cache`, `session`) all match the new rule.
+
 ## 5. Key Discoveries
 
 _(filled during execution)_
@@ -907,6 +916,7 @@ _(filled during execution)_
 | Rules-file size warning falls due with P1a's first rules files | C13 | BACKLOG 🟤 note → Cleanup Week #6 |
 | Extractor helper waits for P1b | C11 | BACKLOG 🟤 note |
 | P1b's two caches become `folder-file-*`'s first production callers; the bulk ratings move once, in P4b, onto `host.store.folderFile` | C2 | The spec's § 21 row (Task 13); P1b's and P4b's plans |
+| `readBulkRatedFile` and its recovery read have no size cap (main reads the file, or a planted tmp, whole). Same class as P1a security findings 2 and 3, pre-existing, and out of scope under C2 | Security review, Task 3 | BACKLOG 🟤 at closeout; P4b moves the ratings onto the capped service anyway |
 | Renderer + `core/*.js` over GOALS G-7's soft 11,945 once the host exists | Risks | The Cleanup Week #6 ceiling-extension decision |
 
 ## 7. Testing
