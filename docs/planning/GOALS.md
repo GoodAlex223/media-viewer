@@ -2,7 +2,7 @@
 
 Project objectives and success metrics.
 
-**Last Updated**: 2026-10-30 <!-- G2 pre-push gate: a status edit only (G-7 ratchet built; pre-push description). --> <!-- Weekly planning (Cleanup Week #5, Oct 26–30): a status edit only, not a refresh. v2's weekly 🔵 share is set to ~12 SP ("Most", user ruling 2026-10-28), so Objective 2's timeline moves to about May 2027. The 2-month clock still runs from 2026-10-27. --> <!-- G5 strategic-doc refresh (plan 2026-10-27_g5-strategic-doc-refresh.md): mission widened, Objective 1 achieved, Objective 2 re-baselined to v2 (spec § 11.1), by the user's rulings of 2026-10-27. The 2-month clock restarts here. Earlier: 2026-10-09 and 2026-10-17 were status flips only, not refreshes. -->
+**Last Updated**: 2026-11-11 <!-- Weekly planning (Nov 16–20, written 2026-11-11): a status edit only, not a refresh. v2 P1a is scheduled for Nov 16–20 (WEEKLY G1), two weeks after its earliest slot: Cleanup Week #5 spilled through Nov 6, and Nov 9–13 had no plan. The 2-month clock still runs from 2026-10-27. --> <!-- Prior (2026-10-30): G2 pre-push gate: a status edit only (G-7 ratchet built; pre-push description). --> <!-- Weekly planning (Cleanup Week #5, Oct 26–30): a status edit only, not a refresh. v2's weekly 🔵 share is set to ~12 SP ("Most", user ruling 2026-10-28), so Objective 2's timeline moves to about May 2027. The 2-month clock still runs from 2026-10-27. --> <!-- G5 strategic-doc refresh (plan 2026-10-27_g5-strategic-doc-refresh.md): mission widened, Objective 1 achieved, Objective 2 re-baselined to v2 (spec § 11.1), by the user's rulings of 2026-10-27. The 2-month clock restarts here. Earlier: 2026-10-09 and 2026-10-17 were status flips only, not refreshes. -->
 **Review Cycle**: Continuous — planning-session staleness check (see [README.md](README.md) § Strategic Review)
 
 ---
@@ -31,7 +31,7 @@ Provide the most efficient desktop tool for collecting, reviewing, rating and ke
 | G-7 The renderer shrinks | Net `wc -l media-viewer.js` ≤ 0 in every phase's PR, enforced by a blocking line ratchet (user ruling 2026-10-27); the renderer plus `core/*.js` below 11,945 lines (`308d43c`); `media-viewer.js` below 6,000 by the end of P7 (§ 11.1) | 11,597 lines after G3 (2026-11-03; 11,529 at `e0b2a16` on 2026-10-27); the ratchet is built (G2): `scripts/renderer-line-ceiling.txt`, 11,597 | 🔴 |
 | G-8 Runs on Windows and Linux: both suites on both platforms at every phase exit | From P1a's Linux baseline | Windows only | 🔴 |
 
-**Timeline**: P1a from the week of Nov 2–6, 2026 at the earliest; about May 2027 (soft). The date assumes v2 takes ~12 SP of each normal week's ~17 🔵 SP (user ruling 2026-10-28); a week that gives v2 less moves it later ([ROADMAP.md](ROADMAP.md) § Releases)
+**Timeline**: P1a scheduled for Nov 16–20, 2026 (its earliest week was Nov 2–6); about May 2027 (soft). The date assumes v2 takes ~12 SP of each normal week's ~17 🔵 SP (user ruling 2026-10-28); a week that gives v2 less moves it later ([ROADMAP.md](ROADMAP.md) § Releases)
 **Owner**: goodalex223
 
 > **Why the re-baseline.** The August target, "< ~6,000 lines after the four extractions", needed ~5,400 lines out, while the renderer grew from 9,418 lines (2026-08-27) to 11,945 (2026-10-25). Four extractions of ZoomManager's size (−416 lines) could not reach it. v2's target moves whole clusters out (§ 11.1: about 5,050–5,550 lines by the end of P6) and forbids growth in any phase.

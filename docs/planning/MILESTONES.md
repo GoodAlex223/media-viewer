@@ -2,7 +2,7 @@
 
 Key targets with dates.
 
-**Last Updated**: 2026-10-30 <!-- G2 closeout (PR #94, merge a80cc37): a status edit only; the blocking line ratchet is in place (Dependencies, v2 pilot). --> <!-- Prior (2026-10-28): Weekly planning (Cleanup Week #5, Oct 26–30): a status edit only, not a refresh. v2's weekly 🔵 share is set to ~12 SP ("Most", user ruling 2026-10-28): v2 complete moves to about May 2027, and the pilot, scaled the same way, to early January 2027 (the planner's call). The 2-month clock still runs from 2026-10-27. --> <!-- G5 strategic-doc refresh (plan 2026-10-27_g5-strategic-doc-refresh.md): the v2 pilot and v2-complete milestones replace "v2.0 modularization complete", which is retired as absorbed into v2 (spec D1); the 24k scope note closed; the Health Summary's Count column dropped (derived counts). The 2-month clock restarts here. Earlier: 2026-10-09 was a status flip only, not a refresh. -->
+**Last Updated**: 2026-11-11 <!-- Weekly planning (Nov 16–20, written 2026-11-11): a status edit only, not a refresh. v2 P1a is scheduled for Nov 16–20 (WEEKLY G1), two weeks after its earliest slot: Cleanup Week #5 spilled through Nov 6, and Nov 9–13 had no plan. The 2-month clock still runs from 2026-10-27. --> <!-- Prior (2026-10-30): G2 closeout (PR #94, merge a80cc37): a status edit only; the blocking line ratchet is in place (Dependencies, v2 pilot). --> <!-- Prior (2026-10-28): Weekly planning (Cleanup Week #5, Oct 26–30): a status edit only, not a refresh. v2's weekly 🔵 share is set to ~12 SP ("Most", user ruling 2026-10-28): v2 complete moves to about May 2027, and the pilot, scaled the same way, to early January 2027 (the planner's call). The 2-month clock still runs from 2026-10-27. --> <!-- G5 strategic-doc refresh (plan 2026-10-27_g5-strategic-doc-refresh.md): the v2 pilot and v2-complete milestones replace "v2.0 modularization complete", which is retired as absorbed into v2 (spec D1); the 24k scope note closed; the Health Summary's Count column dropped (derived counts). The 2-month clock restarts here. Earlier: 2026-10-09 was a status flip only, not a refresh. -->
 
 ---
 
@@ -21,7 +21,7 @@ Milestones are significant checkpoints. They should be:
 ### 🎯 v2 pilot: the module host and the `similarity` module (P1a + P1b)
 
 **Target Date**: early January 2027 (soft)
-**Status**: ⬜ Not started — P1a's earliest week is Nov 2–6, after Cleanup Week #5
+**Status**: ⬜ Not started — P1a is scheduled for Nov 16–20 (WEEKLY G1, planned 2026-11-11), two weeks after its earliest week (Nov 2–6): Cleanup Week #5 spilled through Nov 6, and Nov 9–13 had no plan. The date below is kept (soft); Risks says what it now rests on
 
 **Definition of Done** ([v2 spec](../superpowers/specs/2026-10-22-v2-modules-design.md) § 14 exit criteria):
 
@@ -37,7 +37,7 @@ Milestones are significant checkpoints. They should be:
 
 - P1a's Linux baseline is an unknown: WSL2 is a candidate for the Electron runs, not yet tried (spec § 15)
 - Estimates have run ~1.9× low; P1a (~11 SP) and P1b (~10 SP) can each fill more than a week
-- The date assumes P1a and P1b get ~12 SP of their weeks' 🔵 share (user ruling 2026-10-28, "Most"). It was mid-December at the whole share (~17 SP); scaled by 17/12, that is early January (the planner's call, 2026-10-28). A week that gives them less pushes it later
+- The date assumes P1a and P1b get ~12 SP of their weeks' 🔵 share (user ruling 2026-10-28, "Most"). It was mid-December at the whole share (~17 SP); scaled by 17/12, that is early January (the planner's call, 2026-10-28). A week that gives them less pushes it later. ↳ 2026-11-11: two weeks went before P1a started, so early January now also needs P1a and P1b to run near their estimates, which recent weeks have not (~1.6–1.9× low)
 
 ### 🎯 v2 complete
 

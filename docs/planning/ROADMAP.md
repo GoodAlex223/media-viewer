@@ -2,7 +2,7 @@
 
 Long-term vision, active themes, and releases.
 
-**Last Updated**: 2026-10-30 <!-- G2 closeout (PR #94, merge a80cc37): a status edit only. The blocking renderer line ratchet is built (lines 34 and 96), and the LICENSE file (G1, PR #93) is marked done beside it. --> <!-- Prior (2026-10-28): Weekly planning (Cleanup Week #5, Oct 26–30): a status edit only, not a refresh. v2's weekly 🔵 share is set to ~12 SP ("Most", user ruling 2026-10-28), so the v2 date moves to about May 2027. The 2-month clock still runs from 2026-10-27. --> <!-- G5 strategic-doc refresh (plan 2026-10-27_g5-strategic-doc-refresh.md): v2 replaces the v2.0 release (v2 spec D1), the board follows the spec's § 14 build order, and two drained notes are added, by the user's rulings of 2026-10-27. The 2-month clock restarts here. Earlier: 2026-10-09 was a status flip only, not a refresh. -->
+**Last Updated**: 2026-11-11 <!-- Weekly planning (Nov 16–20, written 2026-11-11): a status edit only, not a refresh. v2 P1a is scheduled for Nov 16–20 (WEEKLY G1), two weeks after its earliest slot: Cleanup Week #5 spilled through Nov 6, and Nov 9–13 had no plan. The 2-month clock still runs from 2026-10-27. --> <!-- Prior (2026-10-30): G2 closeout (PR #94, merge a80cc37): a status edit only. The blocking renderer line ratchet is built (lines 34 and 96), and the LICENSE file (G1, PR #93) is marked done beside it. --> <!-- Prior (2026-10-28): Weekly planning (Cleanup Week #5, Oct 26–30): a status edit only, not a refresh. v2's weekly 🔵 share is set to ~12 SP ("Most", user ruling 2026-10-28), so the v2 date moves to about May 2027. The 2-month clock still runs from 2026-10-27. --> <!-- G5 strategic-doc refresh (plan 2026-10-27_g5-strategic-doc-refresh.md): v2 replaces the v2.0 release (v2 spec D1), the board follows the spec's § 14 build order, and two drained notes are added, by the user's rulings of 2026-10-27. The 2-month clock restarts here. Earlier: 2026-10-09 was a status flip only, not a refresh. -->
 
 ---
 
@@ -26,7 +26,7 @@ Work flows each planning session from [BACKLOG.md](BACKLOG.md) → [WEEKLY.md](W
 
 ### Now
 
-- **v2 P1a — the module host and a Linux baseline**: the manifest, registry and loader; failure isolation; the Modules tab; checks M-1 and M-2; and first, today's app and suites running on Linux. In the week of Nov 2–6 at the earliest, after Cleanup Week #5. Then **P1b, the `similarity` module**, the pilot, which absorbs the planned SortingManager extraction.
+- **v2 P1a — the module host and a Linux baseline**: the manifest, registry and loader; failure isolation; the Modules tab; checks M-1 and M-2; and first, today's app and suites running on Linux. Scheduled for Nov 16–20 (WEEKLY G1, planned 2026-11-11); its earliest week was Nov 2–6, after Cleanup Week #5. Then **P1b, the `similarity` module**, the pilot, which absorbs the planned SortingManager extraction.
 - **Small tasks, any week, before or beside P1a**:
   - the AI research harness on the user's own like/dislike folders, with only overall numbers committed;
   - then **A1**, the like-model learner fix (spec § 12.3);
@@ -82,7 +82,7 @@ Shipped far beyond the v1.1 scope (Feb–Aug 2026): Tournament mode (Swiss engin
 | Phase | Scope | Status |
 | ----- | ----- | ------ |
 | P0 Prerequisites | G2 PR 2 merged (PR #87); the spec approved (2026-10-22, merged in PR #88); the board change and the § 19 BACKLOG entries (G5) | ✅ Done 2026-10-27 |
-| P1a | Module host + Linux baseline | ⬜ Planned |
+| P1a | Module host + Linux baseline | 📅 Scheduled Nov 16–20 |
 | P1b | `similarity` (the pilot) | ⬜ Planned |
 | P2 | Shell part 1: side panel, jobs tray, F1 tabs | ⬜ Planned |
 | P3a / P3b | Job runner and tools / `fetch` | ⬜ Planned |
