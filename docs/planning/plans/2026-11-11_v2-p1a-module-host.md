@@ -592,10 +592,10 @@ The bulk ratings stay on `readBulkRatedFile`/`writeBulkRatedFile` in P1a. They m
 - Produces: `export class Notifier { constructor({ container, autoCloseErrors /* () => boolean */ }); show(message, type = 'success', options = {}) → HTMLElement }`, with today's `showNotification` body moved unchanged (`this.notificationContainer` → `this.container`; `this.autoCloseErrors` → `this.autoCloseErrors()`).
 - `MediaViewer.showNotification(message, type = 'success', options = {}) { return this.notifier.show(message, type, options); }`.
 
-- [ ] **Step 1: Repoint the glue test at `new Notifier({ container: container(), autoCloseErrors: () => true }).show(…)`, with the same assertions.** It fails until the file exists. Run: `npx vitest run tests/similarity-sort-glue.test.js -t "returns its element"`. Expected: FAIL.
-- [ ] **Step 2: Move the body; add the delegate; build the notifier**
-- [ ] **Step 3: Run the unit suite and `wc -l media-viewer.js`.** Expected: PASS, and about −92 lines.
-- [ ] **Step 4: Commit** `refactor(core): move the notification system to core/notifications.js`
+- [x] **Step 1: Repoint the glue test at `new Notifier({ container: container(), autoCloseErrors: () => true }).show(…)`, with the same assertions.** It fails until the file exists. Run: `npx vitest run tests/similarity-sort-glue.test.js -t "returns its element"`. Expected: FAIL.
+- [x] **Step 2: Move the body; add the delegate; build the notifier**
+- [x] **Step 3: Run the unit suite and `wc -l media-viewer.js`.** Expected: PASS, and about −92 lines.
+- [x] **Step 4: Commit** `refactor(core): move the notification system to core/notifications.js`
 
 ---
 
@@ -908,6 +908,8 @@ Spec § 7.13 (per-launch isolation), § 14 exit criteria.
 - **Task 6 done.** `main/module-ipc.js`; `main.js` wires the registry (JS realpath; its own link-refusing writer for `modules.json`, since the state folder is not granted), the folder-file service, the protocol's `resolveModuleDir`, `global.__mvModules`, and `restart-app` beside `app-close-allow` on one hoisted `isMainWindowSender`; `assertFixedPath`'s link half is now `refuseLink`, shared. `preload.js` +6 keys exactly as approved. `tests/bridge-surface.test.js` 4 (RED on 39 keys vs 45 first), `tests/module-ipc.test.js` 10 (RED on the missing module first). Unit suite 61 files, 2,942 passed, 1 skipped; `main-hardening` unchanged. Smoke on an empty scratch profile (`MV_USER_DATA_DIR`): the session log reads `Modules: 0 found, 0 enabled`, with no error.
   - Ruling: added `tests/module-ipc.test.js` (the plan named only the bridge test). It pins the refusal values at unit level, so Task 14's mutation 1 (`rejectValue` → absent) fails in the unit suite as well as in E2E 8. Cost if wrong: one test file.
   - Ruling: the registry loads and the module channels register before `createWindow`, so the page's first `listModules` finds its handler (the plan said "after the grant load" without placing it against the window). Cost if wrong: a few ms of startup with no modules folder.
+
+- **Task 8 done.** `core/notifications.js` (`Notifier`, body moved unchanged; `autoCloseErrors` is a getter read at each show). `showNotification` is a one-line delegate; `this.notifier` is built in `initializeElements` beside `notificationContainer`. `wc -l media-viewer.js` 11,597 → **11,505** (−92). Glue tests repointed at `Notifier` (RED on the missing module first) plus two new: the setting is read at each show, and the delegate passes every call through. Unit suite 2,958 passed; `lint-guard` and `media-url` now include `core/notifications.js` by glob (357 between them).
 
 ## 5. Key Discoveries
 

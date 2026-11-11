@@ -7,6 +7,7 @@ import * as HashPool from '../hash-pool.js';
 import * as HashParity from '../hash-parity.js';
 import * as MainThreadHash from '../main-thread-hash.js';
 import { fakeHashPool } from './hash-pool-harness.js';
+import { Notifier } from '../core/notifications.js';
 
 const require = createRequire(import.meta.url);
 const fs = require('fs');
@@ -2388,7 +2389,8 @@ describe('how a run ends (my call 3)', () => {
 });
 
 describe('showNotification: sticky (spec D3)', () => {
-    // Vitest runs in node: this block stands up the few DOM pieces showNotification touches.
+    // Vitest runs in node: this block stands up the few DOM pieces the notifier touches. Since v2 P1a the body is
+    // core/notifications.js's Notifier.show, and MediaViewer.showNotification delegates to it.
     let savedDocument;
     let savedSetTimeout;
     let timers;
@@ -2463,12 +2465,13 @@ describe('showNotification: sticky (spec D3)', () => {
         globalThis.setTimeout = savedSetTimeout;
     });
 
-    const showNotification = extract('showNotification');
+    const notifierOn = (c, autoCloseErrors = true) =>
+        new Notifier({ container: c, autoCloseErrors: () => autoCloseErrors });
 
     it('returns its element; a sticky one has the class, no auto-close, and survives both prunes', () => {
-        const ctx = { notificationContainer: container(), autoCloseErrors: true };
+        const notifier = notifierOn(container());
         const callback = vi.fn();
-        const sticky = showNotification.call(ctx, 'Similarity order ready', 'success', {
+        const sticky = notifier.show('Similarity order ready', 'success', {
             sticky: true,
             actionButton: 'Show',
             actionCallback: callback,
@@ -2476,12 +2479,12 @@ describe('showNotification: sticky (spec D3)', () => {
         expect(sticky.className).toBe('notification success sticky');
         expect(timers).toEqual([]); // no auto-close
         for (let i = 0; i < 6; i++) {
-            showNotification.call(ctx, `info ${i}`, 'info');
+            notifier.show(`info ${i}`, 'info');
         }
         for (let i = 0; i < 6; i++) {
-            showNotification.call(ctx, `ok ${i}`, 'success');
+            notifier.show(`ok ${i}`, 'success');
         }
-        expect(ctx.notificationContainer.children).toContain(sticky);
+        expect(notifier.container.children).toContain(sticky);
 
         // The action button runs the callback and leaves the notification open.
         timers = [];
@@ -2496,14 +2499,31 @@ describe('showNotification: sticky (spec D3)', () => {
         const close = timers.find((t) => t.ms === 300);
         expect(close).toBeDefined();
         close.fn();
-        expect(ctx.notificationContainer.children).not.toContain(sticky);
+        expect(notifier.container.children).not.toContain(sticky);
     });
 
     it('a non-sticky notification is returned too and still auto-closes', () => {
-        const ctx = { notificationContainer: container(), autoCloseErrors: true };
-        const n = showNotification.call(ctx, 'hello', 'success');
+        const n = notifierOn(container()).show('hello', 'success');
         expect(n.className).toBe('notification success');
         expect(timers.map((t) => t.ms)).toEqual([2000]);
+    });
+
+    it('reads the auto-close-errors setting at each show, not once', () => {
+        let autoClose = false;
+        const notifier = new Notifier({ container: container(), autoCloseErrors: () => autoClose });
+        notifier.show('kept', 'error');
+        expect(timers).toEqual([]);
+        autoClose = true;
+        notifier.show('closes', 'error');
+        expect(timers.map((t) => t.ms)).toEqual([8000]);
+    });
+
+    it('MediaViewer.showNotification hands every call to the notifier and returns its element', () => {
+        const element = {};
+        const ctx = { notifier: { show: vi.fn(() => element) } };
+        const options = { sticky: true };
+        expect(extract('showNotification').call(ctx, 'm', 'warning', options)).toBe(element);
+        expect(ctx.notifier.show).toHaveBeenCalledWith('m', 'warning', options);
     });
 });
 
