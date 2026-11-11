@@ -28,7 +28,10 @@ Project-specific configuration. Universal rules are in [CLAUDE.md](CLAUDE.md).
 |-----------|----------|---------|
 | Entry Point | `main.js` | Electron main process |
 | Security Bridge | `preload.js` | IPC context bridge |
-| Core UI | `media-viewer.js` | Renderer process, all UI logic |
+| Core UI | `media-viewer.js` | Renderer process, most UI logic |
+| Core renderer code (v2) | `core/` | Module host, host API types, F1's Modules section, notifications |
+| Main code in folders (v2) | `main/` | Module registry, per-folder module files, module IPC |
+| Modules (v2) | `modules/<id>/` | First-party modules (none until P1b) |
 | Sorting | `sorting-worker.js` | Web Worker for sorting algorithms |
 | ML Features | `ml-worker.js`, `ml-model.js` | ML prediction |
 | Feature Extraction | `feature-worker.js`, `feature-extractor.js` | Image feature extraction |
@@ -144,7 +147,7 @@ npm run format        # Prettier (format:check to verify only)
 
 ## Known Limitations
 
-1. **Large renderer file**: `media-viewer.js` is 11,597 lines (2026-11-03) - v2 shrinks it phase by phase, and no phase may grow it ([GOALS.md](docs/planning/GOALS.md) Objective 2)
+1. **Large renderer file**: `media-viewer.js` is 11,544 lines (2026-11-12, v2 P1a) - v2 shrinks it phase by phase, and no phase may grow it ([GOALS.md](docs/planning/GOALS.md) Objective 2)
 2. **No TypeScript**: Plain JavaScript with no type checking
 3. **No CI service**: all gates are local Husky hooks; a bypassed hook has no server-side backstop
 4. **Sandbox disabled**: Required for file operations but reduces security

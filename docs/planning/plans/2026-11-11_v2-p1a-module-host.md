@@ -813,7 +813,7 @@ Spec § 7.13 (per-launch isolation), § 14 exit criteria.
 
 **Files:** `CLAUDE.md`, `.claude/rules/core.md`, `.claude/rules/modules.md`, `docs/ARCHITECTURE.md`, `PROJECT.md`, `docs/README.md`, `docs/planning/plans/README.md`, the v2 spec, `scripts/renderer-line-ceiling.txt`
 
-- [ ] **Step 1: `.claude/rules/core.md`** (`paths: ["core/**"]`): the moved notification rule (sticky: exempt from the prunes; the action button leaves closing to the caller; returns the element) and the v2.0 pattern for core classes.
+- [x] **Step 1: `.claude/rules/core.md`** (`paths: ["core/**"]`): the moved notification rule (sticky: exempt from the prunes; the action button leaves closing to the caller; returns the element) and the v2.0 pattern for core classes.
 
   **`.claude/rules/modules.md`** (`paths: ["modules/**", "main/**", "core/module-host.js", "core/host-api.js", "core/modules-panel.js", "tests/e2e/fixtures/modules/**"]`):
   - M-1 and M-2, each with its control;
@@ -825,19 +825,19 @@ Spec § 7.13 (per-launch isolation), § 14 exit criteria.
   - "a failed folder-file read is never absent".
 
   Every cited `CLAUDE.md` heading is kept.
-- [ ] **Step 2: `CLAUDE.md`**:
+- [x] **Step 2: `CLAUDE.md`**:
   - Architecture tree: `core/`, `modules/`, `main/`, `tests/e2e/fixtures/modules/`, one line each;
   - § Error Handling: "via the notification system (`core/notifications.js`)", with the moved sentence removed;
   - § Testing (E2E): `launchApp`'s new options, in one clause;
   - § Security: the new channels and the served module roots, in one clause.
 
   Record the bytes before and after.
-- [ ] **Step 3: Rule-loss check, with a planted control** (G5 size-audit spec § 7). A fresh agent at this session's tier gets `CLAUDE.md` from `main`, and the new `CLAUDE.md` + both rules files with one more rule quietly deleted from a scratch copy. It lists every old rule as present, reworded or missing. If it misses the planted deletion, redo the check. Every other "missing" is restored.
-- [ ] **Step 4: `docs/ARCHITECTURE.md`**: rewrite the file tree (this closes 🟤 "`docs/ARCHITECTURE.md`'s file tree omits every extracted module"), and replace "Extension Points" with the module architecture: roots, registry, host, folder-file service, M-1/M-2, restart. **`PROJECT.md`**: the structure table and the line count.
-- [ ] **Step 5: The spec.** Add a § 21 row: "v2 P1a plan (2026-11-11): C1–C15", one clause each for C1, C2, C3, C4, C5, C6, C7, C8, C9, C10, C11. Add a dated note on § 14 "Every phase also" item 4: the G5 note above.
-- [ ] **Step 6: Indexes.** Add this plan to `docs/README.md` § Active Plans and to `docs/planning/plans/README.md`'s Current Plans table.
-- [ ] **Step 7: The ceiling.** After merging `main` (G2), set `scripts/renderer-line-ceiling.txt` to the exact `wc -l media-viewer.js`. Record `wc -l core/*.js` and the sum against GOALS G-7's 11,945 in this plan's log.
-- [ ] **Step 8: Commit** `docs: v2 P1a - architecture, rules files, spec § 21, line ceiling`
+- [x] **Step 3: Rule-loss check, with a planted control** (G5 size-audit spec § 7). A fresh agent at this session's tier gets `CLAUDE.md` from `main`, and the new `CLAUDE.md` + both rules files with one more rule quietly deleted from a scratch copy. It lists every old rule as present, reworded or missing. If it misses the planted deletion, redo the check. Every other "missing" is restored.
+- [x] **Step 4: `docs/ARCHITECTURE.md`**: rewrite the file tree (this closes 🟤 "`docs/ARCHITECTURE.md`'s file tree omits every extracted module"), and replace "Extension Points" with the module architecture: roots, registry, host, folder-file service, M-1/M-2, restart. **`PROJECT.md`**: the structure table and the line count.
+- [x] **Step 5: The spec.** Add a § 21 row: "v2 P1a plan (2026-11-11): C1–C15", one clause each for C1, C2, C3, C4, C5, C6, C7, C8, C9, C10, C11. Add a dated note on § 14 "Every phase also" item 4: the G5 note above.
+- [x] **Step 6: Indexes.** Add this plan to `docs/README.md` § Active Plans and to `docs/planning/plans/README.md`'s Current Plans table.
+- [x] **Step 7: The ceiling.** After merging `main` (G2), set `scripts/renderer-line-ceiling.txt` to the exact `wc -l media-viewer.js`. Record `wc -l core/*.js` and the sum against GOALS G-7's 11,945 in this plan's log.
+- [x] **Step 8: Commit** `docs: v2 P1a - architecture, rules files, spec § 21, line ceiling`
 
 ---
 
@@ -929,6 +929,12 @@ Spec § 7.13 (per-launch isolation), § 14 exit criteria.
 - **Task 12 done.** `launchApp({ stateDir, moduleRoot, modulesEnabled })` and `MODULE_FIXTURES_DIR`; every launch now gets its own `MV_E2E_STATE_DIR`, and inherited module variables are dropped. Seven fixture modules. `tests/e2e/modules.test.js` 9 cases: first run RED (the helper export missing), then 5 failing on F1, then 9/9. **Full E2E suite: 264 passed, 7 skipped, 12.0 min.**
   - Ruling: the E2E opens F1 with `toggleHelp()` (what the header's help button calls), not the F1 key. With no folder open, the keydown handler passes only undo, by design (CLAUDE.md § State Management, empty state). Cost if wrong: none; the section's visibility is still asserted.
   - Ruling: E2E 6 reads the log file that was newest before Restart now (captured before the click), since the relaunched app writes a new one. Cost if wrong: none.
+
+- **Task 13 done.** `.claude/rules/core.md` and `.claude/rules/modules.md`; `CLAUDE.md` (Architecture tree, Imports, § Testing (E2E) helpers, § Error Handling pointer, the Quit bullet, § Security's IPC guard and app-scheme bullets, the `.claude/` gotcha) **71,287 → 72,422 bytes**; `docs/ARCHITECTURE.md` file tree rewritten from `git ls-files` and "Extension Points" replaced by "Modules (v2)"; `PROJECT.md` structure rows and line count; both plan indexes; the spec's § 21 row (C1–C11) and § 14 item 4 note.
+  - **Rule-loss check** (a fresh Opus agent, `main`'s `CLAUDE.md` against the new one plus both rules files, one rule secretly deleted): it **found the planted deletion** (`buildReverseMap()` must enumerate every mode string), so the check is valid. It counted 169 rule-bearing units: 161 byte-identical, 6 changed by additions only, 1 split. Other findings, all fixed: "`showNotification` returns its element" survived only by implication, and the sticky rule's callers are in `media-viewer.js`, where `core.md` does not load. The sentence is restored in § Error Handling, and `core.md` keeps the full form. The `.claude/` gotcha's "`rules/` … (empty today)" was stale and is corrected.
+  - Ruling: the sticky/return sentence stays in `CLAUDE.md` as well as `core.md` (the plan moved it). Its readers edit `media-viewer.js`, where only `CLAUDE.md` loads. Cost if wrong: 198 bytes.
+  - **Ceiling:** `scripts/renderer-line-ceiling.txt` 11,597 → **11,544**. G2 has not merged (`origin/main` = `d7b0fb8`), so Task 15 re-measures after merging `main`.
+  - **GOALS G-7:** `media-viewer.js` 11,544 + `core/*.js` 682 (`host-api` 47, `module-host` 374, `modules-panel` 147, `notifications` 114) = **12,226**, 281 over the soft 11,945 (the plan predicted ~235). It goes in the PR, and feeds Cleanup Week #6's ceiling-extension decision.
 
 ## 5. Key Discoveries
 

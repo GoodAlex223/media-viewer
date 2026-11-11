@@ -240,38 +240,51 @@ User clicks Like/Dislike
 
 ## File Structure
 
+Every tracked file outside `tests/`, `docs/`, `scripts/`, `vendor/` and `.claude/`, by process. `CLAUDE.md`'s Architecture tree says what each one holds.
+
 ```
 media_viewer/
-├── main.js              # Electron main process
-├── preload.js           # Context bridge (security)
-├── media-viewer.js      # Renderer process (UI logic)
-├── sorting-worker.js    # Web Worker (sorting algorithms)
-├── ml-worker.js         # Web Worker (ML predictions)
-├── ml-model.js          # ML model definitions
-├── feature-extractor.js # Image feature extraction
-├── feature-worker.js    # Web Worker (feature extraction)
-├── face-detector.js     # Face detection features
-├── index.html           # Main HTML template
-├── app-protocol.js      # App scheme handler (app files + granted media)
-├── media-url.js         # Media URLs for the renderer
-├── storage-migration.js # One-time settings move to the app origin
-├── migrate.html         # Static page the settings move loads
-├── vendor/lucide/       # Vendored icon library
-├── styles.css           # UI styles
-├── package.json         # Dependencies and scripts
-├── docs/                # Documentation
-│   ├── README.md        # Documentation index
-│   ├── ARCHITECTURE.md  # This file
-│   ├── PROJECT_CONTEXT.md # Decisions, patterns
-│   ├── MANUAL_TESTING.md  # Manual test scenarios
-│   ├── planning/        # Planning documents
-│   │   ├── TODO.md      # Active tasks
-│   │   ├── DONE.md      # Completed tasks
-│   │   ├── BACKLOG.md   # Unprioritized ideas
-│   │   ├── ROADMAP.md   # Long-term vision
-│   │   └── plans/       # Implementation plans
-│   └── archive/         # Archived documentation
-└── .claude/             # Claude Code configuration
+├── Main process (Node, CommonJS)
+│   ├── main.js                # App lifecycle, every IPC handler (through ipc-guard), file operations
+│   ├── main/                  # v2: main-process code in folders
+│   │   ├── module-registry.js #   Module discovery, manifest validation, dependency resolution, modules.json
+│   │   ├── folder-files.js    #   A module's per-folder files: tagged read, atomic write, delete
+│   │   └── module-ipc.js      #   The module channels (list, toggle, folder-file read/write/delete)
+│   ├── app-menu.js            # Application menu (no Reload: a reload skips the save at quit)
+│   ├── app-protocol.js        # The app scheme: app files, core/ and module files, granted media
+│   ├── atomic-write.js        # Folder-file writer: unique tmp, fsync, rename
+│   ├── clip-image.js          # CLIP image decode (strict, then lenient)
+│   ├── feature-cache-ledger.js # Feature-cache read classification and write checks
+│   ├── ipc-guard.js           # IPC registration: sender check and argument kinds
+│   ├── logger.js              # Session and perf logs
+│   ├── path-grants.js         # Folder grants and containment
+│   └── storage-migration.js   # One-time localStorage move to the app origin (with migrate.html)
+├── Bridge
+│   └── preload.js             # contextBridge → window.electronAPI (Tier 1)
+├── Renderer (ES modules)
+│   ├── index.html, styles.css
+│   ├── media-viewer.js        # MediaViewer: the UI
+│   ├── core/                  # v2: core renderer code
+│   │   ├── module-host.js     #   Loads modules, gives each a host, runs folder visits
+│   │   ├── host-api.js        #   The host API's types (the one core file a module may import)
+│   │   ├── modules-panel.js   #   F1's Modules section
+│   │   └── notifications.js   #   The notification system
+│   ├── fullscreen.js, zoom.js, tournament.js, tournament-engine.js, ml-training.js
+│   ├── feature-cache-store.js, coalescing-saver.js, like-or-skip.js, recent-folders.js
+│   ├── similarity-sort.js, media-url.js, perceptual-hash.js, main-thread-hash.js
+│   ├── hash-pool.js, hash-parity.js
+│   └── face-detector.js       # Classic script
+├── Workers
+│   ├── sorting-worker.js, ml-worker.js, feature-worker.js   # Classic workers
+│   └── hash-worker.js, jxl-decode-worker.js                  # Module workers
+├── Shared (worker and page)
+│   └── feature-extractor.js, ml-model.js, media-formats.js, feature-cache-transport.js
+├── modules/                   # v2: first-party modules (none yet in P1a; P1b adds similarity)
+├── vendor/                    # jxl-oxide-wasm, lucide
+├── scripts/                   # Maintenance and hook scripts (Node)
+├── tests/                     # Vitest units; tests/e2e/ Playwright (fixtures/modules/: the E2E test modules)
+├── docs/                      # This documentation (planning/, archive/, superpowers/specs/)
+└── .claude/                   # Committed agents, hooks, rules, skills, settings
 ```
 
 ---
@@ -302,27 +315,26 @@ media_viewer/
 
 ---
 
-## Extension Points
+## Modules (v2)
 
-### Adding New Sorting Algorithm
+The app is growing into a core plus modules. P1a built the host; P1b moves the first feature (similarity) onto it. Design: [v2 modules spec](superpowers/specs/2026-10-22-v2-modules-design.md).
 
-1. Implement algorithm in `sorting-worker.js`
-2. Add message handler for new algorithm type
-3. Add UI option in renderer
+- **Roots.** Main reads `modules/<id>/module.json` in the app folder as data. An E2E launch adds `tests/e2e/fixtures/modules/` as a second root, only when both `MV_E2E_STATE_DIR` and `MV_E2E_MODULE_ROOT` are set.
+- **Registry** (`main/module-registry.js`). Validates each manifest strictly: unknown keys are refused, and keys for later phases must be empty. It resolves `requires`/`optional` in dependency order. A cycle, a duplicate id or a folder file two modules declare makes every module involved invalid. The toggles live in `userData/modules.json` and take effect on restart. The names of today's per-folder files are reserved for core.
+- **Host** (`core/module-host.js`). Imports each enabled module and calls `activate(host)`, within 5 s for the import and activation together. A module that throws or hangs fails alone, and its dependents are blocked. Each module gets a frozen host: `module`, `log`, `settings`, `ui`, `folder`, `files`, `store`.
+- **Folder files.** `host.store.folderFile(name)` reaches only names the module declared, through `folder-file-*` channels that check the owner and the name in main. A read is `ok`, `absent` or `unreadable`, and a failed read is never `absent`. Each call is checked against its folder visit at the call: a save asked for while the visit is live (including in `onVisitEnd`) reaches that folder, and a later one is refused.
+- **Boundaries.**
+  - Rule M-1: main never `require`s a module's code. Lint bans a computed `require()`/`import()` in main code, and `tests/module-boundary.test.js` scans the literal ones.
+  - Rule M-2: module code reaches the app only through `host`. Lint bans the renderer's globals and document-wide lookups, and `mv/module-imports` keeps a module's imports inside its own folder.
+  - The app scheme serves `core/` and a module's `module.json`, `ui/` and `workers/`, never `main/` code.
+- **Restart.** F1's Modules section saves a toggle at once. "Restart now" runs the app's close flow (the tournament leave prompt, the saves, the modules' deactivation) and then relaunches.
 
-### Adding New File Format
+### Adding a new module
 
-1. Add extension to `isMediaFile()` in `main.js`
-2. Add MIME type to `getMimeType()` in `main.js`
-3. Handle display in renderer if special handling needed
-
-### Adding New View Mode
-
-1. Add mode constant and state
-2. Implement `show[Mode]View()` method
-3. Add UI toggle button
-4. Handle keyboard shortcuts
+1. Create `modules/<id>/module.json` (the P1a manifest: `id`, `name`, `version`, `apiVersion: 1`, `entry: "ui/index.js"`, `defaultEnabled`, and optionally `description`, `requires`, `optional`, `folderFiles`) and `modules/<id>/ui/index.js` exporting `activate(host)`.
+2. Reach the app only through `host` (types: `core/host-api.js`).
+3. Add its unit tests under `tests/`, and an E2E case through a fixture module if it needs the real host.
 
 ---
 
-*Last Updated: 2026-02-05*
+*Last Updated: 2026-11-12*
