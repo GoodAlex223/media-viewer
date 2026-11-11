@@ -120,11 +120,79 @@ describe('read', () => {
         expect(await service().read('someone', dir, NAME)).toEqual(unreadable);
     });
 
+    // Security review (2026-11-11): the cap bounds what main reads, not only what it returns. A file that grows after
+    // its size check is read through one handle, at most maxBytes + 1 bytes, and never whole.
+    it('reads at most maxBytes + 1 bytes of a file that grew after its size check', async () => {
+        await fsp.writeFile(target, JSON.stringify({ pad: 'x'.repeat(10 * MAX) }));
+        let bytesRead = 0;
+        let wholeReads = 0;
+        const fs = {
+            ...fsp,
+            lstat: async (p) =>
+                p === target
+                    ? { ...(await fsp.lstat(p)), size: 2, isFile: () => true, isSymbolicLink: () => false }
+                    : fsp.lstat(p),
+            readFile: async (p, ...rest) => {
+                if (p === target) {
+                    wholeReads++;
+                }
+                return fsp.readFile(p, ...rest);
+            },
+            open: async (p, ...rest) => {
+                const fh = await fsp.open(p, ...rest);
+                if (p !== target) {
+                    return fh;
+                }
+                return {
+                    stat: async () => ({ isFile: () => true, size: 2 }), // the size it had when checked
+                    read: async (...args) => {
+                        const result = await fh.read(...args);
+                        bytesRead += result.bytesRead;
+                        return result;
+                    },
+                    close: () => fh.close(),
+                };
+            },
+        };
+        expect(await service({ fs }).read('mod', dir, NAME)).toEqual({ status: 'unreadable', reason: 'too large' });
+        expect(wholeReads).toBe(0);
+        expect(bytesRead).toBeLessThanOrEqual(MAX + 1);
+    });
+
+    it('skips a recovery copy over the cap: a torn file with only a huge tmp is unreadable', async () => {
+        await fsp.writeFile(target, '{"n":');
+        await fsp.writeFile(tmpPathFor(target, 'abcdef123456'), JSON.stringify({ pad: 'x'.repeat(10 * MAX) }));
+        expect(await service().read('mod', dir, NAME)).toEqual({ status: 'unreadable', reason: 'does not parse' });
+    });
+
+    it('refuses a name that is a core file once case is folded, even if a registry declared it', async () => {
+        const upper = '.BULK_RATED.json';
+        const lenient = { folderFileDecl: (owner, name) => (name === upper ? { kind: 'data', maxBytes: 4096 } : null) };
+        const fs = fsp;
+        const assertPath = linkCheck(fs);
+        const writer = createAtomicWriter({ fs, assertPath, withRetries: (fn) => fn() });
+        const files = createFolderFiles({
+            fs,
+            registry: lenient,
+            assertPath,
+            writer,
+            readRecoveryCopy,
+            logger: console,
+        });
+        await fsp.writeFile(path.join(dir, '.bulk_rated.json'), '{"good":["a.jpg"]}');
+        expect(await files.read('mod', dir, upper)).toEqual({ status: 'unreadable', reason: 'Not permitted' });
+        expect(await files.write('mod', dir, upper, {})).toEqual({ success: false, error: 'Not permitted' });
+        expect(await files.remove('mod', dir, upper)).toEqual({ success: false, error: 'Not permitted' });
+        expect(await fsp.readFile(path.join(dir, '.bulk_rated.json'), 'utf8')).toBe('{"good":["a.jpg"]}');
+    });
+
     it('reads a file it is not allowed to open as unreadable, with the reason', async () => {
         await fsp.writeFile(target, '{}');
-        const fs = fsWith('readFile', target, async () => {
+        const refuse = async () => {
             throw errWith('EACCES');
-        });
+        };
+        // Whichever call opens it (a handle now, a whole-file read before the security fix).
+        const fs = { ...fsWith('readFile', target, refuse), open: fsWith('open', target, refuse).open };
         expect(await service({ fs }).read('mod', dir, NAME)).toEqual({ status: 'unreadable', reason: 'EACCES' });
     });
 });

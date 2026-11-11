@@ -7,8 +7,13 @@
 'use strict';
 
 const path = require('path');
+const { asciiFold } = require('../path-grants');
+const { CORE_RESERVED_FOLDER_FILES } = require('./module-registry');
 
 const NOT_PERMITTED = 'Not permitted';
+const READ_CHUNK_BYTES = 64 * 1024;
+
+class TooLargeError extends Error {}
 
 /**
  * @param {object} deps
@@ -34,32 +39,66 @@ function createFolderFiles({ fs, registry, assertPath, writer, readRecoveryCopy,
         return run;
     }
 
+    // The declaration for (owner, name), or null. A name that is one of core's files once case is folded is refused
+    // whatever the registry says: NTFS would open core's file (the registry already takes lower-case names only).
+    function declOf(owner, name) {
+        if (typeof name !== 'string' || CORE_RESERVED_FOLDER_FILES.includes(asciiFold(name))) {
+            return null;
+        }
+        return registry.folderFileDecl(owner, name);
+    }
+
+    // A file's text, read through one handle and never past maxBytes + 1 bytes, so a file that grows after its size
+    // check costs main no more memory than its cap. Throws TooLargeError over the cap.
+    async function readBounded(filePath, maxBytes) {
+        const fh = await fs.open(filePath, 'r');
+        try {
+            const st = await fh.stat();
+            if (!st.isFile()) {
+                throw new Error('not a file');
+            }
+            if (st.size > maxBytes) {
+                throw new TooLargeError('too large');
+            }
+            const chunks = [];
+            let total = 0;
+            while (total <= maxBytes) {
+                const want = Math.min(Math.max(st.size + 1 - total, READ_CHUNK_BYTES), maxBytes + 1 - total);
+                const buf = Buffer.alloc(want);
+                const { bytesRead } = await fh.read(buf, 0, want, total);
+                if (bytesRead === 0) {
+                    break;
+                }
+                chunks.push(buf.subarray(0, bytesRead));
+                total += bytesRead;
+            }
+            if (total > maxBytes) {
+                throw new TooLargeError('too large'); // it grew since the check
+            }
+            return Buffer.concat(chunks, total).toString('utf8');
+        } finally {
+            await fh.close();
+        }
+    }
+
     /** @returns {Promise<{ status: 'ok', value: any, recovered: boolean } | { status: 'absent' } | { status: 'unreadable', reason: string }>} */
     async function read(owner, folder, name) {
-        const decl = registry.folderFileDecl(owner, name);
+        const decl = declOf(owner, name);
         if (!decl) {
             return { status: 'unreadable', reason: NOT_PERMITTED };
         }
         const filePath = path.join(folder, name);
         try {
             await assertPath(filePath);
-            const st = await fs.lstat(filePath);
-            if (!st.isFile()) {
-                return { status: 'unreadable', reason: 'not a file' };
-            }
-            if (st.size > decl.maxBytes) {
-                return { status: 'unreadable', reason: 'too large' };
-            }
-            const text = await fs.readFile(filePath, 'utf8');
-            if (Buffer.byteLength(text, 'utf8') > decl.maxBytes) {
-                return { status: 'unreadable', reason: 'too large' }; // it grew since the lstat
-            }
+            const text = await readBounded(filePath, decl.maxBytes);
             try {
                 return { status: 'ok', value: JSON.parse(text), recovered: false };
             } catch (err) {
                 // A torn file: the writer's in-place write of a held-open file was cut short, and its tmp is the last
-                // whole copy (atomic-write.js). Only for a file that does not parse: a missing one stays missing.
-                const value = await readRecoveryCopy(filePath, { fs, assertPath, parse: JSON.parse });
+                // whole copy (atomic-write.js). Only for a file that does not parse: a missing one stays missing. A
+                // tmp over the cap is skipped like a torn one.
+                const capped = { ...fs, readFile: (p) => readBounded(p, decl.maxBytes) };
+                const value = await readRecoveryCopy(filePath, { fs: capped, assertPath, parse: JSON.parse });
                 if (value === null) {
                     return { status: 'unreadable', reason: 'does not parse' };
                 }
@@ -75,7 +114,7 @@ function createFolderFiles({ fs, registry, assertPath, writer, readRecoveryCopy,
     }
 
     async function write(owner, folder, name, value) {
-        const decl = registry.folderFileDecl(owner, name);
+        const decl = declOf(owner, name);
         if (!decl) {
             return { success: false, error: NOT_PERMITTED };
         }
@@ -101,7 +140,7 @@ function createFolderFiles({ fs, registry, assertPath, writer, readRecoveryCopy,
     }
 
     async function remove(owner, folder, name) {
-        if (!registry.folderFileDecl(owner, name)) {
+        if (!declOf(owner, name)) {
             return { success: false, error: NOT_PERMITTED };
         }
         const filePath = path.join(folder, name);

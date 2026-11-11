@@ -24,7 +24,9 @@ const STATE_MAX_BYTES = 65536;
 const ID_RE = /^[a-z][a-z0-9-]{0,39}$/;
 const VERSION_RE = /^\d+\.\d+\.\d+$/;
 const ENTRY_RE = /^ui\/[A-Za-z0-9._/-]+\.js$/;
-const FOLDER_FILE_RE = /^\.[A-Za-z0-9_-]{1,58}\.json$/;
+// Lower-case ASCII only: NTFS folds case, so `.BULK_RATED.json` would be core's file on disk, and `.A.json` and `.a.json`
+// one file declared twice (security review, 2026-11-11). Exact comparisons below are then safe.
+const FOLDER_FILE_RE = /^\.[a-z0-9_-]{1,58}\.json$/;
 const FOLDER_FILE_MAX_BYTES = 268435456;
 const MAX_DEPENDENCIES = 16;
 const MAX_FOLDER_FILES = 8;
@@ -97,7 +99,7 @@ function checkFolderFiles(value, reserved, errors) {
         }
         const { name, kind, maxBytes } = decl;
         if (typeof name !== 'string' || !FOLDER_FILE_RE.test(name)) {
-            errors.push(`folderFiles: ${JSON.stringify(name)} is not a dot-file .json name`);
+            errors.push(`folderFiles: ${JSON.stringify(name)} is not a lower-case dot-file .json name`);
         } else if (reserved.includes(name)) {
             errors.push(`folderFiles: ${name} is owned by core`);
         } else if (names.has(name)) {

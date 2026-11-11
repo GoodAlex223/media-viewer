@@ -250,6 +250,9 @@ describe('validateManifest', () => {
             },
         ],
         ['.bulk_rated.json', { folderFiles: [{ name: '.bulk_rated.json', kind: 'data', maxBytes: 1 }] }],
+        // NTFS folds case: an upper-case name would be core's file on disk (security review, 2026-11-11).
+        ['folderFiles', { folderFiles: [{ name: '.BULK_RATED.json', kind: 'data', maxBytes: 1 }] }],
+        ['folderFiles', { folderFiles: [{ name: '.Mixed.json', kind: 'data', maxBytes: 1 }] }],
         ['uses', { uses: [{ name: 'features' }] }],
         ['contributes', { contributes: { panels: ['x'] } }],
         ['permissions', { permissions: { network: true } }],
