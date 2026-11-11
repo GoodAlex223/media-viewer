@@ -4,8 +4,8 @@
 
 **Task Reference**: [WEEKLY.md](../WEEKLY.md) G1 (Nov 16–20, 🏆)
 **Created**: 2026-11-11
-**Status**: Approved 2026-11-11 — Native execution (one session) after `/compact`; Task 1 next
-**Last Updated**: 2026-11-11
+**Status**: Tasks 1–13 done; Task 14 done but the manual smoke (the user's); paused 2026-11-12 for the smoke, push approval (Task 15) and the separate-chat review
+**Last Updated**: 2026-11-12
 **Branch**: `g1-v2-p1a-module-host` (from `main` `d7b0fb8`)
 
 **Goal:** the app discovers first-party modules, loads the enabled ones in dependency order through a host object, survives a module that throws or hangs, and lets the user switch modules on and off from F1 with a restart. Nothing the user does today changes.
@@ -960,6 +960,13 @@ Spec § 7.13 (per-launch isolation), § 14 exit criteria.
     - 4 (`ownerKind` takes any string): **survives by design**. `declaredName` → `folderFileDecl` already requires the owner to be active, so the two checks are one check keyed on one fact. **4b** (`folderFileDecl` without that check) is killed, `module-registry` 1 fail.
     - 5 (serve `main/`): killed, `app-protocol` 2 fail.
   - **Owed by the user:** the manual smoke on a copy of the real profile (below, under the handoff).
+
+  - Mutation baseline (added after the set, per memory "mutate in a copy"): the unmutated sources in a copy made the same way pass 266/266 across the five test files, so each kill above was the mutant's.
+- **Paused 2026-11-12** at the user's request ("continue when I return"). Next:
+  1. The user's manual smoke (Task 14's last box).
+  2. Push and PR with their approval (Task 15).
+  3. G2 has not merged, so before the last push: merge `main`, re-measure, re-set the ceiling.
+  4. `/code-review max` in a separate chat (ask first), plus the Codex CLI trial.
 
 ## 5. Key Discoveries
 
