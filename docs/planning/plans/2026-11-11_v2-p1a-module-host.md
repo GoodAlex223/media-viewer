@@ -783,7 +783,7 @@ Spec § 7.13 (per-launch isolation), § 14 exit criteria.
   - `e2e-storage` declares `{ name: '.e2e_module_state.json', kind: 'data', maxBytes: 4096 }`, records every `onLoaded` visit and `onVisitEnd`, and exposes `testApi` methods `read()`, `write(v)`, `remove()` (against its newest visit), `writeTo(visitIndex, v)` and `readUndeclared()`.
   - `e2e-invalid`'s manifest `id` is `e2e-other`.
 
-- [ ] **Step 1: Write `tests/e2e/modules.test.js`**
+- [x] **Step 1: Write `tests/e2e/modules.test.js`**
   1. **Default launch, no root:** F1's `#modulesSection` reads "No modules yet"; `window.mediaViewer.modules` deep-equals `{}`; a folder loads and a like moves a file.
   2. **Fixture root + `e2e-empty` enabled:** `modules['e2e-empty'].activated === true`, and `hostKeys` deep-equals `['files','folder','log','module','settings','store','ui']`.
   3. **`e2e-throws` + `e2e-needs-throws` enabled:**
@@ -803,9 +803,9 @@ Spec § 7.13 (per-launch isolation), § 14 exit criteria.
      - `readUndeclared()` throws "not declared".
   8. **Main refuses an inactive owner:** with `e2e-storage` off, `window.electronAPI.folderFileRead('e2e-storage', <granted folder>, '.e2e_module_state.json')` gives `{ status: 'unreadable', reason: 'Not permitted' }`.
   9. **Isolation:** a launch that toggles `e2e-empty` on, then a fresh `launchApp({ moduleRoot })` with no `stateDir`: the module is off.
-- [ ] **Step 2: Run it.** Run: `npx playwright test tests/e2e/modules.test.js`. Expected: FAIL first on the missing helper options; implement them; then PASS.
-- [ ] **Step 3: Run the full E2E suite.** Run: `npm run test:e2e`. Expected: PASS. If a launch exits with `0xC0000142` under low memory, record it as environment and rerun only that file (memory: E2E memory guard).
-- [ ] **Step 4: Commit** `test(e2e): v2 P1a - modules load, fail safely, cascade, toggle; per-launch module state`
+- [x] **Step 2: Run it.** Run: `npx playwright test tests/e2e/modules.test.js`. Expected: FAIL first on the missing helper options; implement them; then PASS.
+- [x] **Step 3: Run the full E2E suite.** Run: `npm run test:e2e`. Expected: PASS. If a launch exits with `0xC0000142` under low memory, record it as environment and rerun only that file (memory: E2E memory guard).
+- [x] **Step 4: Commit** `test(e2e): v2 P1a - modules load, fail safely, cascade, toggle; per-launch module state`
 
 ---
 
@@ -925,6 +925,10 @@ Spec § 7.13 (per-launch isolation), § 14 exit criteria.
 - **Task 11 done.** `core/modules-panel.js` (`describeModuleRows`, `ModulesPanel`), the `#modulesSection` markup after Settings, and its styles from existing tokens (`.modules-restart-bar[hidden]` restated, since `display: flex` outranks the attribute). `tests/modules-panel.test.js` 19 (RED on the missing module first): every status, the restart suffix, `empty`, `toggleDisabled`, and the toggle's save, revert-and-notify on a refusal, error, null or rejection, and Restart now. Unit suite 63 files, 3,071 passed. **`wc -l media-viewer.js` = 11,544.**
   - Ruling: an enabled module with no outcome reads "Not started" (the plan's table had no row for it). Cost if wrong: one string.
   - Ruling: Step 4's manual F1 smoke ("No modules yet") is done by E2E case 1 in Task 12, which opens F1 and reads the section on a real launch. Cost if wrong: none; E2E is stronger.
+
+- **Task 12 done.** `launchApp({ stateDir, moduleRoot, modulesEnabled })` and `MODULE_FIXTURES_DIR`; every launch now gets its own `MV_E2E_STATE_DIR`, and inherited module variables are dropped. Seven fixture modules. `tests/e2e/modules.test.js` 9 cases: first run RED (the helper export missing), then 5 failing on F1, then 9/9. **Full E2E suite: 264 passed, 7 skipped, 12.0 min.**
+  - Ruling: the E2E opens F1 with `toggleHelp()` (what the header's help button calls), not the F1 key. With no folder open, the keydown handler passes only undo, by design (CLAUDE.md § State Management, empty state). Cost if wrong: none; the section's visibility is still asserted.
+  - Ruling: E2E 6 reads the log file that was newest before Restart now (captured before the click), since the relaunched app writes a new one. Cost if wrong: none.
 
 ## 5. Key Discoveries
 

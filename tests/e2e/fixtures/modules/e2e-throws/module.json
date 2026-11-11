@@ -1,0 +1,9 @@
+{
+    "id": "e2e-throws",
+    "name": "E2E throws on start",
+    "version": "1.0.0",
+    "apiVersion": 1,
+    "description": "Its activate throws.",
+    "entry": "ui/index.js",
+    "defaultEnabled": false
+}
