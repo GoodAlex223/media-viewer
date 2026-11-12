@@ -4,7 +4,7 @@
 
 **Task Reference**: [WEEKLY.md](../WEEKLY.md) G1 (Nov 16–20, 🏆)
 **Created**: 2026-11-11
-**Status**: Tasks 1–14 done (the manual smoke passed 2026-11-12); waiting for push approval (Task 15) and the separate-chat review
+**Status**: Tasks 1–14 done; PR #100 open since 2026-11-12; waiting for the separate-chat review and the Codex CLI trial (Task 15)
 **Last Updated**: 2026-11-12
 **Branch**: `g1-v2-p1a-module-host` (from `main` `d7b0fb8`)
 
@@ -861,7 +861,7 @@ Spec § 7.13 (per-launch isolation), § 14 exit criteria.
 
 ### Task 15: PR, review and close-out (after the user's approval)
 
-- [ ] Push, then check the PR's commit list (a shared checkout can add commits); open the PR with the line counts and the security-review summary
+- [x] Push, then check the PR's commit list (a shared checkout can add commits); open the PR with the line counts and the security-review summary
 - [ ] Review in a separate chat (`/code-review max`, asked first) and the Codex CLI trial on the same commit (WEEKLY G1 fourth item: record the model, `/status`, allowance and wall time)
 - [ ] After merge, the close-out per `~/.claude/rules/planning-closeout.md`, including:
   - flip P1a's rows on ROADMAP's v2 table and GOALS G-1 and G-2 by hand;
@@ -991,6 +991,13 @@ The user asked Claude to run it. The app was launched the way `npm start` launch
      - `.bulk_rated.json` at quit equals the seed;
      - the renderer logged no console errors or warnings.
 - The first run's step 2 failure was the driver's: it read `mediaFiles[currentIndex]` and `[currentIndex + 1]` as the pair, while `applyBulkRating` rates `compareLeftFile` and `compareRightFile`. Fixed, and re-run on a fresh profile copy; every step passed.
+
+### 2026-11-12 — Pushed; PR #100 (Task 15, first box)
+
+- Pushed with the user's approval ("You can push and open PR"). The pre-push E2E suite: **264 passed, 7 skipped** (12.2 min) at `61e0356`.
+- [PR #100](https://github.com/GoodAlex223/media-viewer/pull/100) lists exactly the branch's 16 commits, `89d824d` to `61e0356`.
+- `origin/main` is still `d7b0fb8`. G2 has not started, so nothing was merged.
+- The smoke's driver became a project skill, `run-media-viewer`, on its own branch `tools-run-media-viewer-skill` (`70c2245`, from `origin/main`). It is kept out of this PR so the review covers P1a only.
 
 ## 5. Key Discoveries
 
