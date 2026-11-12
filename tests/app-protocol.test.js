@@ -12,6 +12,7 @@ const {
     decodeAppPath,
     decodeMediaPath,
     isServedAppPath,
+    moduleFilePath,
     parseRange,
     isBlockedEgress,
     APP_HOST,
@@ -36,6 +37,7 @@ let elsewhere;
 let deps;
 let proto;
 let logger;
+let moduleRoot; // a module root outside the app folder, as the E2E fixture root is (v2 P1a)
 const BIG = 1024 * 1024 + 17; // a size no chunk boundary divides
 
 beforeAll(async () => {
@@ -63,10 +65,30 @@ beforeAll(async () => {
         'node_modules/@vladmandic/face-api/model/m.json': '{}',
         'node_modules/@vladmandic/face-api/package.json': '{}',
         'node_modules/other/z.js': '',
+        'core/a.js': 'export {};',
+        'core/sub/b.css': 'a{}',
+        'core/a.json': '{}',
+        'core/.hidden.js': '',
+        'main/folder-files.js': '',
     };
     for (const [rel, body] of Object.entries(files)) {
         await mkdir(join(appRoot, rel, '..'), { recursive: true });
         await writeFile(join(appRoot, rel), body);
+    }
+    moduleRoot = join(tmp, 'module-root');
+    const moduleFiles = {
+        'm/module.json': '{}',
+        'm/package.json': '{}',
+        'm/ui/index.js': 'export function activate() {}',
+        'm/ui/x/y.css': 'a{}',
+        'm/ui/.hidden.js': '',
+        'm/workers/w.js': '',
+        'm/workers/d.wasm': 'wasm',
+        'm/main/a.js': '',
+    };
+    for (const [rel, body] of Object.entries(moduleFiles)) {
+        await mkdir(join(moduleRoot, rel, '..'), { recursive: true });
+        await writeFile(join(moduleRoot, rel), body);
     }
     await mkdir(media);
     await mkdir(elsewhere);
@@ -80,7 +102,14 @@ beforeAll(async () => {
     const grants = createGrantStore({ storePath: join(tmp, 'grants.json') });
     await grants.grant(media);
     logger = { warn: vi.fn(), error: vi.fn() };
-    deps = { appRoot, resolveMediaRead: createMediaReadRule({ grants, isMediaFile }), getMimeType, csp: CSP, logger };
+    deps = {
+        appRoot,
+        resolveModuleDir: (id) => (id === 'm' ? join(moduleRoot, 'm') : null),
+        resolveMediaRead: createMediaReadRule({ grants, isMediaFile }),
+        getMimeType,
+        csp: CSP,
+        logger,
+    };
     proto = createAppProtocol(deps);
 });
 
@@ -200,6 +229,93 @@ describe('app files', () => {
         expect(await jsRealpath(appRoot)).toBe(appRoot);
         const src = fs.readFileSync(new URL('../app-protocol.js', import.meta.url), 'utf8');
         expect(src).not.toMatch(/promises\.realpath|realpath\.native|realpathSync\.native/);
+    });
+});
+
+// v2 P1a (spec § 9): core code and each module's page-side files are served; main code never is, from the app
+// folder or from a module.
+describe('core and module files', () => {
+    it.each([
+        'core/a.js',
+        'core/sub/b.css',
+        'modules/m/module.json',
+        'modules/m/ui/index.js',
+        'modules/m/ui/x/y.css',
+        'modules/m/workers/w.js',
+        'modules/m/workers/d.wasm',
+    ])('serves %s', async (rel) => {
+        expect((await proto.handle(req(`${ORIGIN}/${rel}`))).status).toBe(200);
+    });
+
+    it("serves a module file's bytes from the module's own folder, with its type and the policy", async () => {
+        const res = await proto.handle(req(`${ORIGIN}/modules/m/ui/index.js`));
+        expect(await res.text()).toBe('export function activate() {}');
+        expect(res.headers.get('content-type')).toBe('text/javascript; charset=utf-8');
+        expect(res.headers.get('content-security-policy')).toBe(CSP);
+        const manifest = await proto.handle(req(`${ORIGIN}/modules/m/module.json`));
+        expect(manifest.headers.get('content-type')).toBe('application/json');
+    });
+
+    it.each([
+        'core/a.json',
+        'core/.hidden.js',
+        'core',
+        'main/folder-files.js',
+        'modules/m/main/a.js',
+        'modules/m/package.json',
+        'modules/m/ui',
+        'modules/m/ui/.hidden.js',
+        'modules/m',
+        'modules/unknown/ui/index.js',
+        'modules/m/ui/%2E%2E/main/a.js',
+        'modules/m/ui/..%5Cmain%5Ca.js',
+    ])('refuses %s', async (rel) => {
+        expect((await proto.handle(req(`${ORIGIN}/${rel}`))).status).toBe(404);
+    });
+
+    it('serves no module file when no resolver is given', async () => {
+        const bare = createAppProtocol({ ...deps, resolveModuleDir: undefined });
+        expect((await bare.handle(req(`${ORIGIN}/modules/m/ui/index.js`))).status).toBe(404);
+        expect((await bare.handle(req(`${ORIGIN}/core/a.js`))).status).toBe(200);
+    });
+
+    it('refuses a file reached through a junction inside a module folder', async () => {
+        const outside = join(tmp, 'outside-module');
+        await mkdir(outside, { recursive: true });
+        await writeFile(join(outside, 'x.js'), '');
+        await symlink(
+            outside,
+            join(moduleRoot, 'm', 'ui', 'linked'),
+            process.platform === 'win32' ? 'junction' : 'dir'
+        );
+        expect((await proto.handle(req(`${ORIGIN}/modules/m/ui/linked/x.js`))).status).toBe(404);
+    });
+
+    it('refuses a link at modules/m/ui/link.js', async (ctx) => {
+        await plant(ctx, join(elsewhere, 'real.png'), join(moduleRoot, 'm', 'ui', 'link.js'));
+        expect((await proto.handle(req(`${ORIGIN}/modules/m/ui/link.js`))).status).toBe(404);
+    });
+
+    it('moduleFilePath admits module.json and ui/ or workers/ files only', () => {
+        const resolve = (id) => (id === 'm' ? join(moduleRoot, 'm') : null);
+        expect(moduleFilePath(['modules', 'm', 'module.json'], resolve)).toBe(join(moduleRoot, 'm', 'module.json'));
+        expect(moduleFilePath(['modules', 'm', 'ui', 'a', 'b.wasm'], resolve)).toBe(
+            join(moduleRoot, 'm', 'ui', 'a', 'b.wasm')
+        );
+        expect(moduleFilePath(['modules', 'm', 'workers', 'w.json'], resolve)).toBe(
+            join(moduleRoot, 'm', 'workers', 'w.json')
+        );
+        for (const segments of [
+            ['modules', 'm', 'main', 'a.js'],
+            ['modules', 'm', 'ui', 'a.html'],
+            ['modules', 'm', 'ui'],
+            ['modules', 'm', 'module.json', 'x.js'],
+            ['modules', 'x', 'ui', 'a.js'],
+            ['core', 'm', 'ui', 'a.js'],
+            ['modules', 'm', 'ui', '.a.js'],
+        ]) {
+            expect(moduleFilePath(segments, resolve), segments.join('/')).toBeNull();
+        }
     });
 });
 
@@ -333,6 +449,11 @@ describe('pure helpers', () => {
         expect(isServedAppPath(['vendor', 'lucide'])).toBe(false);
         expect(isServedAppPath(['Vendor', 'lucide', 'x.js'])).toBe(false);
         expect(isServedAppPath(['vendor', 'lucide', '.hidden.js'])).toBe(false);
+        expect(isServedAppPath(['core', 'a.js'])).toBe(true);
+        expect(isServedAppPath(['core', 'x', 'a.css'])).toBe(true);
+        expect(isServedAppPath(['core', 'a.json'])).toBe(false);
+        expect(isServedAppPath(['main', 'a.js'])).toBe(false);
+        expect(isServedAppPath(['modules', 'm', 'ui', 'a.js'])).toBe(false); // modules go through moduleFilePath
     });
 
     it('parseRange covers the empty file', () => {

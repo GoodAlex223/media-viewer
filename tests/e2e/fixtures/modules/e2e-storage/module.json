@@ -1,0 +1,16 @@
+{
+    "id": "e2e-storage",
+    "name": "E2E storage",
+    "version": "1.0.0",
+    "apiVersion": 1,
+    "description": "Reads and writes its folder file through each visit.",
+    "entry": "ui/index.js",
+    "defaultEnabled": false,
+    "folderFiles": [
+        {
+            "name": ".e2e_module_state.json",
+            "kind": "data",
+            "maxBytes": 4096
+        }
+    ]
+}

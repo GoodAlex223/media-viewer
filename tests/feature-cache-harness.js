@@ -436,6 +436,7 @@ export function makeHost(main, { enableClipFeatures = false } = {}) {
     for (const [name, fn] of Object.entries(compiled)) {
         host[name] = fn;
     }
+    host.moduleHost = stubModuleHost(); // v2 P1a: no modules
     // Wired as MediaViewer's constructor wires it, over FakeMain.
     host.featureCacheStore = new FeatureCacheStore({
         io: {
@@ -488,6 +489,16 @@ export function stubFeatureCacheStore(host) {
             return true;
         },
         markChanged: vi.fn(),
+    };
+}
+
+/** A ModuleHost stand-in (v2 P1a) with no modules: ready at once, visits and deactivation recorded. */
+export function stubModuleHost() {
+    return {
+        ready: Promise.resolve(),
+        beginVisit: vi.fn(),
+        endVisit: vi.fn(),
+        deactivateAll: vi.fn(async () => {}),
     };
 }
 

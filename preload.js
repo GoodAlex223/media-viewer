@@ -65,6 +65,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('applyTournamentResults', folderPath, tierAssignments),
     readBulkRatedFile: (folderPath) => ipcRenderer.invoke('readBulkRatedFile', folderPath),
     writeBulkRatedFile: (folderPath, data) => ipcRenderer.invoke('writeBulkRatedFile', folderPath, data),
+    // Modules (v2 P1a): main's resolved list, the toggle (it takes effect on restart), and the restart, which the
+    // renderer sends only once its own close flow has run.
+    listModules: () => ipcRenderer.invoke('list-modules'),
+    setModuleEnabled: (id, enabled) => ipcRenderer.invoke('set-module-enabled', id, enabled),
+    restartApp: () => ipcRenderer.send('restart-app'),
+    // Per-folder files by owner and declared name (v2 P1a): main checks that the owner declared the name.
+    folderFileRead: (owner, folderPath, name) => ipcRenderer.invoke('folder-file-read', owner, folderPath, name),
+    folderFileWrite: (owner, folderPath, name, value) =>
+        ipcRenderer.invoke('folder-file-write', owner, folderPath, name, value),
+    folderFileDelete: (owner, folderPath, name) => ipcRenderer.invoke('folder-file-delete', owner, folderPath, name),
 
     // Logging (fire-and-forget)
     logError: (data) => ipcRenderer.send('log-renderer-error', data),

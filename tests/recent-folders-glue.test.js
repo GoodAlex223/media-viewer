@@ -3,7 +3,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createRequire } from 'module';
 import * as RecentFolders from '../recent-folders.js';
-import { stubFeatureCacheStore } from './feature-cache-harness.js';
+import { stubFeatureCacheStore, stubModuleHost } from './feature-cache-harness.js';
 
 const require = createRequire(import.meta.url);
 const fs = require('fs');
@@ -196,6 +196,7 @@ describe('loadFolder records only a folder that showed media (spec § 5)', () =>
             ...overrides,
         };
         ctx.featureCacheStore = stubFeatureCacheStore(ctx);
+        ctx.moduleHost = stubModuleHost();
         return ctx;
     }
 

@@ -217,9 +217,24 @@ function getLogPath() {
 // sites pass a plain string; a few pass { level, message, source }. The IPC handler used to
 // destructure the object form only, so every string logged as "undefined" — and an undefined or
 // null payload threw inside the handler (G3).
+//
+// v2 § 8.7 (P1a): a renderer line cannot forge another one. The message's newlines fold and its length is capped,
+// and a source that is not a plain tag (host.log sends 'module:<id>') becomes 'renderer', so no source can close
+// the [source] bracket or start a line of its own.
+const RENDERER_MESSAGE_MAX = 8000;
+const RENDERER_SOURCE = /^[a-z][a-z0-9:-]{0,63}$/;
+
+// Every run of CR/LF becomes ' ⏎ ', and text over `max` characters is cut, with what was cut counted.
+function sanitizeLogText(text, max) {
+    const folded = String(text).replace(/[\r\n]+/g, ' ⏎ ');
+    return folded.length > max ? `${folded.slice(0, max)}… [+${folded.length - max} chars]` : folded;
+}
+
 function normalizeRendererLogEntry(data) {
     if (data == null) return { level: 'error', message: '(empty renderer log entry)', source: 'renderer' };
-    if (typeof data !== 'object') return { level: 'error', message: String(data), source: 'renderer' };
+    if (typeof data !== 'object') {
+        return { level: 'error', message: sanitizeLogText(data, RENDERER_MESSAGE_MAX), source: 'renderer' };
+    }
     let message = data.message;
     if (message == null) {
         try {
@@ -230,8 +245,8 @@ function normalizeRendererLogEntry(data) {
     }
     return {
         level: data.level === 'warn' ? 'warn' : 'error',
-        message: String(message),
-        source: typeof data.source === 'string' && data.source ? data.source : 'renderer',
+        message: sanitizeLogText(message, RENDERER_MESSAGE_MAX),
+        source: typeof data.source === 'string' && RENDERER_SOURCE.test(data.source) ? data.source : 'renderer',
     };
 }
 
@@ -258,5 +273,6 @@ module.exports = {
     cleanup,
     getLogPath,
     normalizeRendererLogEntry,
+    sanitizeLogText,
     installCrashLogging,
 };

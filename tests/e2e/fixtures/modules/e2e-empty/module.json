@@ -1,0 +1,9 @@
+{
+    "id": "e2e-empty",
+    "name": "E2E empty",
+    "version": "1.0.0",
+    "apiVersion": 1,
+    "description": "Activates and does nothing.",
+    "entry": "ui/index.js",
+    "defaultEnabled": false
+}

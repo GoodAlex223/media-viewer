@@ -29,7 +29,7 @@ Central index for all project documentation.
 
 | Document                    | Purpose                               |
 |-----------------------------|---------------------------------------|
-| _None currently active_     | —                                      |
+| [v2 P1a Module Host Plan](planning/plans/2026-11-11_v2-p1a-module-host.md) | WEEKLY G1 (Nov 16–20): the module host, module registry, folder-file service and F1 Modules section (v2 pilot) |
 
 [G4 Strategic-Doc Refresh Plan]: archive/plans/2026-07-12_g4-strategic-docs-refresh.md
 [G1 Bulk-Rate Follow-ups Plan]: archive/plans/2026-08-29_g1-bulk-rate-followups.md

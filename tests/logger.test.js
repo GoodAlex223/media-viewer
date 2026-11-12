@@ -414,5 +414,55 @@ describe('logger', () => {
             const handler = src.slice(start, src.indexOf('});', start));
             expect(handler).toContain('logger.normalizeRendererLogEntry(');
         });
+
+        // v2 § 8.7 (P1a, C12): a renderer line cannot forge another line. Newlines fold, length is capped, and a
+        // source that is not a plain tag becomes 'renderer' (host.log names modules 'module:<id>').
+        it('folds newlines in the message', () => {
+            expect(logger.normalizeRendererLogEntry('a\nb\r\nc').message).toBe('a ⏎ b ⏎ c');
+            expect(logger.normalizeRendererLogEntry({ message: 'x\n[main] forged' }).message).toBe('x ⏎ [main] forged');
+        });
+
+        it('caps the message at 8,000 characters', () => {
+            expect(logger.normalizeRendererLogEntry('y'.repeat(8001)).message).toBe('y'.repeat(8000) + '… [+1 chars]');
+            expect(logger.normalizeRendererLogEntry('y'.repeat(8000)).message).toBe('y'.repeat(8000));
+        });
+
+        it.each([['x]\n[main'], ['Renderer'], [''], ['a b'], ['m'.repeat(65)], [7]])(
+            'replaces the source %j with renderer',
+            (source) => {
+                expect(logger.normalizeRendererLogEntry({ message: 'm', source }).source).toBe('renderer');
+            }
+        );
+
+        it.each([['module:e2e-empty'], ['hash-pool'], ['model-cache'], ['session']])(
+            'keeps the source %s',
+            (source) => {
+                expect(logger.normalizeRendererLogEntry({ message: 'm', source }).source).toBe(source);
+            }
+        );
+    });
+
+    describe('sanitizeLogText()', () => {
+        it('turns every run of CR and LF into one marker', () => {
+            expect(logger.sanitizeLogText('a\nb\r\nc\n\n\nd', 100)).toBe('a ⏎ b ⏎ c ⏎ d');
+        });
+
+        it('cuts text over the cap and says how much it cut', () => {
+            expect(logger.sanitizeLogText('abcdef', 4)).toBe('abcd… [+2 chars]');
+            expect(logger.sanitizeLogText('abcd', 4)).toBe('abcd');
+        });
+
+        it('takes any value as text', () => {
+            expect(logger.sanitizeLogText(12, 10)).toBe('12');
+        });
+
+        // Source-text wiring check, as above: the perf channel gets the same treatment, capped at 2,000.
+        it("is what main.js's log-perf handler logs with", () => {
+            const src = fs.readFileSync(new URL('../main.js', import.meta.url), 'utf8');
+            const start = src.indexOf("guard.on('log-perf'");
+            expect(start).toBeGreaterThan(-1);
+            const handler = src.slice(start, src.indexOf('});', start));
+            expect(handler).toContain("logger.logPerf(logger.sanitizeLogText(message ?? '', 2000))");
+        });
     });
 });

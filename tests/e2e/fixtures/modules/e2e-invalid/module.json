@@ -1,0 +1,9 @@
+{
+    "id": "e2e-other",
+    "name": "E2E invalid",
+    "version": "1.0.0",
+    "apiVersion": 1,
+    "description": "Its id does not match its folder.",
+    "entry": "ui/index.js",
+    "defaultEnabled": false
+}

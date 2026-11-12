@@ -6,7 +6,7 @@ import * as LikeOrSkip from '../like-or-skip.js';
 import * as SimilaritySort from '../similarity-sort.js';
 import * as HashPool from '../hash-pool.js';
 import { CoalescingSaver } from '../coalescing-saver.js';
-import { stubFeatureCacheStore } from './feature-cache-harness.js';
+import { stubFeatureCacheStore, stubModuleHost } from './feature-cache-harness.js';
 import { fakeHashPool } from './hash-pool-harness.js';
 // Extracted methods resolve media-viewer.js's namespace import through the global object (G2).
 globalThis.LikeOrSkip = LikeOrSkip;
@@ -1878,6 +1878,7 @@ describe('handleSortByPrediction lifecycle', () => {
         if (!ctx.featureCacheStore) {
             // The visit has read its cache already, so Phase 1 skips the read (spec my call 4).
             ctx.featureCacheStore = stubFeatureCacheStore(ctx);
+            ctx.moduleHost = stubModuleHost();
             ctx.featureCacheStore.needsRead = vi.fn(() => false);
         }
         ctx._phases = phases;
@@ -5568,6 +5569,7 @@ describe('loadFolder empty-folder teardown (Fix B follow-up)', () => {
             _updateRecentFoldersButton: vi.fn(),
         };
         ctx.featureCacheStore = stubFeatureCacheStore(ctx);
+        ctx.moduleHost = stubModuleHost();
         return ctx;
     }
 

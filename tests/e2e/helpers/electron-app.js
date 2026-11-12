@@ -12,6 +12,12 @@ import { fileURLToPath } from 'url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = resolve(__dirname, '..', '..', '..');
 const FIXTURES_DIR = resolve(__dirname, '..', 'fixtures');
+// The E2E module root (v2 P1a, plan C5): main reads it only when a launch sets both MV_E2E_STATE_DIR and
+// MV_E2E_MODULE_ROOT, so its test modules never reach the user's Modules list.
+export const MODULE_FIXTURES_DIR = join(FIXTURES_DIR, 'modules');
+// Variables a launch sets itself, dropped from the inherited environment in any spelling (Windows names are
+// case-insensitive): a shell that left one set must not change every launch.
+const LAUNCH_OWNED_ENV = new Set(['MV_HASH_PARITY', 'MV_E2E_STATE_DIR', 'MV_E2E_MODULE_ROOT']);
 
 // page → electronApp, so page-only helpers (loadFolder, seedLocalStorage) can reach the main
 // process to grant a folder without every call site changing signature (G1).
@@ -51,9 +57,13 @@ function getLaunchArgs() {
  * Launch the Electron app and wait for it to be ready.
  * `env` adds environment variables for this launch. An inherited MV_HASH_PARITY is always dropped, so a shell
  * that left it set cannot turn the launch into a parity run; pass it in `env` to ask for one.
+ * Modules (v2 P1a): every launch keeps its modules.json in its own state folder (MV_E2E_STATE_DIR): `stateDir`
+ * when given (the caller owns and removes it, and can launch again on it), else this launch's grants folder.
+ * `moduleRoot` adds that module root (MV_E2E_MODULE_ROOT; MODULE_FIXTURES_DIR for the test modules), and
+ * `modulesEnabled` ({ id: true }) is written as the state folder's modules.json before launch.
  * Returns { electronApp, page }.
  */
-export async function launchApp({ migrationMarker, env = {} } = {}) {
+export async function launchApp({ migrationMarker, env = {}, stateDir, moduleRoot, modulesEnabled } = {}) {
     // A fresh grant store per launch (G1): main reads MV_E2E_GRANTS_FILE instead of
     // <userData>/folder-grants.json, so a grant left by an earlier test can never make a
     // refusal test pass for the wrong reason. The same env var exposes global.__mvGrants in the
@@ -69,10 +79,15 @@ export async function launchApp({ migrationMarker, env = {} } = {}) {
     }
     // A shell that left MV_HASH_PARITY set must not turn every E2E launch into a parity run (G2 PR 2, Review Focus
     // #5): drop it, then let the test ask for it through `env`. In any spelling: Windows names are case-insensitive,
-    // so a `mv_hash_parity` copied here would still read as MV_HASH_PARITY in main (PR #87 review #9).
+    // so a `mv_hash_parity` copied here would still read as MV_HASH_PARITY in main (PR #87 review #9). The two module
+    // variables are dropped too, and set below from this launch's own options (LAUNCH_OWNED_ENV).
     const launchEnv = Object.fromEntries(
-        Object.entries(process.env).filter(([name]) => name.toUpperCase() !== 'MV_HASH_PARITY')
+        Object.entries(process.env).filter(([name]) => !LAUNCH_OWNED_ENV.has(name.toUpperCase()))
     );
+    const state = stateDir ?? grantsDir;
+    if (modulesEnabled) {
+        await writeFile(join(state, 'modules.json'), JSON.stringify({ version: 1, enabled: modulesEnabled }));
+    }
     const electronApp = await electron.launch({
         executablePath: getElectronWrapperPath(),
         args: getLaunchArgs(),
@@ -82,6 +97,8 @@ export async function launchApp({ migrationMarker, env = {} } = {}) {
             ...env,
             MV_E2E_GRANTS_FILE: join(grantsDir, 'folder-grants.json'),
             MV_E2E_MIGRATION_MARKER: marker,
+            MV_E2E_STATE_DIR: state,
+            ...(moduleRoot ? { MV_E2E_MODULE_ROOT: moduleRoot } : {}),
         },
     });
     grantsDirByApp.set(electronApp, grantsDir);

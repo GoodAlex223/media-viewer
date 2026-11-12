@@ -1,0 +1,12 @@
+{
+    "id": "e2e-needs-empty",
+    "name": "E2E needs empty",
+    "version": "1.0.0",
+    "apiVersion": 1,
+    "description": "Requires e2e-empty.",
+    "entry": "ui/index.js",
+    "defaultEnabled": false,
+    "requires": [
+        "e2e-empty"
+    ]
+}

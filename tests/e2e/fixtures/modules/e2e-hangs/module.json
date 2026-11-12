@@ -1,0 +1,9 @@
+{
+    "id": "e2e-hangs",
+    "name": "E2E hangs on start",
+    "version": "1.0.0",
+    "apiVersion": 1,
+    "description": "Its activate never settles.",
+    "entry": "ui/index.js",
+    "defaultEnabled": false
+}

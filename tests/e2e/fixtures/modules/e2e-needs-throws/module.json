@@ -1,0 +1,12 @@
+{
+    "id": "e2e-needs-throws",
+    "name": "E2E needs the thrower",
+    "version": "1.0.0",
+    "apiVersion": 1,
+    "description": "Requires e2e-throws.",
+    "entry": "ui/index.js",
+    "defaultEnabled": false,
+    "requires": [
+        "e2e-throws"
+    ]
+}
