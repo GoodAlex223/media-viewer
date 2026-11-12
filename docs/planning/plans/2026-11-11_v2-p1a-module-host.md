@@ -4,7 +4,7 @@
 
 **Task Reference**: [WEEKLY.md](../WEEKLY.md) G1 (Nov 16–20, 🏆)
 **Created**: 2026-11-11
-**Status**: Tasks 1–13 done; Task 14 done but the manual smoke (the user's); paused 2026-11-12 for the smoke, push approval (Task 15) and the separate-chat review
+**Status**: Tasks 1–14 done (the manual smoke passed 2026-11-12); waiting for push approval (Task 15) and the separate-chat review
 **Last Updated**: 2026-11-12
 **Branch**: `g1-v2-p1a-module-host` (from `main` `d7b0fb8`)
 
@@ -852,7 +852,7 @@ Spec § 7.13 (per-launch isolation), § 14 exit criteria.
   3. the timeout set to 6,000 → the 5,000 ms test fails;
   4. `ownerKind` accepting any string → E2E 8 fails;
   5. `isServedAppPath` admitting `main` → an app-protocol 404 case fails.
-- [ ] Manual smoke on a copy of the real profile (`MV_USER_DATA_DIR`, since P1a changes the quit flow that saves ratings):
+- [x] Manual smoke on a copy of the real profile (`MV_USER_DATA_DIR`, since P1a changes the quit flow that saves ratings):
   1. open a folder that has bulk ratings, and check they load;
   2. rate "Both good" and undo;
   3. F1 shows "No modules yet";
@@ -959,7 +959,7 @@ Spec § 7.13 (per-launch isolation), § 14 exit criteria.
     - 3 (6,000 ms): killed, 4 fail.
     - 4 (`ownerKind` takes any string): **survives by design**. `declaredName` → `folderFileDecl` already requires the owner to be active, so the two checks are one check keyed on one fact. **4b** (`folderFileDecl` without that check) is killed, `module-registry` 1 fail.
     - 5 (serve `main/`): killed, `app-protocol` 2 fail.
-  - **Owed by the user:** the manual smoke on a copy of the real profile (below, under the handoff).
+  - The manual smoke on a copy of the real profile ran on 2026-11-12, after the pause (below).
 
   - Mutation baseline (added after the set, per memory "mutate in a copy"): the unmutated sources in a copy made the same way pass 266/266 across the five test files, so each kill above was the mutant's.
 - **Paused 2026-11-12** at the user's request ("continue when I return"). Next:
@@ -967,6 +967,30 @@ Spec § 7.13 (per-launch isolation), § 14 exit criteria.
   2. Push and PR with their approval (Task 15).
   3. G2 has not merged, so before the last push: merge `main`, re-measure, re-set the ceiling.
   4. `/code-review max` in a separate chat (ask first), plus the Codex CLI trial.
+
+### 2026-11-12 — Manual smoke (Task 14's last box), passed
+
+The user asked Claude to run it. The app was launched the way `npm start` launches it: the project directory, so it runs as `media_viewer`, on a fresh copy of `%APPDATA%\media_viewer` through `MV_USER_DATA_DIR`, with no E2E variables. Playwright drove it, and only the OS folder dialog was replaced. Main's own handler still granted each pick. The close went through main's window close, which runs the renderer's close flow.
+
+- Ruling: the smoke used synthetic folders (10 source images with a seeded `.bulk_rated.json`, 4 like and 4 dislike images) in place of a real rated folder. Two reasons:
+  - The profile's like and dislike folders, and five of its six recent folders, no longer exist, and none of the remaining ones has a `.bulk_rated.json`.
+  - A side note the user passed on pointed out that the test writes the open folder's real ratings file, which exists nowhere else.
+
+  Cost if wrong: the smoke did not read a ratings file written by an older build. The format is the same version 1, and P1a does not touch the load path.
+- **Results** (second run; the first failed step 2 on a driver bug, below):
+  1. The ratings load: `s01` good, `s02` good, `s03` bad.
+  2. Compare mode with the AI sort:
+     - the sort trained on 6 likes and 5 dislikes and took 5.3 s;
+     - `D` rated the pair on screen good, in memory and on disk;
+     - `Ctrl+A` removed both labels again, in memory and on disk.
+  3. F1's Modules section is visible and reads "No modules yet"; `mediaViewer.modules` is `{}`.
+  4. Quit:
+     - the window closed 0.8 s after the close request;
+     - the perf log gained `Quit save: 0ms, settled`;
+     - the new session log has `Modules: 0 found, 0 enabled` and `Session ended (clean quit)`;
+     - `.bulk_rated.json` at quit equals the seed;
+     - the renderer logged no console errors or warnings.
+- The first run's step 2 failure was the driver's: it read `mediaFiles[currentIndex]` and `[currentIndex + 1]` as the pair, while `applyBulkRating` rates `compareLeftFile` and `compareRightFile`. Fixed, and re-run on a fresh profile copy; every step passed.
 
 ## 5. Key Discoveries
 
