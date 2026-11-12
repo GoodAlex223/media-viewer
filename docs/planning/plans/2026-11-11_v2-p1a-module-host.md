@@ -101,7 +101,7 @@ These narrow or settle the approved spec. Task 13 records each one that changes 
 | GOALS G-7's soft target (renderer + `core/*.js` below 11,945) is exceeded: the host is new code, about 640 lines | Med | Measured and stated in the PR. It feeds Cleanup Week #6's 🟤 "Extend the line ceiling to the renderer plus `core/*.js`…" decision |
 | ~10 SP against the week's 9 | Med | WEEKLY's overrun rule: a `**Spillover**` line on Sunday Nov 22 if this has not merged |
 | `app.relaunch` under Playwright | Low | The E2E stubs it in main and asserts through the session log, as `rating-data-safety.test.js:405` reads its log |
-| G2 merges first and moves the line count | Low | Merge `main` before the last push; set the ceiling from the merged count |
+| G2 merges first and moves the line count (superseded 2026-11-12: P1a merges first) | Low | Merge `main` before the last push; set the ceiling from the merged count |
 
 ---
 
@@ -144,7 +144,7 @@ These narrow or settle the approved spec. Task 13 records each one that changes 
 
 ### Dependencies
 
-- G2 (compare special move) merges first. This branch merges `main` before its last push, so the ratchet measures both (WEEKLY § Parallel Work).
+- G2 (compare special move) merges first. This branch merges `main` before its last push, so the ratchet measures both (WEEKLY § Parallel Work). **Superseded 2026-11-12 by user ruling: P1a merges first**, and G2's branch merges `main` (see the log).
 - The user approves this plan, including the `preload.js` delta, before Task 1.
 - The review session (Fri) carries the Codex CLI trial (WEEKLY G1 fourth item): the user installs the CLI and runs `codex login` there.
 
@@ -997,6 +997,7 @@ The user asked Claude to run it. The app was launched the way `npm start` launch
 - Pushed with the user's approval ("You can push and open PR"). The pre-push E2E suite: **264 passed, 7 skipped** (12.2 min) at `61e0356`.
 - [PR #100](https://github.com/GoodAlex223/media-viewer/pull/100) lists exactly the branch's 16 commits, `89d824d` to `61e0356`.
 - `origin/main` is still `d7b0fb8`. G2 has not started, so nothing was merged.
+- **Merge order reversed (user ruling, 2026-11-12): P1a merges first**, once its review is clean, and G2 merges `main` into its own branch before its last push. P1a finished ahead of the week and the two touch different code, so holding PR #100 for G2 (Tue Nov 17 at the earliest) would only add a later merge. WEEKLY § Parallel Work and Dependencies updated in this commit. If `main` moves before this PR merges anyway, the merge-and-re-measure step still applies.
 - The smoke's driver became a project skill, `run-media-viewer`, on its own branch `tools-run-media-viewer-skill` (`70c2245`, from `origin/main`). It is kept out of this PR so the review covers P1a only.
 
 ## 5. Key Discoveries
